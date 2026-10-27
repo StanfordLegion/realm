@@ -444,7 +444,13 @@ namespace Realm {
       outstanding_instantiations++;
     }
 
-    // priority_adjust is the priority of this instantiation as a whole
+    // priority_adjust is the priority of this instantiation as a whole; the
+    // scheduler compares it with +-1 against task priorities, so it must
+    // stay within the finite range (as task priorities do)
+    {
+      const int hi = TaskQueue::PRI_MAX_FINITE, lo = TaskQueue::PRI_MIN_FINITE;
+      priority_adjust = std::max(std::min(priority_adjust, hi), lo);
+    }
     SubgraphExecutionState *state = acquire_state();
     state->reset(finish_event, priority_adjust, preconditions, postconditions);
     state->interpolate(args, arglen);

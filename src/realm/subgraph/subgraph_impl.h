@@ -673,6 +673,9 @@ namespace Realm {
     // input it depends on was poisoned): releases the successors that may
     // start now.
     void op_body_done(uint32_t op);
+    // called when active_work reaches zero: wakes the processors that may
+    // have been holding lower-priority work back for this instantiation
+    void stalled(void);
     // An operation's work is complete: releases the remaining successors
     // and postconditions, then its share of the finish counter. The state
     // may be freed once this returns.

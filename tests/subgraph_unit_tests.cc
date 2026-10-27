@@ -2819,6 +2819,106 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 //
+// A hold that lifts because of something on another processor: graph task
+// a1 on Q blocks on an event that only a lower-priority normal task N on P
+// can trigger, while P is held for the graph (its own graph task a2 waits
+// for a1). When a1 blocks the instantiation is stalled everywhere and P's
+// hold must lift, and P, which went to sleep holding N back, must be woken
+// to run N. Without that wake-up P sleeps forever and the graph deadlocks.
+// a1 sleeps first so that P has run out of poll budget and is asleep.
+//
+
+struct HoldWaitTaskArgs {
+  UserEvent e;
+  std::atomic<int> *started;
+};
+static int hold_wait_task_id = 0;
+static void hold_wait_task(const void *args, size_t arglen, const void *userdata,
+                           size_t userlen, Processor p)
+{
+  const HoldWaitTaskArgs *a = static_cast<const HoldWaitTaskArgs *>(args);
+  a->started->store(1);
+  usleep(20000); // past the processors' poll budget
+  a->e.wait();
+}
+
+struct TriggerTaskArgs {
+  UserEvent e;
+};
+static int trigger_event_task_id = 0;
+static void trigger_event_task(const void *args, size_t arglen, const void *userdata,
+                               size_t userlen, Processor p)
+{
+  static_cast<const TriggerTaskArgs *>(args)->e.trigger();
+}
+
+class HoldLiftsOffProcessorTest : public SubgraphTest {
+public:
+  std::string name() const override { return "GraphPriority.HoldLiftsOffProcessor"; }
+  bool can_run() override { return worker_cpus().size() >= 2; }
+
+  void init() override
+  {
+    procs = worker_cpus(2);
+    started.store(0);
+    a2_runs.store(0);
+    e = UserEvent::create_user_event();
+    SubgraphDefinition sd;
+    HoldWaitTaskArgs a1{e, &started};
+    int t1 = make_task_desc(sd, procs[1], hold_wait_task_id, &a1, sizeof(a1)); // Q
+    CounterTaskArgs a2{&a2_runs, UserEvent::NO_USER_EVENT};
+    int t2 = make_task_desc(sd, procs[0], counter_task_id, &a2, sizeof(a2)); // P
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t1, SubgraphDefinition::OPKIND_TASK,
+                   t2);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    // N, priority 0 on P, released once the graph holds P
+    UserEvent gate = UserEvent::create_user_event();
+    TriggerTaskArgs n{e};
+    Event ne = procs[0].spawn(trigger_event_task_id, &n, sizeof(n), gate, 0 /*priority*/);
+    Event fe = sg.instantiate(nullptr, 0, ProfilingRequestSet(), Event::NO_EVENT,
+                              1 /*priority*/);
+    if(!poll_until([&]() { return started.load() != 0; }, config.hang_timeout)) {
+      completed = false;
+      e.trigger();
+      return;
+    }
+    gate.trigger(); // N becomes ready on P while P is held at priority 1
+    completed = wait_with_timeout(Event::merge_events(fe, ne), config.hang_timeout);
+    if(!completed)
+      e.trigger(); // release the graph task so the runtime can shut down
+  }
+
+  bool check() override
+  {
+    if(!completed)
+      log_app.error() << name() << ": the graph did not finish: P was never woken to run "
+                                   "the task that unblocks it";
+    return completed;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  std::vector<Processor> procs;
+  std::atomic<int> started{0};
+  std::atomic<int64_t> a2_runs{0};
+  UserEvent e;
+  Subgraph sg;
+  bool completed = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
 // A destroy takes effect when its precondition triggers, so the usual
 // Realm idiom "destroy once these are done", d = destroy(G); e =
 // instantiate(); G.trigger(e), is valid: the instantiation issued after the
@@ -6279,6 +6379,10 @@ static void register_common_tasks()
   finish_event_task_id = task_id_counter++;
   prof_response_task_id = task_id_counter++;
   respawn_poll_task_id = task_id_counter++;
+  hold_wait_task_id = task_id_counter++;
+  trigger_event_task_id = task_id_counter++;
+  rt.register_task(hold_wait_task_id, hold_wait_task);
+  rt.register_task(trigger_event_task_id, trigger_event_task);
   remote_guarded_task_id = task_id_counter++;
   order_record_task_id = task_id_counter++;
   remote_order_driver_task_id = task_id_counter++;
@@ -6378,6 +6482,7 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new GraphPriorityBlockedYieldsTest());
   tests.emplace_back(new EqualPriorityFairnessTest());
   tests.emplace_back(new EqualPriorityRespawnTest());
+  tests.emplace_back(new HoldLiftsOffProcessorTest());
   tests.emplace_back(new DefaultModeReverseChainTest());
   tests.emplace_back(new DestroyGuardedByInstantiationTest());
   tests.emplace_back(new CopyReplayTest());

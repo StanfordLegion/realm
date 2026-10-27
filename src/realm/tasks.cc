@@ -1223,21 +1223,10 @@ namespace Realm {
             task_priority = std::max(task_priority, floor - 1);
         }
         Task *task = TaskQueue::get_best_task(task_queues, task_priority);
-        if(have_subgraph_work) {
-          // was this a tie, and who won it? (the queues' top priorities are
-          //  a snapshot, which is all the alternation needs)
-          if(task) {
-            if(task->priority == subgraph_priority)
-              subgraph_tie_to_task = false;
-          } else if(!subgraph_tie_to_task) {
-            for(TaskQueue *q : task_queues)
-              if((q->task_count.load() > 0) &&
-                 (q->top_priority.load() == subgraph_priority)) {
-                subgraph_tie_to_task = true;
-                break;
-              }
-          }
-        }
+        // a task of the subgraph work's priority was chosen over it: that
+        //  tie went to the task, the next one goes to the subgraph
+        if(have_subgraph_work && task && (task->priority == subgraph_priority))
+          subgraph_tie_to_task = false;
 
         // did we find a ready task to run?
         if(task) {
@@ -1306,6 +1295,17 @@ namespace Realm {
         // (ties go to resumable workers, as for ready tasks)
         if(have_subgraph_work &&
            (resumable_workers.empty() || (subgraph_priority > resumable_priority))) {
+          // subgraph work runs; if a ready task of its priority was passed
+          //  over, that tie went to the subgraph and the next one goes to
+          //  the task (the queues' top priorities are a snapshot, which is
+          //  all the alternation needs)
+          if(!subgraph_tie_to_task)
+            for(TaskQueue *q : task_queues)
+              if((q->task_count.load() > 0) &&
+                 (q->top_priority.load() == subgraph_priority)) {
+                subgraph_tie_to_task = true;
+                break;
+              }
           ProcSubgraphExecutor::ReadyEntry entry;
           subgraph_executor->dequeue(entry);
           subgraph_executor->task_started(entry.priority);

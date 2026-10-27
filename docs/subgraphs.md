@@ -129,7 +129,15 @@ resumes. Consequences: lower-priority work can start on a graph's processors
 while the whole graph is blocked (or, for a GPU, once a GPU task's function
 has returned and nothing else of the graph is running), and the graph then
 waits for that work to finish or block before its task resumes; nothing ever
-waits forever on a hold. A GPU task whose function has returned counts as
+waits forever on a hold. When an instantiation stalls, the processors it may
+have been holding are woken explicitly, so lower-priority work they held back
+runs even if nothing else would have woken them. This rests on one rule for
+graph tasks: a task that waits for anything must wait through Realm (an
+event wait). A graph task that spins on a flag, blocks in a library call or
+otherwise waits outside Realm keeps its instantiation counted as running, so
+its holds stay in place; if what it waits for needs a held processor, that is
+a deadlock of the application's making, one that ordinary tasks could not
+have because their priorities never reach across processors. A GPU task whose function has returned counts as
 not running, whether or not its work on the stream is complete.
 
 **Completion.** A processor's share of the finish counter is released when its

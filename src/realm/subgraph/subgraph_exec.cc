@@ -455,7 +455,24 @@ namespace Realm {
       if(counter(sx).fetch_sub_acqrel(1) == 1)
         op_ready(sx);
     }
-    active_work.fetch_sub_acqrel(1);
+    if(active_work.fetch_sub_acqrel(1) == 1)
+      stalled();
+  }
+
+  void SubgraphExecutionState::stalled(void)
+  {
+    // The instantiation has nothing running, ready or in flight anywhere, so
+    // its holds on its processors have just lifted (active_floor). A
+    // processor that went to sleep with lower-priority work it was holding
+    // back learns of that only through its work counter: wake every
+    // processor of the graph that still has operations of this
+    // instantiation to run (and so may have been holding). The caller holds
+    // a share of the finish counter, so the state and the compiled form are
+    // valid; the processors' implementations outlive the runtime.
+    const CompiledSubgraph &c = subgraph->compiled;
+    for(size_t p = 0; p < c.procs.size(); p++)
+      if(remaining(uint32_t(p)).load_acquire() != 0)
+        c.procs[p].impl->notify_scheduler_of_new_work();
   }
 
   void SubgraphExecutionState::op_finished(uint32_t op)
@@ -713,7 +730,10 @@ namespace Realm {
   void ProcSubgraphExecutor::task_blocked(int priority, SubgraphExecutionState *state)
   {
     task_finished(priority);
-    state->active_work.fetch_sub_acqrel(1);
+    // the blocked task's operation is unfinished, so its processor's share
+    // keeps the state valid for the wake-up below
+    if(state->active_work.fetch_sub_acqrel(1) == 1)
+      state->stalled();
   }
 
   void ProcSubgraphExecutor::task_resumed(int priority, SubgraphExecutionState *state)
@@ -733,9 +753,10 @@ namespace Realm {
     if(c.front == c.end) {
       // Drop the cursor now: once this processor's operations have all
       // completed, its finish decrement may let the state be released at
-      // any time.
-      active[peeked_cursor] = active.back();
-      active.pop_back();
+      // any time. Erase in place (the vector is short) so the round robin
+      // keeps its order: a swap with the back would move that cursor ahead
+      // of the ones between.
+      active.erase(active.begin() + peeked_cursor);
       scan_start = peeked_cursor;
     } else {
       scan_start = peeked_cursor + 1;
