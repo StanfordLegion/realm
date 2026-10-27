@@ -108,6 +108,7 @@ list(
   actmsg_chunked_send_test.cc
   fragmented_message_test.cc
   incoming_message_manager_test.cc
+  subgraph_order_test.cc
   memcpy_channel_test.cc
   comp_queue_test.cc
   event_test.cc
