@@ -863,22 +863,23 @@ namespace Realm {
                                                bool poisoned)
   {
     const CompiledSubgraph &c = state->subgraph->compiled;
-    // No input waiter is registered yet and no processor knows the state,
-    // so the two early exits below may finish directly.
     if(poisoned) {
-      // Nothing runs; the finish event and every postcondition are
-      // poisoned and cleanup proceeds as usual.
+      // Nothing runs, but the finish event still means "every precondition
+      // has triggered", as for any Realm operation: the instantiation takes
+      // the normal path with every operation skipped (op_poisoned) and every
+      // postcondition poisoned, and finishes once the inputs have been
+      // waited for and everything has drained.
       log_subgraph.info() << "poisoned precondition: subgraph=" << state->subgraph->me;
-      for(Event pc : state->postconditions)
-        GenEventImpl::trigger(pc, true /*poisoned*/);
-      state->finish(true /*poisoned*/);
-      return;
+      state->start_poisoned.store_release(true);
+      state->poisoned.store_release(true);
     }
     if(c.ops.empty()) {
-      // Nothing to wait for.
+      // Nothing to wait for (an empty definition has no inputs either):
+      // no input waiter is registered yet and no processor knows the state,
+      // so this may finish directly.
       for(Event pc : state->postconditions)
-        GenEventImpl::trigger(pc, false /*!poisoned*/);
-      state->finish(false /*!poisoned*/);
+        GenEventImpl::trigger(pc, poisoned);
+      state->finish(poisoned);
       return;
     }
     for(const CompiledSubgraph::Proc &p : c.procs)

@@ -87,6 +87,7 @@ namespace Realm {
                          _preconditions.data() + _preconditions.size());
     postconditions.assign(_postconditions.data(),
                           _postconditions.data() + _postconditions.size());
+    start_poisoned.store(false);
     for(auto &w : poisoned_inputs)
       w.store(0);
     poisoned.store(false);
@@ -285,6 +286,8 @@ namespace Realm {
   {
     if(!poisoned.load_acquire())
       return false; // the common case: no input poisoned
+    if(start_poisoned.load_acquire())
+      return true;
     const CompiledSubgraph &c = subgraph->compiled;
     const uint64_t *bits = c.op_inputs.data() + size_t(op) * c.input_words;
     for(size_t w = 0; w < c.input_words; w++)
@@ -483,7 +486,7 @@ namespace Realm {
       const uint32_t pc = c.postconds_of.data[i];
       if(postcond_counter(pc).fetch_sub_acqrel(1) != 1)
         continue;
-      bool pc_poisoned = false;
+      bool pc_poisoned = start_poisoned.load_acquire();
       const uint64_t *bits = c.postcond_inputs.data() + size_t(pc) * c.input_words;
       for(size_t w = 0; w < c.input_words; w++)
         pc_poisoned = pc_poisoned || ((bits[w] & poisoned_inputs[w].load_acquire()) != 0);

@@ -2919,6 +2919,72 @@ private:
 
 ////////////////////////////////////////////////////////////////////////
 //
+// A poisoned start event skips the graph, but the finish event still means
+// "every precondition has triggered": it must not trigger while an external
+// precondition is pending, and then triggers poisoned with the task not run.
+//
+
+class PoisonedStartWaitsForInputsTest : public SubgraphTest {
+public:
+  std::string name() const override { return "Poison.StartWaitsForInputs"; }
+  bool can_run() override { return worker_cpus().size() >= 1; }
+
+  void init() override
+  {
+    cpu = worker_cpus()[0];
+    runs.store(0);
+    SubgraphDefinition sd;
+    CounterTaskArgs a{&runs, UserEvent::NO_USER_EVENT};
+    int t = make_task_desc(sd, cpu, counter_task_id, &a, sizeof(a));
+    add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 0,
+                   SubgraphDefinition::OPKIND_TASK, t);
+    add_dependency(sd, SubgraphDefinition::OPKIND_TASK, t,
+                   SubgraphDefinition::OPKIND_EXT_POSTCOND, 0);
+    Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  }
+
+  void run() override
+  {
+    UserEvent bad = UserEvent::create_user_event();
+    bad.cancel(); // the poisoned start event
+    UserEvent input = UserEvent::create_user_event();
+    std::vector<Event> pre = {input};
+    std::vector<Event> post(1);
+    Event fe = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post, bad);
+    usleep(50000); // time enough for a finish that ignored the pending input
+    early = fe.has_triggered() || post[0].has_triggered();
+    input.trigger();
+    completed = wait_with_timeout(fe, config.hang_timeout, &finish_poisoned) &&
+                wait_with_timeout(post[0], config.hang_timeout, &post_poisoned);
+  }
+
+  bool check() override
+  {
+    bool ok = completed && !early && finish_poisoned && post_poisoned && (runs.load() == 0);
+    if(!ok)
+      log_app.error() << name() << ": completed=" << completed << " early=" << early
+                      << " finish_poisoned=" << finish_poisoned
+                      << " post_poisoned=" << post_poisoned << " runs=" << runs.load();
+    return ok;
+  }
+
+  void cleanup() override
+  {
+    if(completed)
+      sg.destroy().wait();
+  }
+
+  bool hung() const override { return !completed; }
+
+private:
+  Processor cpu;
+  std::atomic<int64_t> runs{0};
+  Subgraph sg;
+  bool completed = false, early = false, finish_poisoned = false, post_poisoned = false;
+};
+
+////////////////////////////////////////////////////////////////////////
+//
 // A destroy takes effect when its precondition triggers, so the usual
 // Realm idiom "destroy once these are done", d = destroy(G); e =
 // instantiate(); G.trigger(e), is valid: the instantiation issued after the
@@ -6483,6 +6549,7 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new EqualPriorityFairnessTest());
   tests.emplace_back(new EqualPriorityRespawnTest());
   tests.emplace_back(new HoldLiftsOffProcessorTest());
+  tests.emplace_back(new PoisonedStartWaitsForInputsTest());
   tests.emplace_back(new DefaultModeReverseChainTest());
   tests.emplace_back(new DestroyGuardedByInstantiationTest());
   tests.emplace_back(new CopyReplayTest());

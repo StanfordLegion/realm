@@ -173,8 +173,13 @@ destroy while one is pending.
 **Poison.** Only a poisoned start event or poisoned external preconditions
 propagate poison; in `INSTANTIATION_ORDER` mode the previous instantiation's
 poison does not reach the next one (the chain is ordering, not a
-precondition). An external precondition that gates no operation is still
-waited for, and its poison still poisons the finish event. A poisoned
+precondition). An external precondition index below the declared count that
+gates no operation is still waited for, and its poison still poisons the
+finish event; the number of preconditions passed to `instantiate` must equal
+the declared count (one more than the highest index used), anything else is
+fatal. A poisoned start event skips every operation, poisons every
+postcondition and the finish event, and still waits for the external
+preconditions before the finish event triggers. A poisoned
 `destroy` precondition destroys the subgraph anyway (with a warning). Operations
 downstream are skipped (tasks and copies are not run, arrivals are not
 performed); their successors still drain. Misuse is fatal, not poisoned.

@@ -722,6 +722,9 @@ namespace Realm {
     // Bitset of external inputs that triggered poisoned.
     std::vector<atomic<uint64_t>> poisoned_inputs;
     atomic<bool> poisoned;
+    // the start event was poisoned: every operation is skipped and every
+    // postcondition poisoned, after the inputs have been waited for
+    atomic<bool> start_poisoned;
 
     // Scheduling priority of this instantiation. While it is active on a
     // processor whose inputs are all satisfied, that processor runs only
