@@ -1915,27 +1915,32 @@ public:
     std::vector<Event> pre = {pending};
     std::vector<Event> post;
     Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post, start);
+    // A poisoned start skips the graph but, like any Realm operation, the
+    // instantiation is not over until every precondition has triggered: the
+    // state (and its waiter on `pending`) stays alive until then.
+    usleep(50000);
+    early = e.has_triggered();
+    pending.trigger();
     completed = wait_with_timeout(e, config.hang_timeout, &poisoned);
     if(!completed)
       return;
-    // The instantiation is over while its precondition is still pending:
-    // destroy the subgraph (freeing its states) and reuse the memory with
-    // another one before the precondition finally triggers.
+    // Now the subgraph can go, and another one reuses its memory.
     sg.destroy().wait();
     destroyed = true;
     std::vector<Event> pre2 = {Event::NO_EVENT};
     Event e2 = sg2.instantiate(nullptr, 0, ProfilingRequestSet(), pre2, post);
     second_ok = wait_with_timeout(e2, config.hang_timeout);
-    pending.trigger();
   }
 
   bool check() override
   {
-    bool ok = completed && poisoned && destroyed && second_ok && (count.load() == 1);
+    bool ok = completed && !early && poisoned && destroyed && second_ok &&
+              (count.load() == 1);
     if(!ok)
-      log_app.error() << name() << ": completed=" << completed << " poisoned=" << poisoned
-                      << " destroyed=" << destroyed << " second=" << second_ok
-                      << " count=" << count.load() << " (expected 1)";
+      log_app.error() << name() << ": completed=" << completed << " early=" << early
+                      << " poisoned=" << poisoned << " destroyed=" << destroyed
+                      << " second=" << second_ok << " count=" << count.load()
+                      << " (expected 1)";
     return ok;
   }
 
@@ -1950,7 +1955,8 @@ private:
   Subgraph sg, sg2;
   UserEvent pending;
   std::atomic<int64_t> count;
-  bool completed = false, poisoned = false, destroyed = false, second_ok = false;
+  bool completed = false, early = false, poisoned = false, destroyed = false,
+       second_ok = false;
 };
 
 class UnusedInputTest : public SubgraphTest {
