@@ -411,6 +411,9 @@ namespace Realm {
     template <typename T>
     void add_measurement(const T &data, bool send_complete_responses = true);
 
+    // every measurement id some imported request asked for
+    void get_requested_measurement_ids(std::set<ProfilingMeasurementID> &ids) const;
+
   protected:
     void send_response(const ProfilingRequest &pr) const;
 

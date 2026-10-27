@@ -6238,6 +6238,20 @@ static void death_one_shot_twice()
   sg.instantiate(nullptr, 0, ProfilingRequestSet());
 }
 
+static void death_unsupported_task_measurement()
+{
+  // a measurement the executor cannot provide (graph tasks have no
+  // Operation) is refused when the definition is compiled
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
+  Processor cpu = worker_cpus()[0];
+  int t = make_task_desc(sd, cpu, noop_task_id, nullptr, 0);
+  sd.tasks[t].prs.add_request(cpu, noop_task_id)
+      .add_measurement<ProfilingMeasurements::OperationBacktrace>();
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+}
+
 static void death_destroy_twice()
 {
   Subgraph sg = make_one_task_subgraph(noop_task_id);
@@ -6309,6 +6323,7 @@ static const DeathScenario death_scenarios[] = {
     {"redop_size_mismatch", death_redop_size_mismatch},
     {"deferred_creation", death_deferred_creation},
     {"task_on_utility_proc", death_task_on_utility_proc},
+    {"unsupported_task_measurement", death_unsupported_task_measurement},
     {"destroy_twice", death_destroy_twice},
     {"destroy_twice_pending", death_destroy_twice_pending},
     {"one_shot_twice", death_one_shot_twice},

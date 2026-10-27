@@ -191,6 +191,39 @@ namespace Realm {
     }
   }
 
+  void subgraph_check_task_measurements(ID me, const ProfilingRequestSet &prs,
+                                        int task_index)
+  {
+    if(prs.empty())
+      return;
+    ProfilingMeasurementCollection pmc;
+    pmc.import_requests(prs);
+    std::set<ProfilingMeasurementID> ids;
+    pmc.get_requested_measurement_ids(ids);
+    for(ProfilingMeasurementID id : ids) {
+      switch(id) {
+      case PMID_OP_TIMELINE:
+      case PMID_OP_PROC_USAGE:
+      case PMID_OP_STATUS:
+      case PMID_OP_FINISH_EVENT:
+        continue;
+      default:
+        break;
+      }
+      std::ostringstream which;
+      if(task_index >= 0)
+        which << "task " << task_index;
+      else
+        which << "a task";
+      SUBGRAPH_FATAL(me, which.str()
+                             << " requests profiling measurement id " << int(id)
+                             << ", which compiled subgraphs do not provide (graph tasks "
+                                "have no Operation); supported: OperationTimeline, "
+                                "OperationProcessorUsage, OperationStatus, "
+                                "OperationFinishEvent");
+    }
+  }
+
   void
   SubgraphExecutionState::setup_profiling(const SubgraphInstantiationProfiling &iprof)
   {
@@ -231,42 +264,9 @@ namespace Realm {
       entry_for_task(kv.first).requests.import_requests(kv.second);
     for(auto &p : profiling) {
       p->measurements.import_requests(p->requests);
-      // everything else is dropped silently by Realm; here that is an error
-      if(p->measurements
-             .wants_measurement<ProfilingMeasurements::OperationAbnormalStatus>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::OperationBacktrace>() ||
-         p->measurements
-             .wants_measurement<ProfilingMeasurements::OperationTimelineGPU>() ||
-         p->measurements
-             .wants_measurement<ProfilingMeasurements::OperationEventWaits>() ||
-         p->measurements
-             .wants_measurement<ProfilingMeasurements::OperationMemoryUsage>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::OperationCopyInfo>() ||
-         p->measurements
-             .wants_measurement<ProfilingMeasurements::OperationSubgraphInfo>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::InstanceStatus>() ||
-         p->measurements
-             .wants_measurement<ProfilingMeasurements::InstanceAllocResult>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::InstanceTimeline>() ||
-         p->measurements
-             .wants_measurement<ProfilingMeasurements::InstanceMemoryUsage>() ||
-         p->measurements.wants_measurement<
-             ProfilingMeasurements::CachePerfCounters<PMID_PCTRS_CACHE_L1I>>() ||
-         p->measurements.wants_measurement<
-             ProfilingMeasurements::CachePerfCounters<PMID_PCTRS_CACHE_L1D>>() ||
-         p->measurements.wants_measurement<
-             ProfilingMeasurements::CachePerfCounters<PMID_PCTRS_CACHE_L2>>() ||
-         p->measurements.wants_measurement<
-             ProfilingMeasurements::CachePerfCounters<PMID_PCTRS_CACHE_L3>>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::IPCPerfCounters>() ||
-         p->measurements.wants_measurement<ProfilingMeasurements::TLBPerfCounters>() ||
-         p->measurements
-             .wants_measurement<ProfilingMeasurements::BranchPredictionPerfCounters>())
-        SUBGRAPH_FATAL(
-            subgraph->me,
-            "a task requests a profiling measurement that compiled subgraphs do "
-            "not provide (supported: OperationTimeline, OperationProcessorUsage, "
-            "OperationStatus, OperationFinishEvent)");
+      // the definition's requests were checked at compile; the per-instantiation
+      // ones are checked here (a whitelist, see subgraph_check_task_measurements)
+      subgraph_check_task_measurements(subgraph->me, p->requests, -1);
       p->wants_timeline =
           p->measurements.wants_measurement<ProfilingMeasurements::OperationTimeline>();
       p->wants_proc =

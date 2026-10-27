@@ -96,7 +96,7 @@ round show the effect.
 | `TaskDesc::priority != 0` | The executor schedules by instantiation priority only. |
 | `Processor::set_current_task_priority` inside a graph task | Graph tasks have no `Operation`; the instantiation's priority applies. (`Processor::add_finish_event_precondition` returns `REALM_PROCESSOR_ERROR_OUTSIDE_TASK` there, for the same reason.) |
 | A copy that fails or is cancelled | Its successors would run on bad data; nothing in a graph can recover. |
-| Profiling measurements on tasks other than `OperationTimeline`, `OperationProcessorUsage`, `OperationStatus`, `OperationFinishEvent` | Realm would drop them silently. |
+| Profiling measurements on tasks other than `OperationTimeline`, `OperationProcessorUsage`, `OperationStatus`, `OperationFinishEvent` | Graph tasks have no `Operation`, which is where every other measurement is produced. Refused at creation for the definition's requests and at instantiate for per-instantiation ones, as a whitelist: a measurement kind added to Realm later is refused rather than silently never delivered (main drops unsupported requests silently). |
 | Collective pre/postconditions | Not implemented. |
 | `create_subgraph` with an untriggered `wait_on`, or with profiling requests | Compile is synchronous and unprofiled. |
 | Profiling requests on the `instantiate` overloads that take a `ProfilingRequestSet` for the instantiation itself | Use `SubgraphInstantiationProfiling`. |

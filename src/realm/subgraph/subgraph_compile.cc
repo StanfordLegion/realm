@@ -164,6 +164,7 @@ namespace Realm {
         SUBGRAPH_FATAL(me, "task " << i << " has priority " << t.priority
                                    << "; per-task priorities are not implemented (use "
                                       "the instantiation priority)");
+      subgraph_check_task_measurements(me, t.prs, int(i));
     }
 
     // interpolations: which arrivals get their barrier from the arguments?

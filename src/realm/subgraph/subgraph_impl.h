@@ -444,6 +444,14 @@ namespace Realm {
     UserEvent to_trigger;
   };
 
+  // Graph tasks have no Operation, so only the measurements the executor
+  // fills itself are available: OperationTimeline, OperationProcessorUsage,
+  // OperationStatus, OperationFinishEvent. Any other request is fatal (a
+  // whitelist, so a measurement kind added to Realm later is refused rather
+  // than silently never delivered). task_index < 0: the task is not known.
+  void subgraph_check_task_measurements(ID me, const ProfilingRequestSet &prs,
+                                        int task_index);
+
   // active messages
 
   // The header must fit every network's budget. GASNet-EX packs a medium

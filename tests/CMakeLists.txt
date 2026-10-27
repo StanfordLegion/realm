@@ -378,6 +378,7 @@ add_subgraph_death_test(instantiate_after_destroy "instantiate of a subgraph tha
 add_subgraph_death_test(instantiate_after_destroy_requested "instantiated after destroy")
 add_subgraph_death_test(serializable_mode_unsupported "SERIALIZABLE is not implemented")
 add_subgraph_death_test(dependency_cycle "contain a cycle")
+add_subgraph_death_test(unsupported_task_measurement "requests profiling measurement id")
 # Shutdown with an instantiation that cannot finish (gated on an event nobody
 # triggers; a graph task blocked forever): pending application work, reported
 # by the same eager check that reports an untriggered operation. No timer.

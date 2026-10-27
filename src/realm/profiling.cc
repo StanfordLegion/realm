@@ -148,6 +148,15 @@ namespace Realm {
 
   ProfilingMeasurementCollection::~ProfilingMeasurementCollection(void) {}
 
+  void ProfilingMeasurementCollection::get_requested_measurement_ids(
+      std::set<ProfilingMeasurementID> &ids) const
+  {
+    for(std::map<ProfilingMeasurementID, std::vector<const ProfilingRequest *>>::const_iterator
+            it = requested_measurements.begin();
+        it != requested_measurements.end(); ++it)
+      ids.insert(it->first);
+  }
+
   void ProfilingMeasurementCollection::import_requests(const ProfilingRequestSet &prs)
   {
     // iterate over the individual requests, recording the measurements needed
