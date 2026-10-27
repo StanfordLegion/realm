@@ -22,6 +22,7 @@
 
 #include "realm/atomics.h"
 #include "realm/subgraph.h"
+#include "realm/subgraph/subgraph_order.h"
 #include "realm/id.h"
 #include "realm/event_impl.h"
 #include "realm/operation.h"
@@ -311,43 +312,37 @@ namespace Realm {
     CompiledSubgraph compiled;
 
   protected:
-    void instantiate(const void *args, size_t arglen, const ProfilingRequestSet &prs,
-                     const SubgraphInstantiationProfiling &profiling,
-                     span<const Event> preconditions, span<const Event> postconditions,
-                     Event start_event, Event finish_event, int priority_adjust,
-                     const RemoteMessage *remote);
     // A remote instantiate held until its predecessors from the same node
     // have been handled (INSTANTIATION_ORDER): a copy of the message.
     struct HeldInstantiate {
       RemoteMessage msg; // msg.data points into payload
       std::vector<char> payload;
     };
-    // Per sending node, which of its instantiates have been handled and
-    // which arrived early. Every sequence number below `next` has been
-    // handled (or, below a message's `base`, had finished, which implies
-    // handled); `handled` holds the ones at or above `next`.
-    struct SenderOrder {
-      uint64_t next = 0;
-      std::set<uint64_t> handled;
-      std::vector<HeldInstantiate *> held;
-    };
-    // With lifecycle_lock held: whether every instantiate in [base, seq)
-    // from the sender has been handled; if `record`, and it is, records seq
-    // as handled. Recording happens in the same critical section as the
-    // chaining (instantiate), so a later instantiate from the node cannot
-    // slip in between.
-    bool remote_order_ready_locked(const RemoteOrder &order, bool record);
-    // Pops a held instantiate from the sender whose predecessors have all
-    // been handled, if any; the caller handles it (readiness only grows).
-    HeldInstantiate *pop_ready_held(NodeID sender);
+    // The core of instantiate. For a remote instantiate of an
+    // INSTANTIATION_ORDER subgraph it may hold the message instead (returns
+    // nullptr then too). Returns a held message from the same node that is
+    // ready now, if any, popped in the same critical section that recorded
+    // this one: after the instantiation is published nothing may touch this
+    // object again without such a message in hand (a destroy covering the
+    // published instantiation may complete and return the object to the
+    // free list at any moment), and a held message is an unhandled
+    // instantiate, which a conforming program cannot have destroyed.
+    HeldInstantiate *instantiate(const void *args, size_t arglen,
+                                 const ProfilingRequestSet &prs,
+                                 const SubgraphInstantiationProfiling &profiling,
+                                 span<const Event> preconditions,
+                                 span<const Event> postconditions, Event start_event,
+                                 Event finish_event, int priority_adjust,
+                                 const RemoteMessage *remote);
 
-    // Lifecycle state, protected by lifecycle_lock: the finish event of the
-    // most recent instantiation (INSTANTIATION_ORDER chains the next one
-    // after it), the number of instantiations whose state is still alive,
-    // and the destroy request. A destroy is `pending` from the request
-    // until its precondition triggers (a second request is an error) and
-    // `requested` from then on (an instantiate is an error); whoever sees
-    // it requested with the count at zero completes it.
+    // Lifecycle state, protected by lifecycle_lock (including `alive` and
+    // the reset in destroy()): the finish event of the most recent
+    // instantiation (INSTANTIATION_ORDER chains the next one after it), the
+    // number of instantiations whose state is still alive, and the destroy
+    // request. A destroy is `pending` from the request until its
+    // precondition triggers (a second request is an error) and `requested`
+    // from then on (an instantiate is an error); whoever sees it requested
+    // with the count at zero completes it.
     Mutex lifecycle_lock;
     Event previous_instantiation_completion = Event::NO_EVENT;
     int64_t outstanding_instantiations = 0;
@@ -355,7 +350,8 @@ namespace Realm {
     bool destroy_pending = false;
     bool destroy_requested = false;
     UserEvent destroy_done = UserEvent::NO_USER_EVENT;
-    std::unordered_map<NodeID, SenderOrder> sender_order; // INSTANTIATION_ORDER only
+    // per sending node, INSTANTIATION_ORDER only (see subgraph_order.h)
+    std::unordered_map<NodeID, RemoteOrderTracker> sender_order;
 
     // Blocks come from per-domain slabs placed on the domain's NUMA node:
     // one mmap per slab, not per instantiation (an application may have
@@ -411,19 +407,8 @@ namespace Realm {
     Event take(Subgraph subgraph);
 
   private:
-    struct Sent {
-      uint64_t seq;
-      Event finish;
-    };
-    struct Entry {
-      uint64_t next_seq = 0;
-      // in sequence order; the finished prefix is popped by each note, so
-      // the front is the oldest unfinished one (finished ones behind it
-      // wait their turn: each entry is popped once, O(1) amortized)
-      std::deque<Sent> sent;
-    };
     Mutex mutex;
-    std::unordered_map<ID::IDType, Entry> entries;
+    std::unordered_map<ID::IDType, RemoteOrderSender<Event>> entries;
   };
 
   // Sends a destroy message to a subgraph's owner once the instantiations

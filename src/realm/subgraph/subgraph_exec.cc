@@ -797,7 +797,19 @@ namespace Realm {
     // normal task on this processor look like an external thread.
     ThreadLocal::current_processor = proc;
     thread->start_subgraph_task_execution(state);
-    proc_impl->execute_task(task_desc.task_id, state->op_args(entry.op));
+    try {
+      proc_impl->execute_task(task_desc.task_id, state->op_args(entry.op));
+    } catch(...) {
+      // A normal task that throws poisons its own event; a graph task has
+      // none of its own to poison, and its processor's share of the graph
+      // would never be released: report and stop instead of unwinding into
+      // the scheduler with the thread still marked as inside a graph task.
+      thread->stop_subgraph_task_execution();
+      SUBGRAPH_FATAL(state->get_subgraph()->me,
+                     "an exception escaped graph task " << op.index << " on " << proc
+                                                        << "; graph tasks cannot be "
+                                                           "poisoned, so this is fatal");
+    }
     thread->stop_subgraph_task_execution();
     void *token = proc_impl->end_subgraph_task(context, op.deferred);
     if(pf && pf->wants_timeline)
