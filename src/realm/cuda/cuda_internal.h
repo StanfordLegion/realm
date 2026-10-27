@@ -577,6 +577,8 @@ namespace Realm {
       //  thread runs the task function itself, with these providing the
       //  context, stream and completion tracking GPUContextManager would
       virtual unsigned subgraph_task_flags(Processor::TaskFuncID func_id);
+      virtual const void *subgraph_task_entry(Processor::TaskFuncID func_id);
+      virtual void execute_subgraph_task(const void *entry, const ByteArrayRef &task_args);
       virtual bool supports_subgraph_tasks(void) const;
       virtual bool subgraph_tasks_are_async(void) const;
       virtual void *begin_subgraph_task(const void *const *tokens, size_t num_tokens);

@@ -790,8 +790,6 @@ namespace Realm {
       return;
     }
 
-    const SubgraphDefinition::TaskDesc &task_desc = impl->defn->tasks[op.index];
-
     // Tokens of the deferred-effects predecessors this task's work must follow.
     const uint64_t tw0 = c.token_waits.offsets[entry.op];
     const size_t num_tokens = size_t(c.token_waits.offsets[entry.op + 1] - tw0);
@@ -822,7 +820,7 @@ namespace Realm {
     ThreadLocal::current_processor = proc;
     thread->start_subgraph_task_execution(state);
     try {
-      proc_impl->execute_task(task_desc.task_id, state->op_args(entry.op));
+      proc_impl->execute_subgraph_task(op.task_entry, state->op_args(entry.op));
     } catch(...) {
       // A normal task that throws poisons its own event; a graph task has
       // none of its own to poison, and its processor's share of the graph

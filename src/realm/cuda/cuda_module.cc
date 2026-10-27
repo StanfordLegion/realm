@@ -1639,6 +1639,31 @@ namespace Realm {
              (it->second.deferred_effects ? SUBGRAPH_TASK_DEFERRED_EFFECTS : 0);
     }
 
+    const void *GPUProcessor::subgraph_task_entry(Processor::TaskFuncID func_id)
+    {
+      RWLock::AutoReaderLock al(task_table_mutex);
+      std::map<Processor::TaskFuncID, GPUTaskTableEntry>::const_iterator it =
+          gpu_task_table.find(func_id);
+      return (it != gpu_task_table.end()) ? static_cast<const void *>(&it->second)
+                                          : nullptr;
+    }
+
+    void GPUProcessor::execute_subgraph_task(const void *entry,
+                                             const ByteArrayRef &task_args)
+    {
+      const GPUTaskTableEntry &tte = *static_cast<const GPUTaskTableEntry *>(entry);
+      if(tte.stream_aware_fnptr) {
+        // begin_subgraph_task set the stream
+        assert(ThreadLocal::current_gpu_stream != nullptr);
+        (tte.stream_aware_fnptr)(task_args.base(), task_args.size(),
+                                 tte.user_data.base(), tte.user_data.size(), me,
+                                 ThreadLocal::current_gpu_stream->get_stream());
+      } else {
+        (tte.fnptr)(task_args.base(), task_args.size(), tte.user_data.base(),
+                    tte.user_data.size(), me);
+      }
+    }
+
     bool GPUProcessor::supports_subgraph_tasks(void) const { return true; }
 
     bool GPUProcessor::subgraph_tasks_are_async(void) const { return true; }

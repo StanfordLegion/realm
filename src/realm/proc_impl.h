@@ -189,6 +189,13 @@ namespace Realm {
     };
     // Flags for a registered task, 0 if it is not registered here.
     virtual unsigned subgraph_task_flags(Processor::TaskFuncID func_id);
+    // The processor's table entry for a registered task, nullptr if it is
+    // not registered here. Entries are never removed, so the pointer stays
+    // valid for the life of the processor: a compiled subgraph resolves each
+    // task once and runs it with execute_subgraph_task, without the task
+    // table's lock and lookup on every graph task.
+    virtual const void *subgraph_task_entry(Processor::TaskFuncID func_id);
+    virtual void execute_subgraph_task(const void *entry, const ByteArrayRef &task_args);
     // May subgraph tasks run here at all?
     virtual bool supports_subgraph_tasks(void) const;
     // Do tasks keep working after their function returns (GPU kernels)?

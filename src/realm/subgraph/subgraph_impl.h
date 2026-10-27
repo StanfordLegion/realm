@@ -142,6 +142,9 @@ namespace Realm {
       bool async;
       bool deferred;
       int32_t async_index; // per-instantiation token/completion slot, -1 if not async
+      // Tasks: the processor's table entry, resolved at compile (entries are
+      // never removed), so a graph task runs without the table's lock.
+      const void *task_entry;
     };
     struct Input {                   // one external precondition
       std::vector<uint32_t> targets; // operations it directly gates

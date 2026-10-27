@@ -372,6 +372,7 @@ namespace Realm {
       op.args_offset = op.args_size = 0;
       op.async = op.deferred = false;
       op.async_index = -1;
+      op.task_entry = nullptr;
       c.ops.push_back(op);
       return uint32_t(c.ops.size() - 1);
     };
@@ -391,6 +392,8 @@ namespace Realm {
           SUBGRAPH_FATAL(me, "task " << i << " uses task id " << d.tasks[i].task_id
                                      << ", which is not registered on " << cp.proc);
         CompiledSubgraph::Op &op = c.ops.back();
+        op.task_entry = cp.impl->subgraph_task_entry(d.tasks[i].task_id);
+        assert(op.task_entry != nullptr); // registered, per the flags
         op.async = cp.async;
         op.deferred = cp.async &&
                       ((flags & LocalTaskProcessor::SUBGRAPH_TASK_DEFERRED_EFFECTS) != 0);
