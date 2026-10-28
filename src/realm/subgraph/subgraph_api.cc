@@ -106,8 +106,10 @@ namespace Realm {
     } else {
       // The message goes out once every instantiation this node sent has
       // finished (see RemoteSubgraphInstantiations); wait_on is passed to
-      // the owner as given.
+      // the owner as given. Counted here as not yet in effect from this
+      // point until `done` triggers (see SubgraphDestroyReplyMessage).
       UserEvent done = UserEvent::create_user_event();
+      get_runtime()->subgraph_resource_reaper.destroy_returned_event();
       Event unfinished = get_runtime()->remote_subgraph_instantiations.take(*this);
       DeferredRemoteDestroy::send(owner, *this, wait_on, done, unfinished);
       return done;
@@ -402,6 +404,12 @@ namespace Realm {
         // every remote instantiate is recorded, in every mode, so that the
         // numbering stays consistent across the slot's reuse by another mode
         RemoteOrderTracker &tracker = sender_order[remote->order.sender];
+        // a number seen before means a node restarted its numbering (it
+        // never does, not even across this slot's destroy and reuse)
+        if(tracker.handled_already(remote->order.seq))
+          SUBGRAPH_FATAL(me, "node " << remote->order.sender
+                                     << " reused instantiate sequence number "
+                                     << remote->order.seq);
         if(defn->concurrency_mode == SubgraphDefinition::INSTANTIATION_ORDER) {
           if(!tracker.ready(remote->order.seq, true /*record*/)) {
             // An earlier instantiate from the same node has not arrived yet:
@@ -551,19 +559,22 @@ namespace Realm {
       } else {
         destroy_requested = true;
         if(outstanding_instantiations > 0) {
-          // The last instantiation to release its state completes the destroy.
+          // The last instantiation to release its state completes the
+          // destroy (instantiation_released, which takes this lock, so the
+          // destroy is counted before it can complete).
           if(poisoned)
             log_subgraph.warning()
                 << "destroy precondition was poisoned: subgraph=" << me;
           destroy_done = UserEvent::create_user_event();
+          get_runtime()->subgraph_resource_reaper.destroy_returned_event();
           return destroy_done;
         }
       }
     }
     if(!triggered) {
-      // Registered without the lock: the event may trigger meanwhile and
-      // call destroy_precondition_triggered right here.
-      get_runtime()->subgraph_resource_reaper.destroy_deferred();
+      // Counted before the waiter is registered: the event may trigger
+      // meanwhile and call destroy_precondition_triggered right here.
+      get_runtime()->subgraph_resource_reaper.destroy_returned_event();
       deferred_destroy.defer(this, wait_on);
       return done;
     }
@@ -583,18 +594,13 @@ namespace Realm {
       assert(destroy_pending && !destroy_requested);
       destroy_requested = true;
       if(outstanding_instantiations > 0) {
-        // the last release completes the destroy; the reaper's outstanding
-        // count covers that work from here on
-        get_runtime()->subgraph_resource_reaper.destroy_precondition_triggered();
+        // the last release completes the destroy (instantiation_released);
+        // the destroy stays counted as not in effect until then
         return;
       }
       done = destroy_done;
     }
-    // destroy() returns this object to the free list, so nothing of it is
-    // read afterwards; the pending count drops only once the work is done
-    destroy();
-    done.trigger();
-    get_runtime()->subgraph_resource_reaper.destroy_precondition_triggered();
+    complete_destroy(done);
   }
 
   void SubgraphImpl::instantiation_released(void)
@@ -608,7 +614,25 @@ namespace Realm {
         return;
       done = destroy_done;
     }
+    complete_destroy(done);
+  }
+
+  void SubgraphImpl::complete_destroy(UserEvent done)
+  {
+    // destroy() returns this object to the free list, so nothing of it is
+    // read afterwards. The order of the last two steps is the contract: the
+    // destroy is uncounted as pending work before its event triggers, so an
+    // application that has seen the event (by a chained waiter, a wait, or
+    // a poll of has_triggered) and then shuts down is never told that this
+    // destroy is not yet in effect. The other order is wrong for every
+    // observer: a poll or an external wait sees the trigger at once, and a
+    // waiter (the deferred shutdown included) runs inside trigger() itself
+    // whenever this is reached outside another trigger's waiter processing,
+    // as from a background worker or a processor thread. The same order as
+    // SubgraphExecutionState::finish for the unfinished count.
+    assert(done.exists());
     destroy();
+    get_runtime()->subgraph_resource_reaper.destroy_took_effect();
     done.trigger();
   }
 
@@ -815,10 +839,65 @@ namespace Realm {
                                          const void *data, size_t datalen)
   {
     SubgraphImpl *subgraph = get_runtime()->get_subgraph_impl(msg.subgraph);
-    msg.to_trigger.trigger(subgraph->request_destroy(msg.wait_on));
+    // the caller completes its own event (and its count) from the result
+    ActiveMessage<SubgraphDestroyReplyMessage> reply(sender);
+    reply->to_trigger = msg.to_trigger;
+    reply->result = subgraph->request_destroy(msg.wait_on);
+    reply.commit();
   }
 
   ActiveMessageHandlerReg<SubgraphDestroyMessage> subgraph_destroy_message_handler;
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class SubgraphDestroyReplyMessage, RemoteDestroyCompletion
+  //
+
+  /*static*/ void
+  SubgraphDestroyReplyMessage::handle_message(NodeID sender,
+                                              const SubgraphDestroyReplyMessage &msg,
+                                              const void *data, size_t datalen)
+  {
+    RemoteDestroyCompletion::complete(msg.to_trigger, msg.result);
+  }
+
+  ActiveMessageHandlerReg<SubgraphDestroyReplyMessage>
+      subgraph_destroy_reply_message_handler;
+
+  RemoteDestroyCompletion::RemoteDestroyCompletion(UserEvent _to_trigger)
+    : to_trigger(_to_trigger)
+  {}
+
+  /*static*/ void RemoteDestroyCompletion::complete(UserEvent to_trigger, Event result)
+  {
+    bool poisoned = false; // a destroy completes unpoisoned (with a warning)
+    if(!result.exists() || result.has_triggered_faultaware(poisoned)) {
+      finish(to_trigger);
+      return;
+    }
+    EventImpl::add_waiter(result, new RemoteDestroyCompletion(to_trigger));
+  }
+
+  /*static*/ void RemoteDestroyCompletion::finish(UserEvent to_trigger)
+  {
+    // the same order as SubgraphImpl::complete_destroy: uncounted before
+    // the event the application holds can be seen triggered
+    get_runtime()->subgraph_resource_reaper.destroy_took_effect();
+    to_trigger.trigger();
+  }
+
+  void RemoteDestroyCompletion::event_triggered(bool poisoned, TimeLimit work_until)
+  {
+    finish(to_trigger);
+    delete this;
+  }
+
+  void RemoteDestroyCompletion::print(std::ostream &os) const
+  {
+    os << "remote subgraph destroy completion: event=" << to_trigger;
+  }
+
+  Event RemoteDestroyCompletion::get_finish_event(void) const { return to_trigger; }
 
   ////////////////////////////////////////////////////////////////////////
   //

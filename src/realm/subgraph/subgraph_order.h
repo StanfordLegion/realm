@@ -109,6 +109,12 @@ namespace Realm {
       return nullptr;
     }
 
+    // Whether seq has already been handled: a sender never reuses a number,
+    // so a message for which this is true is a protocol violation.
+    bool handled_already(uint64_t seq) const
+    {
+      return (seq < next) || (handled.count(seq) != 0);
+    }
     size_t num_held() const { return held.size(); }
     // size of the out-of-order window (handled sequence numbers above next)
     size_t window() const { return handled.size(); }

@@ -823,10 +823,12 @@ namespace Realm {
       proc_impl->execute_subgraph_task(op.task_entry, state->op_args(entry.op));
     }
     catch(...) {
-      // A normal task that throws poisons its own event; a graph task has
-      // none of its own to poison, and its processor's share of the graph
-      // would never be released: report and stop instead of unwinding into
-      // the scheduler with the thread still marked as inside a graph task.
+      // A normal task that throws an ExecutionException with abnormal
+      // status requested poisons its own event (any other exception ends
+      // the process); a graph task has no event of its own to poison, and
+      // its processor's share of the graph would never be released: report
+      // and stop instead of unwinding into the scheduler with the thread
+      // still marked as inside a graph task.
       thread->stop_subgraph_task_execution();
       SUBGRAPH_FATAL(state->get_subgraph()->me, "an exception escaped graph task "
                                                     << op.index << " on " << proc

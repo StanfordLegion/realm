@@ -147,22 +147,28 @@ for correctly.
 
 **Shutdown.** The contract is the one every Realm operation has: an
 application must chain the events Realm hands it (instantiation finish events,
-external postconditions) into the precondition it gives `Runtime::shutdown`,
-in some form. An instantiation whose finish event has not triggered when the
-runtime shuts down (after that precondition and the processors' flush tasks)
-is pending application work, and the runtime aborts with a diagnostic naming
-the count ("pending subgraph instantiation(s) during shutdown"), as it does
-for an untriggered operation. The event a `destroy` returns is no exception:
-like every event Realm hands out, it must be chained into the shutdown
-precondition (or waited for), and a destroy that has not taken effect when the
-runtime shuts down is reported the same way ("subgraph destroy(s) not yet in
-effect during shutdown"). A destroy that returned `NO_EVENT` took effect on
-the spot and needs nothing. The check is eager and exact for programs that
-follow this rule: the destroy's event triggers only after the destroy has
-taken effect, so nothing is ever counted that the application had already
-been told was done. What the runtime drains on its own is only the internal
-work behind those events: the release of finished instantiations' states and
-the destroy itself.
+external postconditions, and the event a `destroy` returns) into the
+precondition it gives `Runtime::shutdown`, in some form, exactly as it must
+for the finish event of a task or a copy. An instantiation whose finish event
+has not triggered when the runtime shuts down (after that precondition and
+the processors' flush tasks) is pending application work, and the runtime
+aborts with a diagnostic naming the count ("pending subgraph instantiation(s)
+during shutdown"), as it does for an untriggered operation. A `destroy`
+returns an event whenever it cannot take effect on the spot, because its
+precondition has not triggered or because instantiations it covers have not
+yet released their state; the destroy is not in effect until that event
+triggers, and a destroy still not in effect at shutdown is reported the same
+way ("subgraph destroy(s) not yet in effect during shutdown"). A destroy
+called from a node other than the owner is counted on both: on the calling
+node from the call until the event it returned triggers, and on the owner
+from the request's arrival until the destroy completes. A destroy that
+returned `NO_EVENT` took effect on the spot and needs nothing. The check is
+eager and exact: an instantiation or a destroy is uncounted before its event
+triggers, so nothing is ever counted that the application had been told was
+done, whether it learned so through a chained waiter, a wait, or a poll of
+`has_triggered`. What the runtime drains on its own before tearing down is
+only internal work that no application event gates: the release of finished
+instantiations' states.
 
 **Destroy.** A destroy takes effect when its precondition triggers, not when
 it is called. Instantiations handled before that point are covered by it

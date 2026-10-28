@@ -393,13 +393,16 @@ foreach(scenario shutdown_unfinished_instantiation shutdown_blocked_graph_task
   )
 endforeach()
 endif()
-# Teardown scenarios: destroy without waiting, then shutdown. Each must exit 0.
+# Teardown scenarios: destroys in flight at shutdown, their events chained
+# into the shutdown precondition or observed before it. Each must exit 0.
 foreach(
   scenario
-  destroy_without_wait
-  destroy_many_without_wait
+  destroy_chained
+  destroy_many_chained
   destroy_as_shutdown_precondition
   destroy_many_waiters_chained
+  destroy_observed_then_shutdown
+  destroy_released_late_observed
   pending_instantiations_released_late
 )
   # $<TARGET_FILE:...> like every other test: a bare target name makes CMake

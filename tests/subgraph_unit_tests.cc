@@ -5756,6 +5756,21 @@ static void remote_order_driver_task(const void *args, size_t arglen,
       16384,       sizeof(int), 262144, remote_order_big_bytes};
   std::vector<Event> evs, ds;
   if(a->destroyer && a->destroy_first) {
+    // Two finished instantiates of each subgraph from this node first, so
+    // that its sequence numbering at the owner is past zero when the
+    // destroy call is made: a destroy call that restarted the numbering
+    // (F-017) would then reorder the instantiates issued after it. Their
+    // tag is negative; the order check ignores them.
+    {
+      std::vector<Event> pre;
+      for(int i = 0; i < a->n; i++)
+        for(int k = 0; k < 2; k++) {
+          buf[0] = -1;
+          pre.push_back(
+              a->sgs[i].instantiate(buf.data(), sizeof(int), ProfilingRequestSet()));
+        }
+      Event::merge_events(pre).wait();
+    }
     // destroy(G) first; G covers every sender's instantiations, including
     // this node's own, issued below: the issue order of those must survive
     Event guard = Event::merge_events(a->others_issued, Event(a->issued));
@@ -5884,11 +5899,16 @@ public:
     for(int i = 0; i < remote_order_subgraphs; i++) {
       int n = std::min(logs[i].n.load(), int(remote_order_log_cap));
       total += logs[i].n.load();
+      for(int k = 0; k < n; k++)
+        if(logs[i].tags[k] < 0)
+          total--; // the destroyer's warm-up instantiates, unordered
       // per sender, the tags it issued must appear in issue order
       for(int s = 0; s < S; s++) {
         int last = -1;
         for(int k = 0; k < n; k++) {
           int tag = logs[i].tags[k];
+          if(tag < 0)
+            continue;
           int who = (per_sender == 1) ? (tag - 1) / 2 : tag / per_sender;
           if(who != s)
             continue;
@@ -6370,16 +6390,18 @@ static DagState *exit_state(const DagSpec *spec, const std::vector<Processor> &p
 
 static Event exit_shutdown_precondition = Event::NO_EVENT;
 
-// The shutdown precondition covers the instantiations' finish events in
-// every scenario: as for any other operation, an instantiation that has not
-// finished when the runtime shuts down is an error (see the two abort
-// scenarios below). What these scenarios leave unwaited is the destroy's
-// returned event, that is the release of the states and the completion of
-// the destroy, which the runtime must drain itself before tearing down.
+// Every event Realm hands the application, an instantiation's finish event
+// and the event a destroy returns alike, is chained into the shutdown
+// precondition (or observed to have triggered before shutdown is
+// requested), as for any other operation: an instantiation that has not
+// finished, or a destroy that is not yet in effect, when the runtime shuts
+// down is an error (see the abort scenarios below). What the runtime drains
+// itself before tearing down is only the release of the finished states.
 
-static void exit_destroy_without_wait()
+static void exit_destroy_chained()
 {
-  // Instantiate, destroy without waiting on the returned event, shut down.
+  // Instantiate, destroy with work in flight (so the destroy returns an
+  // event), chain that event with the finish events, shut down.
   std::vector<Processor> procs = worker_cpus(2);
   DagSpec *spec = exit_spec(dag_layers(2, 2, procs.size(), true));
   DagState *state = exit_state(spec, procs);
@@ -6388,11 +6410,11 @@ static void exit_destroy_without_wait()
   std::vector<Event> evs;
   for(int i = 0; i < 500; i++)
     evs.push_back(sg.instantiate(nullptr, 0, ProfilingRequestSet()));
-  sg.destroy();
+  evs.push_back(sg.destroy());
   exit_shutdown_precondition = Event::merge_events(evs);
 }
 
-static void exit_destroy_many_without_wait()
+static void exit_destroy_many_chained()
 {
   // A burst of destroys of many graphs, each with work in flight.
   std::vector<Processor> procs = worker_cpus(4);
@@ -6407,7 +6429,7 @@ static void exit_destroy_many_without_wait()
     for(Subgraph &sg : sgs)
       evs.push_back(sg.instantiate(nullptr, 0, ProfilingRequestSet()));
   for(Subgraph &sg : sgs)
-    sg.destroy();
+    evs.push_back(sg.destroy());
   exit_shutdown_precondition = Event::merge_events(evs);
 }
 
@@ -6445,6 +6467,66 @@ static void exit_destroy_many_waiters_chained()
   g.trigger();
   others.push_back(d);
   exit_shutdown_precondition = Event::merge_events(others);
+}
+
+static void exit_destroy_observed_then_shutdown()
+{
+  // The destroy's event is not chained: it is observed to have triggered,
+  // by polling, before shutdown is requested. Valid under the contract only
+  // because a destroy is uncounted before its event triggers. As above,
+  // many other waiters on the precondition make the trigger defer the
+  // destroy's own waiter to a background worker (a processor thread's
+  // flush task would hide a wrong order). The window between the two steps
+  // is too short for this scenario to fail on its own; with a hold between
+  // them the old order aborts here, and in destroy_many_waiters_chained
+  // too, since the chained shutdown waiter runs inside trigger() when the
+  // destroy completes on a background worker.
+  std::vector<Processor> procs = worker_cpus(1);
+  SubgraphDefinition sd;
+  make_task_desc(sd, procs[0], noop_task_id, nullptr, 0);
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
+  Event fe = sg.instantiate(nullptr, 0, ProfilingRequestSet());
+  UserEvent g = UserEvent::create_user_event();
+  std::vector<Event> others;
+  for(int i = 0; i < 20000; i++)
+    others.push_back(Event::merge_events(g, fe));
+  Event d = sg.destroy(g);
+  g.trigger();
+  if(!wait_with_timeout(d, config.hang_timeout)) {
+    log_app.fatal() << "the destroy's event never triggered";
+    abort();
+  }
+  exit_shutdown_precondition = fe; // the destroy's event is deliberately absent
+}
+
+static void exit_destroy_released_late_observed()
+{
+  // The other way a destroy returns an event: no precondition, but covered
+  // instantiations whose states have not been released (they are gated, so
+  // this is certain). The destroy completes when the last of them is
+  // released (instantiation_released), on whatever thread that happens;
+  // its event is observed by polling, not chained.
+  std::vector<Processor> procs = worker_cpus(2);
+  DagSpec *spec = exit_spec(dag_layers(2, 2, procs.size(), true));
+  DagState *state = exit_state(spec, procs);
+  Subgraph sg =
+      build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER);
+  UserEvent gate = UserEvent::create_user_event();
+  std::vector<Event> evs;
+  for(int i = 0; i < 300; i++)
+    evs.push_back(sg.instantiate(nullptr, 0, ProfilingRequestSet(), gate));
+  Event d = sg.destroy();
+  if(!d.exists()) {
+    log_app.fatal() << "destroy with gated instantiations outstanding returned NO_EVENT";
+    abort();
+  }
+  gate.trigger();
+  if(!wait_with_timeout(d, config.hang_timeout)) {
+    log_app.fatal() << "the destroy's event never triggered";
+    abort();
+  }
+  exit_shutdown_precondition = Event::merge_events(evs);
 }
 
 static void exit_pending_instantiations_released_late()
@@ -6499,9 +6581,9 @@ static void exit_shutdown_blocked_graph_task()
 
 static void exit_shutdown_pending_destroy()
 {
-  // a destroy whose precondition nobody triggers: its precondition is
-  // application work too ("subgraph destroy(s) whose precondition has not
-  // triggered during shutdown")
+  // a destroy whose precondition nobody triggers never takes effect, and
+  // its returned event never triggers: pending application work ("subgraph
+  // destroy(s) not yet in effect during shutdown")
   std::vector<Processor> procs = worker_cpus(1);
   SubgraphDefinition sd;
   make_task_desc(sd, procs[0], noop_task_id, nullptr, 0);
@@ -6512,11 +6594,13 @@ static void exit_shutdown_pending_destroy()
 }
 
 static const DeathScenario exit_scenarios[] = {
-    {"destroy_without_wait", exit_destroy_without_wait},
-    {"destroy_many_without_wait", exit_destroy_many_without_wait},
+    {"destroy_chained", exit_destroy_chained},
+    {"destroy_many_chained", exit_destroy_many_chained},
     {"destroy_as_shutdown_precondition", exit_destroy_as_shutdown_precondition},
     {"pending_instantiations_released_late", exit_pending_instantiations_released_late},
     {"destroy_many_waiters_chained", exit_destroy_many_waiters_chained},
+    {"destroy_observed_then_shutdown", exit_destroy_observed_then_shutdown},
+    {"destroy_released_late_observed", exit_destroy_released_late_observed},
     // these three abort during shutdown
     {"shutdown_unfinished_instantiation", exit_shutdown_unfinished_instantiation},
     {"shutdown_blocked_graph_task", exit_shutdown_blocked_graph_task},

@@ -17,12 +17,13 @@
 
 // Randomized model of the issue-order bookkeeping for remote subgraph
 // instantiations (realm/subgraph/subgraph_order.h): several sending nodes,
-// instantiations that finish at random times (which moves each sender's
-// base), and a network that delivers each node's messages in a random order
-// within a bounded window. The owner must handle every node's messages in
-// that node's issue order, hold nothing forever, and keep its out-of-order
-// window bounded by what was actually in flight. Also covers the reuse of a
-// subgraph id by a new owner-side state while a sender keeps counting.
+// instantiations that finish at random times (which lets each sender drop
+// its record of them), and a network that delivers each node's messages in
+// a random order within a bounded window. The owner must handle every
+// node's messages in that node's issue order, hold nothing forever, and
+// keep its out-of-order window bounded by what was actually in flight. Also
+// covers the reuse of a subgraph id after a destroy, where both sides keep
+// counting from where they were.
 
 #include <gtest/gtest.h>
 #include "realm/subgraph/subgraph_order.h"
@@ -243,6 +244,22 @@ TEST(SubgraphOrder, RecordingWithoutHoldingKeepsTheNumberingConsistent)
   EXPECT_TRUE(t.ready(5, true));
   EXPECT_TRUE(t.ready(6, true));
   EXPECT_EQ(t.next_unhandled(), 7u);
+}
+
+TEST(SubgraphOrder, ReusedNumberIsDetected)
+{
+  // A sender never reuses a sequence number, not even across the slot's
+  // destroy and reuse; the owner can tell one that did (and refuses it).
+  RemoteOrderTracker t;
+  EXPECT_TRUE(t.ready(0, true));
+  t.record(2);
+  EXPECT_TRUE(t.handled_already(0));
+  EXPECT_FALSE(t.handled_already(1));
+  EXPECT_TRUE(t.handled_already(2));
+  EXPECT_FALSE(t.handled_already(3));
+  EXPECT_TRUE(t.ready(1, true));
+  EXPECT_EQ(t.next_unhandled(), 3u);
+  EXPECT_TRUE(t.handled_already(1));
 }
 
 TEST(SubgraphOrder, HeldMessageReleasedByPredecessor)

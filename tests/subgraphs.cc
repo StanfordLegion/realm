@@ -151,11 +151,13 @@ void cleanup_task(const void *args, size_t arglen, const void *userdata, size_t 
   //  sure the external postcondition actually triggers
   e = Event::merge_events(e, postconditions[0]);
 
-  // destroy the subgraph and trigger the done event upon completion of this
-  //  instance
-  cta.subgraph.destroy(e);
-  cta.subgraph_inner.destroy(e);
-  cta.cleanup_done.trigger(e);
+  // destroy the subgraphs once this instance is complete; the events the
+  //  destroys return must reach the shutdown precondition like every other
+  //  event Realm hands out, so cleanup_done (which the top-level task waits
+  //  for before shutting down) covers them
+  Event d_outer = cta.subgraph.destroy(e);
+  Event d_inner = cta.subgraph_inner.destroy(e);
+  cta.cleanup_done.trigger(Event::merge_events(e, d_outer, d_inner));
 }
 
 // clang doesn't permit use of offsetof when there are non-POD types involved

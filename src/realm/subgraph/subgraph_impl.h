@@ -270,12 +270,18 @@ namespace Realm {
     // was requested first) are covered by it, and the subgraph is destroyed
     // once the last of them has released its resources. Instantiating after
     // wait_on has triggered is an error. The returned event triggers when
-    // the destroy is complete, NO_EVENT if it was completed on the spot.
+    // the destroy is complete, NO_EVENT if it was completed on the spot. A
+    // returned event is one the application must chain into the shutdown
+    // precondition, like every other event Realm hands it: until it
+    // triggers the destroy is counted by the reaper as not yet in effect.
     Event request_destroy(Event wait_on);
     // Called by DeferredDestroy when the destroy's precondition triggers.
     void destroy_precondition_triggered(bool poisoned);
     // Called when an instantiation's execution state has been released.
     void instantiation_released(void);
+    // The one place a destroy that returned an event completes: destroys
+    // this object, uncounts the destroy, and only then triggers the event.
+    void complete_destroy(UserEvent done);
 
     // A remote instantiate: who sent it and where it stands in that node's
     // sequence of instantiates of this subgraph (see
@@ -463,6 +469,39 @@ namespace Realm {
                                const void *data, size_t datalen);
   };
 
+  // The owner's answer to a SubgraphDestroyMessage: the event its destroy
+  // returned (NO_EVENT if the destroy took effect on the spot). A remote
+  // destroy is counted on both nodes: the calling node counts it from the
+  // destroy call until it triggers to_trigger, which it does only after
+  // `result` has triggered and its count has dropped
+  // (RemoteDestroyCompletion); the owner counts it from the request's
+  // arrival until the destroy completes. So at every moment at least one
+  // node's shutdown check sees a remote destroy that is not yet in effect,
+  // and the calling node's event never leads its count.
+  struct SubgraphDestroyReplyMessage {
+    UserEvent to_trigger;
+    Event result;
+
+    static void handle_message(NodeID sender, const SubgraphDestroyReplyMessage &msg,
+                               const void *data, size_t datalen);
+  };
+
+  class RemoteDestroyCompletion : public EventWaiter {
+  public:
+    // Uncounts the destroy on this node and triggers to_trigger once
+    // `result` has triggered (at once if it has, or is NO_EVENT).
+    static void complete(UserEvent to_trigger, Event result);
+
+    virtual void event_triggered(bool poisoned, TimeLimit work_until);
+    virtual void print(std::ostream &os) const;
+    virtual Event get_finish_event(void) const;
+
+  protected:
+    explicit RemoteDestroyCompletion(UserEvent _to_trigger);
+    static void finish(UserEvent to_trigger);
+    UserEvent to_trigger;
+  };
+
   // SubgraphWorkLauncher installs an instantiation onto its processors once
   // the instantiation's precondition has triggered.
   // The waiters below are members of the execution state, so an
@@ -553,16 +592,18 @@ namespace Realm {
     //  - outstanding: instantiated, state not yet released. After the finish
     //    event has triggered, releasing the state is bounded internal work
     //    on the background workers (recycle it, instantiation_released, and
-    //    possibly a deferred destroy, which looks events up), so the runtime
-    //    waits for it before tearing down. An application is allowed to see
-    //    an instantiation's finish event, destroy the subgraph without
-    //    waiting for the returned event and shut down. The wait depends on
+    //    possibly the completion of a destroy, which looks events up), so
+    //    the runtime waits for it before tearing down. The wait depends on
     //    no application event and so always ends.
-    //  - pending_destroys: destroys requested on this node whose
-    //    precondition has not triggered. The precondition is an application
-    //    event, so this too is pending application work at shutdown (and a
-    //    destroy that never takes effect would leave its waiter registered
-    //    on an event through teardown).
+    //  - pending_destroys: destroys requested on this node that returned an
+    //    event and are not yet in effect, whether they wait for their
+    //    precondition or for the last covered instantiation to release its
+    //    state. The returned event is one Realm handed the application, so
+    //    like a finish event it must be chained into the shutdown
+    //    precondition, and a destroy still counted at shutdown is an
+    //    application bug reported the same way. The count drops before the
+    //    event triggers (complete_destroy), so anything that has seen the
+    //    event trigger, by waiter, wait or poll, sees the count dropped.
     void instantiation_created(void)
     {
       unfinished.fetch_add(1);
@@ -575,8 +616,8 @@ namespace Realm {
     void held_instantiation_created(void) { outstanding.fetch_add(1); }
     void instantiation_finished(void) { unfinished.fetch_sub_acqrel(1); }
     void instantiation_released(void) { outstanding.fetch_sub_acqrel(1); }
-    void destroy_deferred(void) { pending_destroys.fetch_add(1); }
-    void destroy_precondition_triggered(void) { pending_destroys.fetch_sub_acqrel(1); }
+    void destroy_returned_event(void) { pending_destroys.fetch_add(1); }
+    void destroy_took_effect(void) { pending_destroys.fetch_sub_acqrel(1); }
     int64_t num_unfinished(void) const { return unfinished.load_acquire(); }
     int64_t num_pending_destroys(void) const { return pending_destroys.load_acquire(); }
     bool idle(void) const { return outstanding.load_acquire() == 0; }

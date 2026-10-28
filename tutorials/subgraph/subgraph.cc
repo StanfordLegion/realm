@@ -351,7 +351,11 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
     p.spawn(VERIFY_TASK, &verify_args, sizeof(VerifyTaskArgs)).wait();
   }
 
-  sg.destroy();
+  // the event destroy returns must be chained into the shutdown
+  // precondition like every other event Realm hands out; waiting for it
+  // inside this task (whose finish event is the shutdown precondition) does
+  // that
+  sg.destroy().wait();
 
   for(int i = 0; i < 5; i++) {
     insts[i].destroy();

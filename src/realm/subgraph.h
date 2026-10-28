@@ -62,7 +62,10 @@ namespace Realm {
     // finish event, or something that follows it); instantiating after
     // wait_on has triggered is an error, as is a second destroy while one
     // is pending. The returned event triggers when destruction is complete;
-    // it is NO_EVENT if the subgraph could be destroyed immediately.
+    // it is NO_EVENT if the subgraph could be destroyed immediately. Like
+    // every event Realm hands out, a returned event must be chained into
+    // the precondition given to Runtime::shutdown (or waited for before
+    // it): a destroy not yet in effect at shutdown is an error.
     Event destroy(Event wait_on = Event::NO_EVENT) const;
 
     // priority_adjust is the priority of the instantiation as a whole. While
