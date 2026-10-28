@@ -162,7 +162,10 @@ way ("subgraph destroy(s) not yet in effect during shutdown"). A destroy
 called from a node other than the owner is counted on both: on the calling
 node from the call until the event it returned triggers, and on the owner
 from the request's arrival until the destroy completes. A destroy that
-returned `NO_EVENT` took effect on the spot and needs nothing. The check is
+returned `NO_EVENT` took effect on the spot; but whether an event comes back
+depends on timing (on whether the last covered instantiation has already
+released its state), so always chain the result rather than testing it:
+chaining `NO_EVENT` costs nothing. The check is
 eager and exact: an instantiation or a destroy is uncounted before its event
 triggers, so nothing is ever counted that the application had been told was
 done, whether it learned so through a chained waiter, a wait, or a poll of

@@ -2918,9 +2918,12 @@ namespace Realm {
         abort();
       }
     }
-    // finished instantiations release their state on a background worker;
-    //  let that drain (it may complete deferred destroys, which look events
-    //  up) - bounded work that depends on no application event
+    // finished instantiations release their state on a background worker
+    //  (recycle it into the subgraph's pool); let that drain before the
+    //  subgraphs are torn down - bounded work that depends on no application
+    //  event. It completes no destroy: every destroy that returned an event
+    //  was complete before the check above passed, and one that returned
+    //  NO_EVENT was complete on the spot.
     subgraph_resource_reaper.wait_for_idle();
     {
       size_t n = num_untriggered_events.load();

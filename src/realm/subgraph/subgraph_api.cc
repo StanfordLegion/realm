@@ -1008,8 +1008,9 @@ namespace Realm {
     // Nothing may touch the state (and so *this) after recycling: the next
     // instantiation can take it from the pool at once, and completing a
     // pending destroy deletes the pooled states. The reaper's count goes
-    // last: the runtime's shutdown waits on it, and the destroy that the
-    // release may complete still looks events up.
+    // last: the runtime's shutdown waits on it before tearing the subgraphs
+    // down, and instantiation_released still takes the subgraph's lock
+    // (and may complete a destroy that the application has yet to see).
     SubgraphImpl *subgraph = state->get_subgraph();
     subgraph->recycle_state(state);
     subgraph->instantiation_released();

@@ -6450,9 +6450,13 @@ static void exit_destroy_as_shutdown_precondition()
 static void exit_destroy_many_waiters_chained()
 {
   // The destroy's precondition has many other waiters, so the destroy's own
-  // waiter may run on a background worker after the trigger returns; the
+  // waiter runs on a background worker after the trigger returns; the
   // destroy's event is chained into the shutdown precondition as the
   // contract requires, so shutdown waits for it instead of reporting it.
+  // The chain is formed after the trigger: if the destroy has completed by
+  // then, merge_events drops its event as already triggered and the chain
+  // acts as a poll, so this scenario too depends on the destroy being
+  // uncounted before its event triggers (see the next scenario).
   std::vector<Processor> procs = worker_cpus(1);
   SubgraphDefinition sd;
   make_task_desc(sd, procs[0], noop_task_id, nullptr, 0);
@@ -6478,9 +6482,10 @@ static void exit_destroy_observed_then_shutdown()
   // destroy's own waiter to a background worker (a processor thread's
   // flush task would hide a wrong order). The window between the two steps
   // is too short for this scenario to fail on its own; with a hold between
-  // them the old order aborts here, and in destroy_many_waiters_chained
-  // too, since the chained shutdown waiter runs inside trigger() when the
-  // destroy completes on a background worker.
+  // them (see pr482-review-6's f020_destroy_event_order) the old order
+  // aborts here, and in destroy_many_waiters_chained too, whose chain is
+  // formed after the trigger and so sees the destroy's event as already
+  // triggered, exactly like the poll here.
   std::vector<Processor> procs = worker_cpus(1);
   SubgraphDefinition sd;
   make_task_desc(sd, procs[0], noop_task_id, nullptr, 0);
@@ -6505,13 +6510,25 @@ static void exit_destroy_released_late_observed()
   // The other way a destroy returns an event: no precondition, but covered
   // instantiations whose states have not been released (they are gated, so
   // this is certain). The destroy completes when the last of them is
-  // released (instantiation_released), on whatever thread that happens;
-  // its event is observed by polling, not chained.
-  std::vector<Processor> procs = worker_cpus(2);
-  DagSpec *spec = exit_spec(dag_layers(2, 2, procs.size(), true));
-  DagState *state = exit_state(spec, procs);
-  Subgraph sg =
-      build_dag_subgraph(*spec, *state, SubgraphDefinition::INSTANTIATION_ORDER);
+  // released (instantiation_released); its event is observed by polling,
+  // not chained. The graph is a single fill, so the last operation
+  // completes in a DMA channel and the release, and with it the destroy,
+  // runs on a background worker: a processor thread's flush task would
+  // hide a wrong completion order, as it does when the graph ends in a
+  // task. Like the previous scenario this cannot fail on its own; with a
+  // hold between the two completion steps the old order aborts here.
+  IndexSpace<1> is = Rect<1>(0, 63);
+  std::map<FieldID, size_t> field_sizes = {{FID_DATA, sizeof(int)}};
+  RegionInstance inst;
+  RegionInstance::create_instance(inst, sysmem(), is, field_sizes, 0,
+                                  ProfilingRequestSet())
+      .wait();
+  SubgraphDefinition sd;
+  sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+  int fill_value = 7;
+  make_fill_desc(sd, is, inst, FID_DATA, &fill_value, sizeof(fill_value));
+  Subgraph sg;
+  Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
   UserEvent gate = UserEvent::create_user_event();
   std::vector<Event> evs;
   for(int i = 0; i < 300; i++)

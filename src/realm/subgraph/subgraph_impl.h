@@ -591,10 +591,13 @@ namespace Realm {
     //    waiting (and no timer) is involved.
     //  - outstanding: instantiated, state not yet released. After the finish
     //    event has triggered, releasing the state is bounded internal work
-    //    on the background workers (recycle it, instantiation_released, and
-    //    possibly the completion of a destroy, which looks events up), so
-    //    the runtime waits for it before tearing down. The wait depends on
-    //    no application event and so always ends.
+    //    on the background workers (recycle it into the subgraph's pool,
+    //    instantiation_released), so the runtime waits for it before tearing
+    //    the subgraphs down. The wait depends on no application event and so
+    //    always ends. In a program that follows the contract below it never
+    //    completes a destroy: a destroy that returned an event is uncounted
+    //    only once it is complete, so when the shutdown check finds no
+    //    destroy counted, none is left for a release to complete.
     //  - pending_destroys: destroys requested on this node that returned an
     //    event and are not yet in effect, whether they wait for their
     //    precondition or for the last covered instantiation to release its

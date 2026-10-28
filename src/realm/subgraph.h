@@ -65,7 +65,10 @@ namespace Realm {
     // it is NO_EVENT if the subgraph could be destroyed immediately. Like
     // every event Realm hands out, a returned event must be chained into
     // the precondition given to Runtime::shutdown (or waited for before
-    // it): a destroy not yet in effect at shutdown is an error.
+    // it): a destroy not yet in effect at shutdown is an error. Whether an
+    // event comes back depends on timing (on whether the last covered
+    // instantiation has already released its state), so always chain the
+    // result; chaining NO_EVENT costs nothing.
     Event destroy(Event wait_on = Event::NO_EVENT) const;
 
     // priority_adjust is the priority of the instantiation as a whole. While
