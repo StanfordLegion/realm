@@ -219,10 +219,20 @@ namespace Realm {
 
     bool over_pending_completion_soft_limit() const;
 
+    // Completion indices share a 32-bit AM argument with the message ID and two flag
+    //  bits, so the number of bits left for the index depends on how wide the message
+    //  ID has to be (see MSGID_BITS in gasnetex_internal.cc).  Limits this manager to
+    //  2^index_bits completions, and its soft limit to half of that.  Must be called
+    //  before any completion is allocated; returns false if index_bits cannot hold
+    //  even one group of completions.
+    bool set_index_bits(unsigned index_bits);
+
   protected:
     // NOTE: we stuff completion IDs, message IDs and 2 more bits into a
-    //  32-bit word, so we're limited to 2^(30-12) = 256K completions
+    //  32-bit word, so we're limited to 2^(30-12) = 256K completions with the usual
+    //  12-bit message IDs - fewer if set_index_bits() asks for a narrower index
     static const size_t LOG2_MAXGROUPS = 10;
+    int max_groups; // groups we may allocate: at most 1 << LOG2_MAXGROUPS
 
     // protects pops from the free list (to avoid A-B-A problem), but NOT pushes
     Realm::Mutex mutex;

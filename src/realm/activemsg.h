@@ -90,11 +90,9 @@ namespace Realm {
     //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer alive
     //  and unmodified until LOCAL COMPLETION - NOT merely until commit() returns.
     //  A backend may hand the pointer straight to the network and return before it
-    //  has been read: on UCX, UCPMessageImpl::commit does not copy a contiguous
-    //  source and send_slow_path() submits the request asynchronously.  Use
-    //  add_local_completion() to learn when the buffer is free, or use the
-    //  (target, max_payload_size) constructor with add_payload(), which copies
-    //  during commit().
+    //  has been read.  Use add_local_completion() to learn when the buffer is free,
+    //  or use the (target, max_payload_size) constructor with add_payload(), which
+    //  copies during commit().
     ActiveMessage(NodeID _target, const void *_data, size_t _datalen);
     ActiveMessage(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
                   const RemoteAddress &_dest_payload_addr);
@@ -287,6 +285,16 @@ namespace Realm {
   //  other type's.
   REALM_INTERNAL_API_EXTERNAL_LINKAGE uint64_t next_chunk_message_id(NodeID node_id);
 
+  // Called when an ActiveMessage's payload is too large to send as one message and
+  //  the network cannot carry it as fragments either - Network::max_payload_size()
+  //  returned 0 for the fragment header (sizeof(WrappedWithFragInfo<T>)), which a
+  //  backend does when that header exceeds what it can put on the wire.  Reports the
+  //  message type and sizes and aborts: failing at the first such send, on every
+  //  network, beats a backend overrunning its header buffer later.
+  [[noreturn]] REALM_INTERNAL_API_EXTERNAL_LINKAGE void
+  report_unfragmentable_message(unsigned short msgid, size_t header_size,
+                                size_t wrapped_header_size, size_t payload_size);
+
   // singleton class that can convert message type->ID and ID->handler
   class ActiveMessageHandlerTable {
   public:
@@ -306,6 +314,10 @@ namespace Realm {
     MessageID lookup_message_id(void) const;
 
     const char *lookup_message_name(MessageID id);
+
+    // number of registered handlers (and so one more than the largest MessageID) -
+    //  networks with a narrower message ID field than MessageID need to check this
+    size_t num_handlers(void) const { return handlers.size(); }
     void record_message_handler_call(MessageID id, long long t_start, long long t_end);
     void report_message_handler_stats();
 
@@ -408,16 +420,31 @@ namespace Realm {
     // returns true if the call was handled immediately (in which case the
     //  callback, if present, will NOT be called), or false if the message
     //  will be processed later
+    // a callback is only ever invoked where queued messages are handled (a handler
+    //  thread or do_work), never from within this call, so a backend may call it
+    //  from a receive path where its own callback would not be legal
     bool add_incoming_message(NodeID sender, ActiveMessageHandlerTable::MessageID msgid,
                               const void *hdr, size_t hdr_size, int hdr_mode,
                               const void *payload, size_t payload_size, int payload_mode,
                               CallbackFnptr callback_fnptr, CallbackData callback_data1,
                               CallbackData callback_data2, TimeLimit work_until);
 
+    // The same, for a message that did NOT arrive off the wire - a multicast relay
+    //  handing the original message to its own handler.  It is handled exactly like
+    //  one that did, but it is not counted toward the drain target: the quiescence
+    //  check sets that target from the packets the network received, and a delivery
+    //  with no packet behind it would otherwise let the drain return early.
+    bool add_local_message(NodeID sender, ActiveMessageHandlerTable::MessageID msgid,
+                           const void *hdr, size_t hdr_size, int hdr_mode,
+                           const void *payload, size_t payload_size, int payload_mode,
+                           CallbackFnptr callback_fnptr, CallbackData callback_data1,
+                           CallbackData callback_data2, TimeLimit work_until);
+
     void start_handler_threads(size_t stack_size);
 
     // stalls caller until all incoming messages have been handled (and at
-    //  least 'min_messages_handled' in total)
+    //  least 'min_messages_handled' of those that arrived off the wire in total -
+    //  messages delivered through add_local_message are handled but not counted)
     void drain_incoming_messages(size_t min_messages_handled);
 
     void shutdown(void);
@@ -455,6 +482,9 @@ namespace Realm {
       // callbacks that arrived on earlier fragments of this message and could not be
       //  fired then - null for every message that was not reassembled
       std::vector<DeferredCallback> *deferred_callbacks;
+      // false for a message that did not arrive off the wire (add_local_message), so
+      //  that handling it does not count toward the drain target
+      bool count_for_drain;
     };
 
     struct MessageBlock {
@@ -482,6 +512,15 @@ namespace Realm {
     // fires and releases any callbacks held from this message's fragments
     static void invoke_deferred_callbacks(Message *msg);
 
+    // the shared implementation: 'count_for_drain' is false only for add_local_message
+    bool add_incoming_message_impl(NodeID sender,
+                                   ActiveMessageHandlerTable::MessageID msgid,
+                                   const void *hdr, size_t hdr_size, int hdr_mode,
+                                   const void *payload, size_t payload_size,
+                                   int payload_mode, CallbackFnptr callback_fnptr,
+                                   CallbackData callback_data1,
+                                   CallbackData callback_data2, TimeLimit work_until,
+                                   bool count_for_drain);
     int get_messages(Message *&head, Message **&tail, bool wait);
     bool return_messages(int sender, size_t num_handled, Message *head, Message **tail);
 
@@ -496,6 +535,9 @@ namespace Realm {
     int handlers_active;
     bool drain_pending;
     size_t drain_min_count;
+    // messages handled that arrived off the wire - what a drain compares with the
+    //  network's packet count.  Locally injected messages (add_local_message) are
+    //  handled the same way but never counted here.
     size_t total_messages_handled;
     Mutex mutex;
     Mutex::CondVar condvar, drain_condvar;
@@ -553,6 +595,22 @@ namespace Realm {
   struct is_wrapped_with_frag_info : std::false_type {};
   template <typename U>
   struct is_wrapped_with_frag_info<WrappedWithFragInfo<U>> : std::true_type {};
+
+  // The largest fragment header, sizeof(WrappedWithFragInfo<T>), that every network
+  //  must be able to send; a network with a tight header limit checks this against
+  //  it where that limit is defined.  ActiveMessageHandlerReg checks every type
+  //  against it, so a header that grows too large fails the build, rather than
+  //  aborting in report_unfragmentable_message the first time the type carries a
+  //  large payload.
+  static constexpr size_t MAX_FRAGMENT_HEADER_BYTES = 56;
+
+  // Specialize to std::true_type to register a type whose fragment header exceeds
+  //  MAX_FRAGMENT_HEADER_BYTES anyway.  It can still be sent, but where the network
+  //  cannot fit its fragment header a payload too large for one message aborts in
+  //  report_unfragmentable_message.  Only test types, which never travel over a real
+  //  network, should need this.
+  template <typename T>
+  struct allow_unfragmentable_header : std::false_type {};
 
   ////////////////////////////////////////////////////////////////////////
   //
@@ -624,21 +682,25 @@ namespace Realm {
   //  a rework of the simulated network in multicast_test.cc.  Large-payload multicast is
   //  currently rare in Realm, so that price is not justified.  Revisit if profiling ever
   //  shows deep-tree multicast of multi-megabyte payloads on the critical path.
+  //
+  // Layout: the envelope is also the header of every fragment of a chunked multicast
+  //  (WrappedWithFragInfo<MulticastEnvelopeMessage>), and a fragment header must fit
+  //  MAX_FRAGMENT_HEADER_BYTES on every network.  That leaves 40 bytes here, so the
+  //  fields go widest first and the two small counters are 16 bits wide.
   struct MulticastEnvelopeMessage {
     // (origin_node, multicast_id) is the globally unique multicast identifier
     uint64_t multicast_id = 0;
+    uint64_t original_payload_size = 0;
     // the node that ORIGINATED the multicast - this, and never the previous hop, is
     //  what the original handler must see as its sender
     NodeID origin_node = 0;
-
-    uint64_t original_payload_size = 0;
     uint32_t target_encoding_size = 0;
     uint32_t completion_size = 0;
-    uint32_t flags = 0;
-    // hops from the origin: the origin's own first-hop envelopes carry 1.  This is 32
-    //  bits rather than 16 because with a radix of 1 the tree degenerates to a chain
-    //  one hop long per target.
-    uint32_t depth = 0;
+    uint16_t flags = 0;
+    // hops from the origin: the origin's own first-hop envelopes carry 1.  With a radix
+    //  of 1 the tree degenerates to a chain one hop long per target, so this can reach
+    //  the node count - which Realm's node IDs keep below 65536.
+    uint16_t depth = 0;
 
     // message ID of the ORIGINAL typed message, looked up in the same
     //  ActiveMessageHandlerTable at both ends
@@ -652,6 +714,11 @@ namespace Realm {
                                const void *payload, size_t payload_size,
                                TimeLimit work_until);
   };
+  static_assert(sizeof(WrappedWithFragInfo<MulticastEnvelopeMessage>) <=
+                    MAX_FRAGMENT_HEADER_BYTES,
+                "the multicast envelope must fit a fragment header on every network");
+  static_assert(MulticastEnvelopeFlags::ALL_KNOWN <= 0xffffU,
+                "MulticastEnvelopeMessage::flags is 16 bits wide");
 
   ////////////////////////////////////////////////////////////////////////
   //

@@ -29,14 +29,14 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.config.os }}-${{ matrix.config.shared == 'ON' && 'shared' || 'static' }}-${{ matrix.config.cc }}-${{ matrix.config.build }}${{ matrix.config.cuda && format('-cuda{0}', matrix.config.cuda) || '' }}${{ matrix.config.ucx == 'ON' && '-ucx' || '' }}${{ matrix.config.gasnet == 'ON' && '-gasnet' || '' }}${{ matrix.config.kokkos == 'ON' && '-kokkos' || '' }}${{ matrix.config.openmp == 'ON' && '-openmp' || '' }}${{ matrix.config.python == 'ON' && '-python' || '' }}${{ matrix.config.sanitizer != 'NONE' && format('-{0}', matrix.config.sanitizer) || '' }}
+    name: ${{ matrix.config.os }}-${{ matrix.config.shared == 'ON' && 'shared' || 'static' }}-${{ matrix.config.cc }}-${{ matrix.config.build }}${{ matrix.config.cuda && format('-cuda{0}', matrix.config.cuda) || '' }}${{ matrix.config.ucx == 'ON' && '-ucx' || '' }}${{ matrix.config.gasnet == 'ON' && '-gasnet' || '' }}${{ matrix.config.mpi == 'ON' && '-mpi' || '' }}${{ matrix.config.kokkos == 'ON' && '-kokkos' || '' }}${{ matrix.config.openmp == 'ON' && '-openmp' || '' }}${{ matrix.config.python == 'ON' && '-python' || '' }}${{ matrix.config.sanitizer != 'NONE' && format('-{0}', matrix.config.sanitizer) || '' }}
     runs-on: ${{ matrix.config.os }}
     env:
       CPM_SOURCE_CACHE: "${{ github.workspace }}/.cache/cpm"
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPRESS: "true"
       CCACHE_COMPRESS_LEVEL: "6"
-      CONFIG_KEY: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ matrix.config.shared_lib }}-${{ matrix.config.openmp }}-${{ matrix.config.ucx }}-${{ matrix.config.gasnet }}-${{ matrix.config.python }}-${{ matrix.config.kokkos }}-${{ matrix.config.sanitizer }}
+      CONFIG_KEY: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ matrix.config.shared_lib }}-${{ matrix.config.openmp }}-${{ matrix.config.ucx }}-${{ matrix.config.gasnet }}-${{ matrix.config.mpi }}-${{ matrix.config.python }}-${{ matrix.config.kokkos }}-${{ matrix.config.sanitizer }}
     strategy:
       fail-fast: false
       matrix:
@@ -94,6 +94,21 @@ jobs:
               ucx: 'OFF',
               gasnet: 'OFF',
               python: 'ON',
+              kokkos: 'OFF',
+              sanitizer: 'NONE'
+            }
+          - {
+              os: ubuntu-latest,
+              build: Release,
+              cc: "gcc", cxx: "g++",
+              ccache: ccache,
+              shared_lib: 'OFF',
+              cuda: '',
+              openmp: 'ON',
+              ucx: 'OFF',
+              gasnet: 'OFF',
+              mpi: 'ON',
+              python: 'OFF',
               kokkos: 'OFF',
               sanitizer: 'NONE'
             }
@@ -340,6 +355,7 @@ jobs:
                 -DBUILD_SHARED_LIBS=${{ matrix.config.shared_lib }}
                 -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON
                 -DREALM_ENABLE_OPENMP=${{ matrix.config.openmp }}
+                -DREALM_ENABLE_MPI=${{ matrix.config.mpi || 'OFF' }}
                 -DREALM_ENABLE_UCX=${{ matrix.config.ucx }}
                 -DREALM_ENABLE_PYTHON=${{ matrix.config.python }}
                 -DREALM_ENABLE_CUDA=${{ matrix.config.cuda != '' && 'ON' || 'OFF' }}

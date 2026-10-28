@@ -516,7 +516,12 @@ namespace Realm {
 
     // automatically register a WrappedWithFragInfo<T> handler so that
     //  fragmented messages of any type can be reassembled
-    if constexpr(!is_wrapped_with_frag_info<T>::value && std::is_same<T, T2>::value) {
+    if constexpr(!is_wrapped_with_frag_info<T>::value &&
+                 std::is_same<T, T2>::value) {
+      static_assert((sizeof(WrappedWithFragInfo<T>) <= MAX_FRAGMENT_HEADER_BYTES) ||
+                        allow_unfragmentable_header<T>::value,
+                    "this message header is too large to send in fragments on every "
+                    "network - see MAX_FRAGMENT_HEADER_BYTES in activemsg.h");
       auto *wrapped_reg = new ActiveMessageHandlerReg<WrappedWithFragInfo<T>, T>();
       (void)wrapped_reg; // leaked intentionally - lives for program lifetime
     }
@@ -570,7 +575,9 @@ namespace Realm {
     } else {
       size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, nullptr);
-      assert(network_max_payload_ > 0);
+      if(network_max_payload_ == 0)
+        report_unfragmentable_message(activemsg_handler_table.lookup_message_id<T>(),
+                                      sizeof(T), wrapped_hdr_size, _max_payload_size);
 
       chunk_target_ = _target;
       // the payload buffer is materialized lazily: a caller that only uses
@@ -625,7 +632,9 @@ namespace Realm {
       // pass the caller's data pointer so the backend can check registration
       size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, _data);
-      assert(network_max_payload_ > 0);
+      if(network_max_payload_ == 0)
+        report_unfragmentable_message(activemsg_handler_table.lookup_message_id<T>(),
+                                      sizeof(T), wrapped_hdr_size, _datalen);
 
       chunk_target_ = _target;
       chunk_src_data_ = _data;
@@ -930,6 +939,10 @@ namespace Realm {
                                 MulticastMetricsSink *metrics,
                                 MulticastCompletionCallback *on_remote_complete)
   {
+    // the header travels as raw bytes: copied into the envelope at the origin and
+    //  at every relay, and read straight out of the envelope by the receiver
+    static_assert(std::is_trivially_copyable<T>::value,
+                  "multicast_message requires a trivially copyable header type");
     MulticastForwarder::send(get_runtime_multicast_transport(), targets,
                              activemsg_handler_table.lookup_message_id<T>(), &header,
                              sizeof(T), payload, payload_size, TimeLimit(), metrics,

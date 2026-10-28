@@ -386,12 +386,20 @@ namespace Realm {
   //  independent: the handle names somebody else's alteration, the floor is
   //  this node's own.  Each is the tip of a per-node chain (see 'prev_ts'
   //  above), so a pair is the whole witnessed set and not a truncation of it.
+  //
+  // Field order: the 64-bit fields come first so that 'gen' and 'poisoned'
+  //  share the last word.  In the natural order (8-4-8-8-8-1) the struct pads
+  //  to 48 bytes, and ActiveMessageHandlerReg rejects any header above 40 bytes
+  //  (MAX_FRAGMENT_HEADER_BYTES less the FragmentInfo prefix) because its
+  //  fragment-wrapped form would not fit in GASNet-EX's AM arguments.  Packed
+  //  this way it is 40 bytes.  Both ends copy the struct whole, so the order
+  //  carries no protocol meaning.
   struct BarrierTsArrivalMessage {
     ID::IDType barrier_id;
-    EventImpl::gen_t gen;
     int64_t val;
     Barrier::timestamp_t ts;
     Barrier::timestamp_t local_ts;
+    EventImpl::gen_t gen;
     // decision Q4 - see BarrierReportMessage::poisoned.  A bypassed arrival
     //  carries the bit for exactly the same reason a report does.
     bool poisoned;
