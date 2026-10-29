@@ -735,9 +735,9 @@ namespace {
                                       data, sizeof(data), PAYLOAD_COPY, nullptr, 0, 0,
                                       TimeLimit()));
     qhdr.frag_info = {0, 1, 0x3002ULL};
-    EXPECT_FALSE(mgr.add_local_message(1, queued_msgid, &qhdr, sizeof(qhdr),
-                                       PAYLOAD_COPY, data, sizeof(data), PAYLOAD_COPY,
-                                       nullptr, 0, 0, TimeLimit()));
+    EXPECT_FALSE(mgr.add_local_message(1, queued_msgid, &qhdr, sizeof(qhdr), PAYLOAD_COPY,
+                                       data, sizeof(data), PAYLOAD_COPY, nullptr, 0, 0,
+                                       TimeLimit()));
 
     for(int i = 0; (i < 4) && (OversizedFragMessage::call_count.load() < 2); i++)
       mgr.do_work(TimeLimit());

@@ -1597,9 +1597,9 @@ namespace Realm {
     //  handler-signature detection is duplicated here (plan section 7.4).  The one
     //  difference is the accounting: no network packet is behind this delivery, so it
     //  must not count toward the quiescence drain's target (add_local_message).
-    bool handled = manager->add_local_message(
-        sender, msgid, hdr, hdr_size, PAYLOAD_COPY, payload, payload_size, PAYLOAD_COPY,
-        fnptr, data1, 0, work_until);
+    bool handled = manager->add_local_message(sender, msgid, hdr, hdr_size, PAYLOAD_COPY,
+                                              payload, payload_size, PAYLOAD_COPY, fnptr,
+                                              data1, 0, work_until);
 
     if(token != nullptr) {
       if(handled) {
