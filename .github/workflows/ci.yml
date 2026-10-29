@@ -411,35 +411,6 @@ jobs:
                 --timeout 240
                 --parallel 4
 
-      - name: Diagnose machine_config_test crash
-        if: >-
-          failure() && steps.run-tests.conclusion == 'failure' &&
-          runner.os == 'Linux' && matrix.config.python == 'ON' &&
-          matrix.config.gasnet == 'OFF' && matrix.config.ucx == 'OFF'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gdb
-          python3 - <<'PY'
-          import json
-          import os
-          import subprocess
-
-          tests = json.loads(subprocess.check_output(
-              ['ctest', '--test-dir', 'build', '--show-only=json-v1'], text=True))
-          test = next(t for t in tests['tests'] if t['name'] == 'machine_config_test')
-          props = {p['name']: p['value'] for p in test.get('properties', [])}
-          env = os.environ.copy()
-          for assignment in props.get('ENVIRONMENT', []):
-              key, value = assignment.split('=', 1)
-              env[key] = value
-          subprocess.run(
-              ['gdb', '-nx', '--batch', '-ex', 'set pagination off', '-ex', 'run',
-               '-ex', 'thread apply all bt', '-ex', 'info sharedlibrary',
-               '--args', *test['command']],
-              cwd=props.get('WORKING_DIRECTORY', 'build'), env=env,
-              check=True, timeout=240)
-          PY
-
       - uses: test-summary/action@v2
         name: Upload Test Results
         if: always() && hashFiles('test-results.xml')
