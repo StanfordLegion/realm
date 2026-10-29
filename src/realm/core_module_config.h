@@ -61,7 +61,7 @@ namespace Realm {
     friend class RuntimeImpl;
 
   public:
-    static constexpr const char *const MODULE_NAME = "core";
+    static constexpr const char *MODULE_NAME = "core";
 
     // a default-constructed object holds Realm's default settings - it may be
     //  copied freely and assigned to the object owned by the runtime (see the

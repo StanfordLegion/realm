@@ -58,7 +58,7 @@ namespace Realm {
       friend class HipModule;
 
     public:
-      static constexpr const char *const MODULE_NAME = "hip";
+      static constexpr const char *MODULE_NAME = "hip";
 
       // a default-constructed object holds Realm's default settings - it may be
       //  copied freely and assigned to the object owned by the runtime (see the

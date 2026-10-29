@@ -36,7 +36,7 @@ namespace Realm {
       friend class OpenMPModule;
 
     public:
-      static constexpr const char *const MODULE_NAME = "openmp";
+      static constexpr const char *MODULE_NAME = "openmp";
 
       // a default-constructed object holds Realm's default settings - it may be
       //  copied freely and assigned to the object owned by the runtime (see the

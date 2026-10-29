@@ -55,7 +55,7 @@ namespace Realm {
       friend class NumaModule;
 
     public:
-      static constexpr const char *const MODULE_NAME = "numa";
+      static constexpr const char *MODULE_NAME = "numa";
 
       // a default-constructed object holds Realm's default settings - it may be
       //  copied freely and assigned to the object owned by the runtime (see the

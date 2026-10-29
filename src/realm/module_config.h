@@ -33,8 +33,8 @@ namespace Realm {
   //  Runtime::create_configs() and handed out (by pointer) by
   //  Runtime::get_module_config().  Each module defines a subclass (e.g.
   //  Realm::Cuda::CudaModuleConfig) whose settings are plain public data
-  //  members, and which declares a `static constexpr const char *const
-  //  MODULE_NAME` naming the module.  The headers declaring these subclasses
+  //  members, and which declares a `static constexpr const char *MODULE_NAME`
+  //  naming the module.  The headers declaring these subclasses
   //  contain only plain data types and are installed with every Realm build,
   //  whether or not the corresponding module is compiled in, so an application
   //  may always refer to them and use the typed

@@ -34,7 +34,7 @@ namespace Realm {
     friend class GASNetEXModule;
 
   public:
-    static constexpr const char *const MODULE_NAME = "gasnetex";
+    static constexpr const char *MODULE_NAME = "gasnetex";
 
     // a default-constructed object holds Realm's default settings - it may be
     //  copied freely and assigned to the object owned by the runtime (see the
