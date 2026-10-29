@@ -84,6 +84,13 @@ namespace Realm {
     cp.add_option_int_units("-ucx:pb_mp_max_size", cfg_pbuf_mp_max_size);
     cp.add_option_int_units("-ucx:pb_mp_max_chunk_size", cfg_pbuf_mp_max_chunk_size);
     cp.add_option_int_units("-ucx:pb_mp_thresh", cfg_pbuf_mp_thresh);
+    // the names these options had before they were renamed to -ucx:pb_mp_*, still
+    //  accepted so that existing command lines keep their effect instead of being
+    //  silently ignored
+    cp.add_option_int("-ucx:pb_init_count", cfg_pbuf_mp_init_count);
+    cp.add_option_int("-ucx:pb_max_count", cfg_pbuf_mp_max_count);
+    cp.add_option_int_units("-ucx:pb_max_size", cfg_pbuf_mp_max_size);
+    cp.add_option_int_units("-ucx:pb_max_chunk_size", cfg_pbuf_mp_max_chunk_size);
 
     // malloc mpool
     cp.add_option_int_units("-ucx:mmp_max_obj_size", cfg_mmp_max_obj_size);

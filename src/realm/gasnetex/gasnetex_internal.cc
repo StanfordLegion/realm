@@ -48,7 +48,16 @@ namespace Realm {
   Logger log_gex_bind("gexbind");
   Logger log_gex_amcredit("gexamcredit");
 
-  static const unsigned MSGID_BITS = 12;
+  // AM argument 0 carries the message ID in its low MSGID_BITS and completion
+  //  information above it: (completion index << 2) plus two flag bits.  12 bits is
+  //  enough for most handler tables and leaves room for 2^18 completion indices.  A
+  //  larger table (dependent partitioning registers ~36*D^2 handler types for
+  //  REALM_MAX_DIM=D, and every type is registered twice so that it can be sent in
+  //  fragments) takes the bits it needs from the completion index instead.  Set once
+  //  in GASNetEXInternal::attach, before any active message is sent, from the handler
+  //  table, which is identical on every rank.
+  static const unsigned MIN_MSGID_BITS = 12;
+  static unsigned MSGID_BITS = MIN_MSGID_BITS;
 
   gex_wrapper_handle_t gex_wrapper_handle;
 
@@ -830,7 +839,8 @@ namespace Realm {
   //
 
   PendingCompletionManager::PendingCompletionManager()
-    : first_free(0)
+    : max_groups(1 << LOG2_MAXGROUPS)
+    , first_free(0)
     , num_groups(0)
     , num_pending(0)
   {
@@ -840,6 +850,21 @@ namespace Realm {
 
     for(size_t i = 0; i < (1 << LOG2_MAXGROUPS); i++)
       groups[i].store(0);
+  }
+
+  bool PendingCompletionManager::set_index_bits(unsigned index_bits)
+  {
+    assert(num_groups.load() == 0);
+    if(index_bits < PendingCompletionGroup::LOG2_GROUPSIZE)
+      return false;
+    unsigned log2_groups =
+        std::min(unsigned(LOG2_MAXGROUPS),
+                 unsigned(index_bits - PendingCompletionGroup::LOG2_GROUPSIZE));
+    max_groups = 1 << log2_groups;
+    // the soft limit stays at 50% of max capacity
+    pending_soft_limit =
+        (size_t(max_groups) << PendingCompletionGroup::LOG2_GROUPSIZE) / 2;
+    return true;
   }
 
   PendingCompletionManager::~PendingCompletionManager()
@@ -878,13 +903,21 @@ namespace Realm {
     PendingCompletionGroup *newgrp = new PendingCompletionGroup;
     int grp_index = num_groups.load();
     while(true) {
+      // a completion index must fit in the bits AM argument 0 leaves for it, so this
+      //  is a hard limit rather than one more group to allocate
+      if(REALM_UNLIKELY(grp_index >= max_groups)) {
+        log_gex_comp.fatal() << "out of pending completions: all "
+                             << (size_t(max_groups)
+                                 << PendingCompletionGroup::LOG2_GROUPSIZE)
+                             << " are in use";
+        abort();
+      }
       PendingCompletionGroup *expected = 0;
       if(groups[grp_index].compare_exchange(expected, newgrp)) {
         // success - this is our index
         break;
       } else {
         grp_index++;
-        assert(grp_index < (1 << LOG2_MAXGROUPS));
       }
     }
     // monotonically advance num_groups to at least grp_index + 1.  fetch_add
@@ -1549,8 +1582,10 @@ namespace Realm {
 #endif
 
     // attempt an immediate send if they are enabled and we don't appear
-    //  to have any completion replies queued up
-    if(internal->module->config->cfg_use_immediate && (comp_reply_count.load() == 0)) {
+    //  to have any completion replies queued up - as for packets, we can't
+    //  inject if we're inside an AM request/reply handler
+    if(internal->module->config->cfg_use_immediate && !ThreadLocal::in_am_handler &&
+       (comp_reply_count.load() == 0)) {
       // always in immediate mode
       gex_flags_t flags = GEX_WRAPPER_FLAG_IMMEDIATE;
 
@@ -3343,6 +3378,28 @@ namespace Realm {
     log_gex.info() << "gasnet versions: release=" << gex_wrapper_handle.GEX_RELEASE
                    << " api=" << gex_wrapper_handle.GEX_API;
 
+    // size the message ID field for this handler table, which is constructed before
+    //  any network attaches (see MSGID_BITS)
+    {
+      const size_t num_handlers = activemsg_handler_table.num_handlers();
+      unsigned bits = MIN_MSGID_BITS;
+      while((size_t(1) << bits) < num_handlers)
+        bits++;
+      // AM argument 0 is 32 bits: message ID, then two flag bits, then the index
+      const unsigned index_bits = (bits < 30) ? (30 - bits) : 0;
+      if(!compmgr.set_index_bits(index_bits)) {
+        log_gex.fatal() << "too many active message handlers for GASNet-EX: "
+                        << num_handlers << " need " << bits
+                        << " message ID bits, which leaves too few for completions";
+        abort();
+      }
+      MSGID_BITS = bits;
+      if(bits > MIN_MSGID_BITS)
+        log_gex.info() << num_handlers << " active message handlers: using " << bits
+                       << "-bit message IDs and at most " << (size_t(1) << index_bits)
+                       << " pending completions";
+    }
+
     // the primordial segment consists of:
     // 1) storage for any NetworkSegments we're allowed to allocate
     // 2) outbufs
@@ -5111,7 +5168,11 @@ namespace Realm {
       // if the message was handled immediately, we can use a reply for
       //  completion information
       // set MSB to indicate this is coming in a reply (for AM credit counting)
-      return comp_info | (1U << 31);
+      if(comp_info != 0)
+        return comp_info | (1U << 31);
+      // with nothing to complete, the only reply is the dummy for AM credits -
+      //  an MSB-only word would read as a completion with neither bit set
+      return (module->config->cfg_am_limit ? ~0U : 0);
     } else {
       // remote isn't done and there's no local completion for shorts
       //  but we have to send a dummy response if we're counting AM credits
@@ -5160,7 +5221,11 @@ namespace Realm {
     if(handled) {
       // if the message was handled immediately, we can use a reply for
       //  completion information
-      return comp_info | (1U << 31);
+      if(comp_info != 0)
+        return comp_info | (1U << 31);
+      // with nothing to complete, the only reply is the dummy for AM credits
+      //  (see handle_short)
+      return (module->config->cfg_am_limit ? ~0U : 0);
     } else {
       if((comp_info & PendingCompletion::LOCAL_PENDING_BIT) != 0) {
         // reply is allowed for local completion, but remote isn't done
@@ -5211,7 +5276,11 @@ namespace Realm {
     if(handled) {
       // if the message was handled immediately, we can use a reply for
       //  completion information
-      return comp_info | (1U << 31);
+      if(comp_info != 0)
+        return comp_info | (1U << 31);
+      // with nothing to complete, the only reply is the dummy for AM credits
+      //  (see handle_short)
+      return (module->config->cfg_am_limit ? ~0U : 0);
     } else {
       if((comp_info & PendingCompletion::LOCAL_PENDING_BIT) != 0) {
         // reply is allowed for local completion, but remote isn't done

@@ -27,6 +27,7 @@
 #include "realm/transfer/ib_memory.h"
 
 #include <limits.h>
+#include <limits>
 
 #if !defined(REALM_MPI_HAS_COMM_SPLIT_TYPE) && defined(OMPI_MAJOR_VERSION)
 #if(OMPI_MAJOR_VERSION * 100 + OMPI_MINOR_VERSION) >= 107
@@ -1010,7 +1011,13 @@ namespace Realm {
   {
     // MPI has no concept of registered segments - same limit either way
     (void)src_payload_addr;
-    return (AM_BUF_SIZE - header_size);
+    // AM_BUF_SIZE is only the eager threshold (see recommended_max_payload): a larger
+    //  payload goes as a header followed by its own MPI_Send, and arrives without a
+    //  copy into the receiver's message blocks.  The real limit is the int that
+    //  AMSend and MPI_Send count bytes in.  Reporting AM_BUF_SIZE here would make
+    //  ActiveMessage cut every message above ~4KB into ~4KB fragments.
+    (void)header_size;
+    return size_t(std::numeric_limits<int>::max());
   }
 
 }; // namespace Realm
