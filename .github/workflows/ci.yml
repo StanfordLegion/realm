@@ -655,7 +655,8 @@ jobs:
       - name: Start FreeBSD
         run: |
           .github/workflows/freebsd-vm.sh start ${{ matrix.release }}
-          .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake git ninja python3'
+          # Install cmake and ctest directly, without the cmake documentation metapackage.
+          .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake-core git ninja python3'
           .github/workflows/freebsd-vm.sh push . /root/realm
 
       - name: Configure
@@ -717,7 +718,8 @@ jobs:
       - name: Start FreeBSD
         run: |
           .github/workflows/freebsd-vm.sh start ${{ matrix.release }}
-          .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake gdb git ninja python3'
+          # Install cmake and ctest directly, without the cmake documentation metapackage.
+          .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake-core gdb git ninja python3'
           .github/workflows/freebsd-vm.sh push . /root/realm
 
       - name: Show gdb
