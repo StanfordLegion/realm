@@ -25,7 +25,10 @@ TEST(OpenMPThreadPoolTest, StopImmediatelyAfterStart)
 {
   HardwareTopology topology = HardwareTopology::create_topology();
   CoreReservationSet reservations(&topology);
-  ThreadPool pool(Processor::NO_PROC, 2, "startup/shutdown test", -1, 0, reservations);
+  // Zero requests PTHREAD_STACK_MIN, which is too small for Realm on FreeBSD.
+  const size_t stack_size = 1 << 20;
+  ThreadPool pool(Processor::NO_PROC, 2, "startup/shutdown test", -1, stack_size,
+                  reservations);
   ASSERT_TRUE(reservations.satisfy_reservations(true));
 
   // Shutdown must also handle workers that have not reached their entry point.

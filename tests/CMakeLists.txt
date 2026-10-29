@@ -191,6 +191,19 @@ if(NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
 endif()
 
 include(GoogleTest)
+if(REALM_USE_PYTHON)
+  add_executable(realm_python_interpreter_test unit_tests/python_interpreter_test.cc)
+  target_link_libraries(
+    realm_python_interpreter_test PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES}
+                                          ${REALM_EXTRA_OBJS}
+  )
+  add_test(NAME python_interpreter_shutdown COMMAND realm_python_interpreter_test)
+  set_tests_properties(
+    python_interpreter_shutdown PROPERTIES LABELS "unit" ENVIRONMENT
+                                           "REALM_PYTHON_LIB=$<TARGET_FILE:Python3::Python>"
+  )
+endif()
+
 if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
    AND NOT WIN32
    AND NOT CMAKE_CROSSCOMPILING
