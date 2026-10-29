@@ -513,14 +513,11 @@ namespace Realm {
     static void invoke_deferred_callbacks(Message *msg);
 
     // the shared implementation: 'count_for_drain' is false only for add_local_message
-    bool add_incoming_message_impl(NodeID sender,
-                                   ActiveMessageHandlerTable::MessageID msgid,
-                                   const void *hdr, size_t hdr_size, int hdr_mode,
-                                   const void *payload, size_t payload_size,
-                                   int payload_mode, CallbackFnptr callback_fnptr,
-                                   CallbackData callback_data1,
-                                   CallbackData callback_data2, TimeLimit work_until,
-                                   bool count_for_drain);
+    bool add_incoming_message_impl(
+        NodeID sender, ActiveMessageHandlerTable::MessageID msgid, const void *hdr,
+        size_t hdr_size, int hdr_mode, const void *payload, size_t payload_size,
+        int payload_mode, CallbackFnptr callback_fnptr, CallbackData callback_data1,
+        CallbackData callback_data2, TimeLimit work_until, bool count_for_drain);
     int get_messages(Message *&head, Message **&tail, bool wait);
     bool return_messages(int sender, size_t num_handled, Message *head, Message **tail);
 
