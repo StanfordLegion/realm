@@ -155,12 +155,12 @@ jobs:
               sanitizer: 'NONE'
             }
           - {
-              os: ubuntu-latest,
+              os: ubuntu-24.04,
               build: Release,
               cc: "gcc", cxx: "g++",
               ccache: ccache,
               shared_lib: 'OFF',
-              cuda: '13.3.1',
+              cuda: '12.9.1',
               openmp: 'ON',
               ucx: 'OFF',
               gasnet: 'OFF',
@@ -657,7 +657,6 @@ jobs:
       - name: Start FreeBSD
         run: |
           .github/workflows/freebsd-vm.sh start ${{ matrix.release }}
-          # Install cmake and ctest directly, without the cmake documentation metapackage.
           .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake-core git ninja python3'
           .github/workflows/freebsd-vm.sh push . /root/realm
 
@@ -720,7 +719,6 @@ jobs:
       - name: Start FreeBSD
         run: |
           .github/workflows/freebsd-vm.sh start ${{ matrix.release }}
-          # Install cmake and ctest directly, without the cmake documentation metapackage.
           .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake-core gdb git ninja python3'
           .github/workflows/freebsd-vm.sh push . /root/realm
 
