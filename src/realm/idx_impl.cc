@@ -18,6 +18,7 @@
 // Realm index space implementation
 
 #include "realm/idx_impl.h"
+#include "realm/transfer/transfer.h"
 
 #include "realm/deppart/inst_helper.h"
 #include "realm/instance.h"
@@ -201,6 +202,22 @@ namespace Realm {
     // TODO: move to transfer.cc for indirection goodness
     assert(indirect_len == 0);
     return space.copy(srcs, dsts, requests, wait_on, priority);
+  }
+
+  template <int N, typename T>
+  TransferDesc *IndexSpaceGenericImplTyped<N, T>::make_transfer_desc(
+      const std::vector<CopySrcDstField> &srcs, const std::vector<CopySrcDstField> &dsts,
+      const std::vector<SubgraphDefinition::IndirectionRef> &indirects,
+      const ProfilingRequestSet &requests) const
+  {
+    std::vector<const typename CopyIndirection<N, T>::Base *> typed(indirects.size());
+    for(size_t i = 0; i < indirects.size(); i++) {
+      if(indirects[i].type_tag != NT_TemplateHelper::encode_tag<N, T>())
+        return nullptr;
+      typed[i] =
+          static_cast<const typename CopyIndirection<N, T>::Base *>(indirects[i].ptr);
+    }
+    return new TransferDesc(space, srcs, dsts, typed, requests);
   }
 
   template <int N, typename T>

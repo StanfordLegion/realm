@@ -374,6 +374,9 @@ namespace Realm {
                                   const void *payload = 0, size_t payload_size = 0,
                                   int priority = 0, bool report_if_empty = false);
 
+    // copies all requests of another set into this one
+    void import_requests(const ProfilingRequestSet &rhs);
+
     size_t request_count(void) const;
     bool empty(void) const;
 
@@ -407,6 +410,9 @@ namespace Realm {
 
     template <typename T>
     void add_measurement(const T &data, bool send_complete_responses = true);
+
+    // every measurement id some imported request asked for
+    void get_requested_measurement_ids(std::set<ProfilingMeasurementID> &ids) const;
 
   protected:
     void send_response(const ProfilingRequest &pr) const;

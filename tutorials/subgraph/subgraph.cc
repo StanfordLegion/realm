@@ -312,6 +312,12 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
   sd.dependencies[8].tgt_op_kind = SubgraphDefinition::OPKIND_EXT_POSTCOND;
   sd.dependencies[8].tgt_op_index = 0;
 
+  // Instantiations are chained through their postconditions below, so they
+  // never overlap; INSTANTIATION_ORDER states that to the runtime. (The
+  // default, CONCURRENT, would work too: it orders instantiations only by
+  // the events the application gives them.)
+  sd.concurrency_mode = SubgraphDefinition::INSTANTIATION_ORDER;
+
   Subgraph sg;
   Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
 
@@ -345,7 +351,11 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
     p.spawn(VERIFY_TASK, &verify_args, sizeof(VerifyTaskArgs)).wait();
   }
 
-  sg.destroy();
+  // the event destroy returns must be chained into the shutdown
+  // precondition like every other event Realm hands out; waiting for it
+  // inside this task (whose finish event is the shutdown precondition) does
+  // that
+  sg.destroy().wait();
 
   for(int i = 0; i < 5; i++) {
     insts[i].destroy();

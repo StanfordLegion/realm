@@ -88,6 +88,13 @@ namespace Realm {
       delete *it;
   }
 
+  void ProfilingRequestSet::import_requests(const ProfilingRequestSet &rhs)
+  {
+    for(std::vector<ProfilingRequest *>::const_iterator it = rhs.requests.begin();
+        it != rhs.requests.end(); ++it)
+      requests.push_back(new ProfilingRequest(**it));
+  }
+
   ProfilingRequestSet &ProfilingRequestSet::operator=(const ProfilingRequestSet &rhs)
   {
     for(std::vector<ProfilingRequest *>::iterator it = requests.begin();
@@ -140,6 +147,16 @@ namespace Realm {
   {}
 
   ProfilingMeasurementCollection::~ProfilingMeasurementCollection(void) {}
+
+  void ProfilingMeasurementCollection::get_requested_measurement_ids(
+      std::set<ProfilingMeasurementID> &ids) const
+  {
+    for(std::map<ProfilingMeasurementID,
+                 std::vector<const ProfilingRequest *>>::const_iterator it =
+            requested_measurements.begin();
+        it != requested_measurements.end(); ++it)
+      ids.insert(it->first);
+  }
 
   void ProfilingMeasurementCollection::import_requests(const ProfilingRequestSet &prs)
   {

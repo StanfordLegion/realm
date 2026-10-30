@@ -108,6 +108,7 @@ list(
   actmsg_chunked_send_test.cc
   fragmented_message_test.cc
   incoming_message_manager_test.cc
+  subgraph_order_test.cc
   memcpy_channel_test.cc
   comp_queue_test.cc
   event_test.cc
@@ -336,7 +337,96 @@ add_integration_test(event_subscribe "${REALM_TEST_DIR}/event_subscribe.cc")
 set(compqueue_ARGS -ll:cpu 4 -timeout 120)
 add_integration_test(compqueue "${REALM_TEST_DIR}/compqueue.cc")
 add_integration_test(test_nodeset "${REALM_TEST_DIR}/test_nodeset.cc")
-add_integration_test(subgraphs "${REALM_TEST_DIR}/subgraphs.cc")
+# subgraphs.cc exercises nested instantiations and reservations, which the
+# compiled subgraph implementation does not support yet (creation fails
+# fatally); re-enable as those land. subgraphs_compiled.cc is the same test
+# with those two inlined (see its header comment).
+# add_integration_test(subgraphs "${REALM_TEST_DIR}/subgraphs.cc")
+set(subgraphs_compiled_ARGS -ll:cpu 2)
+add_integration_test(subgraphs_compiled "${REALM_TEST_DIR}/subgraphs_compiled.cc")
+set(subgraph_unit_tests_ARGS -ll:cpu 4)
+add_integration_test(subgraph_unit_tests "${REALM_TEST_DIR}/subgraph_unit_tests.cc")
+if(REALM_ENABLE_CUDA)
+  # GPU tasks in subgraphs: the same binary with kernels, run with a GPU
+  target_sources(subgraph_unit_tests PRIVATE "${REALM_TEST_DIR}/subgraph_unit_tests_gpu.cu")
+  target_compile_definitions(subgraph_unit_tests PRIVATE SUBGRAPH_TESTS_CUDA=1)
+  target_link_libraries(subgraph_unit_tests ${TEST_GPU_LIBS})
+  add_test(NAME subgraph_unit_tests_gpu
+           COMMAND $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:gpu 1 -ll:zsize 32)
+  set_tests_properties(subgraph_unit_tests_gpu PROPERTIES RESOURCE_LOCK gpu TIMEOUT 600)
+  if(NOT WIN32)
+    add_test(NAME subgraph_death_deferred_task_requests_ctxsync
+             COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:gpu 1 -death deferred_task_requests_ctxsync")
+    set_tests_properties(subgraph_death_deferred_task_requests_ctxsync
+                         PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED"
+                                    PASS_REGULAR_EXPRESSION "registered with deferred effects"
+                                    RESOURCE_LOCK gpu TIMEOUT 120)
+  endif()
+endif()
+if(NOT WIN32) # the scenarios run through sh
+# Compiled subgraphs must reject unsupported usage fatally. Each scenario runs
+# in its own process and must die of the subgraph implementation's own
+# diagnostic for that scenario (the fatal message names the subgraph and the
+# reason); surviving (the marker) is a failure. With PASS_REGULAR_EXPRESSION
+# set, ctest ignores the exit status, so the expected text is what is checked.
+function(add_subgraph_death_test scenario expected)
+  add_test(NAME subgraph_death_${scenario}
+           COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:util 1 -death ${scenario}")
+  set_tests_properties(
+    subgraph_death_${scenario}
+    PROPERTIES FAIL_REGULAR_EXPRESSION "DEATH-TEST-SURVIVED"
+               PASS_REGULAR_EXPRESSION "[{]subgraph[}]: subgraph .*${expected}" TIMEOUT 120
+  )
+endfunction()
+add_subgraph_death_test(unsupported_op_compiled "nested subgraph instantiations are not implemented")
+add_subgraph_death_test(profiling_on_compiled_instantiate "profiling requests on the instantiation itself")
+add_subgraph_death_test(external_precond_compiled_instantiate "external preconditions, but the definition declares 0")
+add_subgraph_death_test(unregistered_task "uses task id")
+add_subgraph_death_test(indirection_type_mismatch "indirection for a different index space type")
+add_subgraph_death_test(interpolation_out_of_range "writes past its target")
+add_subgraph_death_test(redop_size_mismatch "provides 8 bytes")
+add_subgraph_death_test(deferred_creation "deferred creation")
+add_subgraph_death_test(task_on_utility_proc "has no compiled-subgraph hooks")
+add_subgraph_death_test(destroy_twice "already destroyed")
+add_subgraph_death_test(destroy_twice_pending "destroyed twice")
+add_subgraph_death_test(one_shot_twice "ONE_SHOT subgraph instantiated a second time")
+add_subgraph_death_test(instantiate_after_destroy "instantiate of a subgraph that was destroyed")
+add_subgraph_death_test(instantiate_after_destroy_requested "instantiated after destroy")
+add_subgraph_death_test(serializable_mode_unsupported "SERIALIZABLE is not implemented")
+add_subgraph_death_test(dependency_cycle "contain a cycle")
+add_subgraph_death_test(unsupported_task_measurement "requests profiling measurement id")
+# Shutdown with an instantiation that cannot finish (gated on an event nobody
+# triggers; a graph task blocked forever): pending application work, reported
+# by the same eager check that reports an untriggered operation. No timer.
+foreach(scenario shutdown_unfinished_instantiation shutdown_blocked_graph_task
+    shutdown_pending_destroy)
+  add_test(NAME subgraph_exit_${scenario}
+           COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -exit ${scenario}")
+  set_tests_properties(
+    subgraph_exit_${scenario}
+    PROPERTIES PASS_REGULAR_EXPRESSION "(pending subgraph instantiation\\(s\\)|destroy\\(s\\) not yet in effect) during shutdown"
+               TIMEOUT 120
+  )
+endforeach()
+endif()
+# Teardown scenarios: destroys in flight at shutdown, their events chained
+# into the shutdown precondition or observed before it. Each must exit 0.
+foreach(
+  scenario
+  destroy_chained
+  destroy_many_chained
+  destroy_as_shutdown_precondition
+  destroy_many_waiters_chained
+  destroy_observed_then_shutdown
+  destroy_released_late_observed
+  pending_instantiations_released_late
+)
+  # $<TARGET_FILE:...> like every other test: a bare target name makes CMake
+  # prepend CMAKE_CROSSCOMPILING_EMULATOR, which the cross CI job cannot run.
+  add_test(NAME subgraph_exit_${scenario}
+           COMMAND $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -exit ${scenario})
+  set_tests_properties(subgraph_exit_${scenario} PROPERTIES TIMEOUT 120)
+endforeach()
 add_integration_test(large_tls "${REALM_TEST_DIR}/large_tls.cc")
 add_integration_test(stack_guard "${REALM_TEST_DIR}/stack_guard.cc")
 add_integration_test(memmodel "${REALM_TEST_DIR}/memmodel.cc")

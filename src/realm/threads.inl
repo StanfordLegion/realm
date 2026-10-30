@@ -55,6 +55,9 @@ namespace Realm {
     : state(STATE_CREATED)
     , scheduler(_scheduler)
     , current_op(0)
+    , in_subgraph_task_exec(false)
+    , subgraph_task_state_ptr(nullptr)
+    , subgraph_finish_event_id(0)
     , exception_handler_count(0)
     , signal_count(0)
   {}
@@ -248,6 +251,18 @@ namespace Realm {
   }
 
   inline Operation *Thread::get_operation(void) const { return current_op; }
+
+  inline void Thread::start_subgraph_task_execution(void *state)
+  {
+    in_subgraph_task_exec = true;
+    subgraph_task_state_ptr = state;
+  }
+
+  inline void Thread::stop_subgraph_task_execution()
+  {
+    in_subgraph_task_exec = false;
+    subgraph_task_state_ptr = nullptr;
+  }
 
   inline void Thread::setup_perf_counters(const ProfilingMeasurementCollection &pmc)
   {
