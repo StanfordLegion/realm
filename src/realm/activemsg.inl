@@ -374,12 +374,19 @@ namespace Realm {
   template <typename CALLABLE>
   void ActiveMessage<T, INLINE_STORAGE>::add_local_completion(const CALLABLE &callable)
   {
-    assert(impl != 0);
-
     size_t bytes = sizeof(CompletionCallback<CALLABLE>);
     // round up
     bytes = (((bytes - 1) / CompletionCallbackBase::ALIGNMENT) + 1) *
             CompletionCallbackBase::ALIGNMENT;
+
+    if(network_max_payload_ != 0) {
+      // chunked mode has no impl yet - hold it until commit_chunked()
+      void *ptr = reserve_chunked_completion(chunk_local_comp_, bytes);
+      new(ptr) CompletionCallback<CALLABLE>(callable);
+      return;
+    }
+
+    assert(impl != 0);
     void *ptr = impl->add_local_completion(bytes);
     new(ptr) CompletionCallback<CALLABLE>(callable);
   }
@@ -388,12 +395,19 @@ namespace Realm {
   template <typename CALLABLE>
   void ActiveMessage<T, INLINE_STORAGE>::add_remote_completion(const CALLABLE &callable)
   {
-    assert(impl != 0);
-
     size_t bytes = sizeof(CompletionCallback<CALLABLE>);
     // round up
     bytes = (((bytes - 1) / CompletionCallbackBase::ALIGNMENT) + 1) *
             CompletionCallbackBase::ALIGNMENT;
+
+    if(network_max_payload_ != 0) {
+      // chunked mode has no impl yet - hold it until commit_chunked()
+      void *ptr = reserve_chunked_completion(chunk_remote_comp_, bytes);
+      new(ptr) CompletionCallback<CALLABLE>(callable);
+      return;
+    }
+
+    assert(impl != 0);
     void *ptr = impl->add_remote_completion(bytes);
     new(ptr) CompletionCallback<CALLABLE>(callable);
   }
@@ -427,7 +441,10 @@ namespace Realm {
   void ActiveMessage<T, INLINE_STORAGE>::cancel(void)
   {
     if(network_max_payload_ != 0) {
-      // chunked mode - just clean up the local state
+      // chunked mode - just clean up the local state.  Nothing was sent, so neither
+      //  completion is owed and both are destroyed rather than invoked.
+      discard_chunked_completions(chunk_local_comp_);
+      discard_chunked_completions(chunk_remote_comp_);
       header->~T();
       header = 0;
       chunk_alloc_.clear();
@@ -569,6 +586,10 @@ namespace Realm {
     //  fragmented messages of any type can be reassembled
     if constexpr(!is_wrapped_with_frag_info<T>::value &&
                  std::is_same<T, T2>::value) {
+      static_assert((sizeof(WrappedWithFragInfo<T>) <= MAX_FRAGMENT_HEADER_BYTES) ||
+                        allow_unfragmentable_header<T>::value,
+                    "this message header is too large to send in fragments on every "
+                    "network - see MAX_FRAGMENT_HEADER_BYTES in activemsg.h");
       auto *wrapped_reg = new ActiveMessageHandlerReg<WrappedWithFragInfo<T>, T>();
       (void)wrapped_reg; // leaked intentionally - lives for program lifetime
     }
@@ -587,6 +608,33 @@ namespace Realm {
   //
 
   template <typename T, size_t INLINE_STORAGE>
+  /*static*/ void *
+  ActiveMessage<T, INLINE_STORAGE>::reserve_chunked_completion(std::vector<char> &buf,
+                                                               size_t bytes)
+  {
+    size_t ofs = buf.size();
+    // the callbacks are polymorphic, so a plain resize() would memcpy them - clone
+    //  into fresh storage instead
+    std::vector<char> grown(ofs + bytes);
+    if(ofs > 0) {
+      CompletionCallbackBase::clone_all(grown.data(), buf.data(), ofs);
+      CompletionCallbackBase::destroy_all(buf.data(), ofs);
+    }
+    buf.swap(grown);
+    return (buf.data() + ofs);
+  }
+
+  template <typename T, size_t INLINE_STORAGE>
+  /*static*/ void
+  ActiveMessage<T, INLINE_STORAGE>::discard_chunked_completions(std::vector<char> &buf)
+  {
+    if(!buf.empty()) {
+      CompletionCallbackBase::destroy_all(buf.data(), buf.size());
+      buf.clear();
+    }
+  }
+
+  template <typename T, size_t INLINE_STORAGE>
   void ActiveMessage<T, INLINE_STORAGE>::init_chunked(NodeID _target,
                                                       size_t _max_payload_size)
   {
@@ -595,7 +643,9 @@ namespace Realm {
     } else {
       size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, nullptr);
-      assert(network_max_payload_ > 0);
+      if(network_max_payload_ == 0)
+        report_unfragmentable_message(activemsg_handler_table.lookup_message_id<T>(),
+                                      sizeof(T), wrapped_hdr_size, _max_payload_size);
 
       chunk_targets_.add(_target);
       chunk_alloc_.resize(_max_payload_size);
@@ -615,7 +665,9 @@ namespace Realm {
     } else {
       size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, nullptr);
-      assert(network_max_payload_ > 0);
+      if(network_max_payload_ == 0)
+        report_unfragmentable_message(activemsg_handler_table.lookup_message_id<T>(),
+                                      sizeof(T), wrapped_hdr_size, _max_payload_size);
 
       chunk_targets_ = _targets;
       chunk_alloc_.resize(_max_payload_size);
@@ -638,7 +690,9 @@ namespace Realm {
       // pass the caller's data pointer so the backend can check registration
       size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, _data);
-      assert(network_max_payload_ > 0);
+      if(network_max_payload_ == 0)
+        report_unfragmentable_message(activemsg_handler_table.lookup_message_id<T>(),
+                                      sizeof(T), wrapped_hdr_size, _datalen);
 
       chunk_targets_.add(_target);
       chunk_src_data_ = _data;
@@ -660,7 +714,9 @@ namespace Realm {
     } else {
       size_t wrapped_hdr_size = sizeof(WrappedWithFragInfo<T>);
       network_max_payload_ = Network::max_payload_size(wrapped_hdr_size, _data);
-      assert(network_max_payload_ > 0);
+      if(network_max_payload_ == 0)
+        report_unfragmentable_message(activemsg_handler_table.lookup_message_id<T>(),
+                                      sizeof(T), wrapped_hdr_size, _datalen);
 
       chunk_targets_ = _targets;
       chunk_src_data_ = _data;
@@ -685,7 +741,7 @@ namespace Realm {
 
       // msg_id only needs to be unique per-sender, so using my_node_id is fine
       //  for both unicast and multicast chunked sends
-      uint64_t msg_id = next_chunk_message_id(Network::my_node_id);
+      uint64_t msg_id = Realm::next_chunk_message_id(Network::my_node_id);
       size_t max_chunk = network_max_payload_;
       uint32_t total_chunks =
           static_cast<uint32_t>((total_payload + max_chunk - 1) / max_chunk);
@@ -693,20 +749,54 @@ namespace Realm {
         total_chunks = 1;
       }
 
+      // a single target is sent the way an unchunked message to one target would be:
+      //  some networks' multi-target path cannot carry a remote completion, and the
+      //  unicast path is cheaper everywhere.  Two or more targets still take the
+      //  multi-target path, remote completion and all, so such a network's limits
+      //  apply to them just as they do unchunked.
+      const bool unicast = (chunk_targets_.size() == 1);
+      const NodeID unicast_target = (unicast ? *(chunk_targets_.begin()) : NodeID(-1));
+
       size_t offset = 0;
       for(uint32_t chunk_id = 0; chunk_id < total_chunks; ++chunk_id) {
         size_t chunk_size = std::min(max_chunk, total_payload - offset);
 
-        ActiveMessage<WrappedWithFragInfo<T>> chunk_msg(chunk_targets_, chunk_size);
+        ActiveMessage<WrappedWithFragInfo<T>> chunk_msg;
+        if(unicast)
+          chunk_msg.init(unicast_target, chunk_size);
+        else
+          chunk_msg.init(chunk_targets_, chunk_size);
         chunk_msg->frag_info = {chunk_id, total_chunks, msg_id};
         chunk_msg->user = *header;
         if(chunk_size > 0) {
           chunk_msg.add_payload(payload_data + offset, chunk_size);
         }
+        // A remote completion means "received AND handled by the target", which for a
+        //  chunked message is only true once every chunk has arrived and the
+        //  reassembled message has run.  Put it on chunk 0 and let the receiver hold
+        //  it until then (IncomingMessageManager::DeferredCallback).  Attaching one to
+        //  every chunk would be wrong: only whichever chunk completes reassembly ever
+        //  fires, and delivery need not be ordered, so the rest would stay pending on
+        //  this node forever.
+        if((chunk_id == 0) && !chunk_remote_comp_.empty()) {
+          void *ptr = chunk_msg.impl->add_remote_completion(chunk_remote_comp_.size());
+          CompletionCallbackBase::clone_all(ptr, chunk_remote_comp_.data(),
+                                            chunk_remote_comp_.size());
+        }
         chunk_msg.commit();
 
         offset += chunk_size;
       }
+
+      // Local completion means the source data has been read and may be overwritten.
+      //  Every chunk was copied into a network-owned buffer by add_payload above, so
+      //  that is already true by the time we get here.
+      if(!chunk_local_comp_.empty()) {
+        CompletionCallbackBase::invoke_all(chunk_local_comp_.data(),
+                                           chunk_local_comp_.size());
+        discard_chunked_completions(chunk_local_comp_);
+      }
+      discard_chunked_completions(chunk_remote_comp_);
 
       // clean up
       header->~T();
@@ -718,15 +808,6 @@ namespace Realm {
       chunk_src_datalen_ = 0;
       network_max_payload_ = 0;
     }
-  }
-
-  template <typename T, size_t INLINE_STORAGE>
-  /*static*/ uint64_t
-  ActiveMessage<T, INLINE_STORAGE>::next_chunk_message_id(NodeID node_id)
-  {
-    static std::atomic<uint64_t> counter{0};
-    uint64_t local = counter.fetch_add(1, std::memory_order_relaxed);
-    return (static_cast<uint64_t>(node_id) << 48) | (local & ((1ULL << 48) - 1));
   }
 
   namespace HandlerWrappers {

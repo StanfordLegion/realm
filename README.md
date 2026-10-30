@@ -169,11 +169,18 @@ Please file an issue or pull request if something is missing or outdated.
 We welcome contributions of all kinds – bug reports, documentation fixes, new features, and performance improvements.
 
 1. Fork the repository and create a feature branch.
-2. Follow the existing code style (clang-format is enforced in CI).
+2. Follow the existing code style using clang-format 21 (enforced in CI on changed lines).
 3. Make sure `ctest` passes on your machine *and* with `REALM_ENABLE_SANITIZER` if possible.
 4. Open a pull request against `master` (or the feature branch you were asked to use).
 
 See [`CONTRIBUTING.md`](.github/CONTRIBUTING.md) for the full guidelines.
+
+To format your changes before submitting a pull request, install `clang-format-21`
+and run:
+
+```sh
+git diff -U0 --no-color origin/main | clang-format-diff-21 -p1 -i
+```
 
 ---
 

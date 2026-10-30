@@ -43,6 +43,19 @@ namespace Realm {
     return true;
   }
 
+  bool FragmentedMessage::add_chunk(uint32_t chunk_id, std::vector<char> &&data)
+  {
+    if(chunk_id >= total_chunks || received_flags[chunk_id]) {
+      return false;
+    }
+
+    total_size += data.size();
+    received_chunks[chunk_id] = std::move(data);
+    received_flags[chunk_id] = true;
+    received_count++;
+    return true;
+  }
+
   bool FragmentedMessage::is_complete() const
   {
     assert(received_count <= total_chunks);
@@ -64,5 +77,17 @@ namespace Realm {
     }
 
     return message;
+  }
+
+  void FragmentedMessage::reassemble(void *dst) const
+  {
+    assert(is_complete());
+    char *out = static_cast<char *>(dst);
+    for(const std::vector<char> &chunk : received_chunks) {
+      if(!chunk.empty()) {
+        std::memcpy(out, chunk.data(), chunk.size());
+        out += chunk.size();
+      }
+    }
   }
 } // namespace Realm

@@ -19,6 +19,7 @@ on:
   pull_request:
     branches: main
     paths:
+      - '.github/workflows/format.yml'
       - '**.cc'
       - '**.c'
       - '**.h'
@@ -29,6 +30,7 @@ on:
   push:
     branches: main
     paths:
+      - '.github/workflows/format.yml'
       - '**.cc'
       - '**.c'
       - '**.h'
@@ -50,7 +52,7 @@ jobs:
 
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: clang-format-15 cmake-format
+          packages: clang-format-21 cmake-format
 
       - name: PR base/head sha
         if: github.event_name == 'pull_request'
@@ -73,11 +75,11 @@ jobs:
       - name: Clang Format
         run: |
           git diff -U0 --no-color ${BASE_SHA}..${HEAD_SHA} > /tmp/patch.diff
-          cat /tmp/patch.diff | clang-format-diff-15 -p1 2>&1 > /tmp/not-formatted.diff
+          cat /tmp/patch.diff | clang-format-diff-21 -p1 2>&1 > /tmp/not-formatted.diff
           if grep -q '[^[:space:]]' /tmp/not-formatted.diff; then
             echo 'Code is not formatted'
             echo 'Run clang-format-diff on your changes to fix these:'
-            echo "    git diff -U0 --no-color ${BASE_SHA} | clang-format-diff-15 -p1 -i"
+            echo "    git diff -U0 --no-color ${BASE_SHA} | clang-format-diff-21 -p1 -i"
             echo "Diff formatting result:"
             cat /tmp/not-formatted.diff
             exit 1

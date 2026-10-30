@@ -39,13 +39,15 @@ TEST_F(FragmentedMessageTest, AddChunkWorksCorrectly)
   EXPECT_EQ(message->size(), sizeof(chunk1) - 1);
 }
 
-TEST_F(FragmentedMessageTest, AddDuplicateChunkIgnored)
+TEST_F(FragmentedMessageTest, AddDuplicateChunkRejected)
 {
   const char chunk1[] = "Data";
   message->add_chunk(0, chunk1, sizeof(chunk1));
   EXPECT_EQ(message->size(), sizeof(chunk1));
-  message->add_chunk(0, chunk1, sizeof(chunk1)); // duplicate
-  EXPECT_EQ(message->size(), sizeof(chunk1));    // unchanged
+  // rejected rather than absorbed - callers treat this as a protocol violation,
+  //  since Realm's transports deliver exactly once and nothing retransmits
+  EXPECT_FALSE(message->add_chunk(0, chunk1, sizeof(chunk1))); // duplicate
+  EXPECT_EQ(message->size(), sizeof(chunk1));                  // unchanged
 }
 
 TEST_F(FragmentedMessageTest, IsCompleteReturnsCorrectly)
@@ -117,6 +119,43 @@ TEST_F(FragmentedMessageTest, AddChunkOutOfBounds)
 {
   const char chunk[] = "OutOfBounds";
   EXPECT_FALSE(message->add_chunk(5, chunk, sizeof(chunk)));
+}
+
+TEST_F(FragmentedMessageTest, AddChunkTakesOverAVector)
+{
+  std::vector<char> chunk1 = {'a', 'b'};
+  std::vector<char> chunk2 = {'c'};
+  message = std::make_unique<FragmentedMessage>(2);
+
+  EXPECT_TRUE(message->add_chunk(1, std::move(chunk2)));
+  EXPECT_TRUE(message->add_chunk(0, std::move(chunk1)));
+  EXPECT_EQ(message->size(), 3u);
+  ASSERT_TRUE(message->is_complete());
+
+  std::vector<char> again = {'d'};
+  EXPECT_FALSE(message->add_chunk(1, std::move(again)));          // duplicate
+  EXPECT_FALSE(message->add_chunk(2, std::vector<char>(1, 'e'))); // out of range
+  EXPECT_EQ(message->size(), 3u);
+
+  std::vector<char> result = message->reassemble();
+  EXPECT_EQ(std::string(result.begin(), result.end()), "abc");
+}
+
+TEST_F(FragmentedMessageTest, ReassembleIntoABuffer)
+{
+  const char chunk1[] = "Part 1 ";
+  const char chunk2[] = "";
+  const char chunk3[] = "Part 3";
+
+  // out of order, and with an empty chunk in the middle
+  message->add_chunk(2, chunk3, sizeof(chunk3) - 1);
+  message->add_chunk(1, chunk2, sizeof(chunk2) - 1);
+  message->add_chunk(0, chunk1, sizeof(chunk1) - 1);
+  ASSERT_TRUE(message->is_complete());
+
+  std::vector<char> buffer(message->size() + 1, '#');
+  message->reassemble(buffer.data());
+  EXPECT_EQ(std::string(buffer.begin(), buffer.end()), "Part 1 Part 3#");
 }
 
 TEST_F(FragmentedMessageTest, EmptyReassemble)

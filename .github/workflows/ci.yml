@@ -29,14 +29,14 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.config.os }}-${{ matrix.config.shared == 'ON' && 'shared' || 'static' }}-${{ matrix.config.cc }}-${{ matrix.config.build }}${{ matrix.config.cuda && format('-cuda{0}', matrix.config.cuda) || '' }}${{ matrix.config.ucx == 'ON' && '-ucx' || '' }}${{ matrix.config.gasnet == 'ON' && '-gasnet' || '' }}${{ matrix.config.kokkos == 'ON' && '-kokkos' || '' }}${{ matrix.config.openmp == 'ON' && '-openmp' || '' }}${{ matrix.config.python == 'ON' && '-python' || '' }}${{ matrix.config.sanitizer != 'NONE' && format('-{0}', matrix.config.sanitizer) || '' }}
+    name: ${{ matrix.config.os }}-${{ matrix.config.shared == 'ON' && 'shared' || 'static' }}-${{ matrix.config.cc }}-${{ matrix.config.build }}${{ matrix.config.cuda && format('-cuda{0}', matrix.config.cuda) || '' }}${{ matrix.config.ucx == 'ON' && '-ucx' || '' }}${{ matrix.config.gasnet == 'ON' && '-gasnet' || '' }}${{ matrix.config.mpi == 'ON' && '-mpi' || '' }}${{ matrix.config.kokkos == 'ON' && '-kokkos' || '' }}${{ matrix.config.openmp == 'ON' && '-openmp' || '' }}${{ matrix.config.python == 'ON' && '-python' || '' }}${{ matrix.config.sanitizer != 'NONE' && format('-{0}', matrix.config.sanitizer) || '' }}
     runs-on: ${{ matrix.config.os }}
     env:
       CPM_SOURCE_CACHE: "${{ github.workspace }}/.cache/cpm"
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPRESS: "true"
       CCACHE_COMPRESS_LEVEL: "6"
-      CONFIG_KEY: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ matrix.config.shared_lib }}-${{ matrix.config.openmp }}-${{ matrix.config.ucx }}-${{ matrix.config.gasnet }}-${{ matrix.config.python }}-${{ matrix.config.kokkos }}-${{ matrix.config.sanitizer }}
+      CONFIG_KEY: ${{ matrix.config.os }}-${{ matrix.config.cc }}-${{ matrix.config.cuda }}-${{ matrix.config.build }}-${{ matrix.config.shared_lib }}-${{ matrix.config.openmp }}-${{ matrix.config.ucx }}-${{ matrix.config.gasnet }}-${{ matrix.config.mpi }}-${{ matrix.config.python }}-${{ matrix.config.kokkos }}-${{ matrix.config.sanitizer }}
     strategy:
       fail-fast: false
       matrix:
@@ -106,6 +106,21 @@ jobs:
               cuda: '',
               openmp: 'ON',
               ucx: 'OFF',
+              gasnet: 'OFF',
+              mpi: 'ON',
+              python: 'OFF',
+              kokkos: 'OFF',
+              sanitizer: 'NONE'
+            }
+          - {
+              os: ubuntu-latest,
+              build: Release,
+              cc: "gcc", cxx: "g++",
+              ccache: ccache,
+              shared_lib: 'OFF',
+              cuda: '',
+              openmp: 'ON',
+              ucx: 'OFF',
               gasnet: 'ON',
               python: 'ON',
               kokkos: 'ON',
@@ -131,7 +146,7 @@ jobs:
               cc: "gcc", cxx: "g++",
               ccache: ccache,
               shared_lib: 'OFF',
-              cuda: '13.0.0',
+              cuda: '13.3.1',
               openmp: 'ON',
               ucx: 'OFF',
               gasnet: 'OFF',
@@ -140,7 +155,7 @@ jobs:
               sanitizer: 'NONE'
             }
           - {
-              os: ubuntu-latest,
+              os: ubuntu-24.04,
               build: Release,
               cc: "gcc", cxx: "g++",
               ccache: ccache,
@@ -252,7 +267,7 @@ jobs:
           $(which sudo) apt-get update
           $(which sudo) apt-get install -yy libopenmpi-dev
 
-      - uses: Jimver/cuda-toolkit@v0.2.27
+      - uses: Jimver/cuda-toolkit@v0.2.36
         name: Get CUDA
         if: ${{ matrix.config.cuda != '' }}
         with:
@@ -303,7 +318,7 @@ jobs:
         uses: actions/checkout@v4.2.2
         with:
           repository: kokkos/kokkos
-          ref: 4.0.01
+          ref: 4.7.04
           path: kokkos
 
       - name: Build Kokkos
@@ -312,6 +327,8 @@ jobs:
           cmake -S kokkos -B kokkos/build \
             ${{ matrix.config.cuda != '' && '-DKokkos_ARCH_AMPERE80=ON -DKokkos_ENABLE_CUDA=ON -DKokkos_ENABLE_CUDA_LAMBDA=ON -DKokkos_ENABLE_CUDA_UVM=OFF -DCMAKE_CXX_FLAGS=-DKOKKOS_IMPL_TURN_OFF_CUDA_HOST_INIT_CHECK' || ''}} \
             -DKokkos_ENABLE_COMPILE_AS_CMAKE_LANGUAGE=ON \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DCMAKE_CUDA_STANDARD=17 \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -340,6 +357,7 @@ jobs:
                 -DBUILD_SHARED_LIBS=${{ matrix.config.shared_lib }}
                 -DREALM_BUILD_TESTS=ON -DREALM_BUILD_BENCHMARKS=ON -DREALM_BUILD_TUTORIALS=ON -DREALM_BUILD_EXAMPLES=ON
                 -DREALM_ENABLE_OPENMP=${{ matrix.config.openmp }}
+                -DREALM_ENABLE_MPI=${{ matrix.config.mpi || 'OFF' }}
                 -DREALM_ENABLE_UCX=${{ matrix.config.ucx }}
                 -DREALM_ENABLE_PYTHON=${{ matrix.config.python }}
                 -DREALM_ENABLE_CUDA=${{ matrix.config.cuda != '' && 'ON' || 'OFF' }}
@@ -639,7 +657,7 @@ jobs:
       - name: Start FreeBSD
         run: |
           .github/workflows/freebsd-vm.sh start ${{ matrix.release }}
-          .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake git ninja python3'
+          .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake-core git ninja python3'
           .github/workflows/freebsd-vm.sh push . /root/realm
 
       - name: Configure
@@ -701,7 +719,7 @@ jobs:
       - name: Start FreeBSD
         run: |
           .github/workflows/freebsd-vm.sh start ${{ matrix.release }}
-          .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake gdb git ninja python3'
+          .github/workflows/freebsd-vm.sh run 'env ASSUME_ALWAYS_YES=yes pkg install -y cmake-core gdb git ninja python3'
           .github/workflows/freebsd-vm.sh push . /root/realm
 
       - name: Show gdb

@@ -274,7 +274,7 @@ namespace Realm {
         CHECK_MPI(
             MPI_Send(payload, payload_size, MPI_BYTE, tgt, msg_tag, MPI_COMM_WORLD));
 #endif
-      } else if(header_size + payload_size <= AM_BUF_SIZE) {
+      } else if(size_t(header_size) + size_t(payload_size) <= AM_BUF_SIZE) {
         msg->type = 0;
         if(header_size > 0) {
           memcpy(msg_header, header, header_size);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 NVIDIA Corporation
+ * Copyright 2025 NVIDIA Corporation, Los Alamos National Laboratory
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@
 #ifndef __TYPES_H__
 #define __TYPES_H__
 
+#include <cstdint>
 #include <cstdio>
 #include <string>
 

@@ -48,11 +48,15 @@ namespace Realm {
    *     arrives.
    *   – When all `total_chunks` pieces have been delivered, `is_complete()`
    *     returns *true* and the caller can safely call `reassemble()` to obtain
-   *     a contiguous `std::vector<char>` containing the payload in order.
+   *     a contiguous `std::vector<char>` containing the payload in order, or to
+   *     copy it into a buffer of the caller's own.
    *
    * A few design notes:
-   *   • Duplicate fragments are ignored, allowing simple resend logic on the
-   *     transmit path.
+   *   • `add_chunk()` returns false for a duplicate or out-of-range
+   *     `chunk_id` rather than absorbing it.  Realm's transports deliver every
+   *     message exactly once and nothing retransmits, so a caller should treat
+   *     either as a protocol violation - see
+   *     IncomingMessageManager::add_incoming_message.
    *   • No per-fragment dynamic allocations are performed – each chunk's
    *     storage is reserved exactly once when its size becomes known.
    */
@@ -62,10 +66,20 @@ namespace Realm {
     explicit FragmentedMessage(uint32_t total_chunks = 0);
 
     bool add_chunk(uint32_t chunk_id, const void *data, size_t size);
+    // the same, but taking over a copy the caller has already made - so that the
+    //  copy need not be made under whatever lock protects this message
+    bool add_chunk(uint32_t chunk_id, std::vector<char> &&data);
 
     bool is_complete() const;
     size_t size() const;
+
+    // number of chunks this message was created expecting - a fragment claiming a
+    //  different total means two messages have collided on one reassembly key, or
+    //  the fragment header is corrupt
+    uint32_t expected_chunks() const { return total_chunks; }
     std::vector<char> reassemble() const;
+    // copies the complete message, in order, to 'dst', which has room for size() bytes
+    void reassemble(void *dst) const;
 
   private:
     uint32_t total_chunks{0};
