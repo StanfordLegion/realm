@@ -181,6 +181,15 @@ namespace Realm {
     const char *python_lib_env = getenv("REALM_PYTHON_LIB");
     std::string python_lib = python_lib_env ? python_lib_env : find_libpython();
 
+    // Python and its allocators can leave thread-exit callbacks registered after
+    // Py_Finalize. Keep the libraries mapped for the lifetime of the process so
+    // those callbacks remain valid.
+#ifdef RTLD_NODELETE
+    const int library_lifetime_flags = RTLD_NODELETE;
+#else
+    const int library_lifetime_flags = 0;
+#endif
+
 #ifdef REALM_USE_DLMOPEN
     // loading libpython into its own namespace will cause it to try to bring
     //   in a second copy of libpthread.so.0, which is fairly disastrous
@@ -190,7 +199,8 @@ namespace Realm {
     if(!dlmproxy_filename)
       dlmproxy_filename = "dlmproxy_libpthread.so.0";
     dlmproxy_handle =
-        dlmopen(LM_ID_NEWLM, dlmproxy_filename, RTLD_DEEPBIND | RTLD_GLOBAL | RTLD_LAZY);
+        dlmopen(LM_ID_NEWLM, dlmproxy_filename,
+                RTLD_DEEPBIND | RTLD_GLOBAL | RTLD_LAZY | library_lifetime_flags);
     if(!dlmproxy_handle) {
       const char *error = dlerror();
       log_py.fatal() << "HELP!  Use of dlmopen for python requires dlmproxy for "
@@ -213,10 +223,11 @@ namespace Realm {
     int ret = dlinfo(dlmproxy_handle, RTLD_DI_LMID, &lmid);
     assert(ret == 0);
 
-    handle = dlmopen(lmid, python_lib.c_str(), RTLD_DEEPBIND | RTLD_GLOBAL | RTLD_NOW);
+    handle = dlmopen(lmid, python_lib.c_str(),
+                     RTLD_DEEPBIND | RTLD_GLOBAL | RTLD_NOW | library_lifetime_flags);
 #else
     // life is so much easier if we use dlopen (but we only get one copy then)
-    handle = dlopen(python_lib.c_str(), RTLD_GLOBAL | RTLD_LAZY);
+    handle = dlopen(python_lib.c_str(), RTLD_GLOBAL | RTLD_LAZY | library_lifetime_flags);
 #endif
 
     if(!handle) {

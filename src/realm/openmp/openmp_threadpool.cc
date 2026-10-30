@@ -291,7 +291,7 @@ namespace Realm {
       core_rsrvs[i] = new CoreReservation(
           stringbuilder() << _name_prefix << " (worker " << (i + 1) << ")", crs, params);
 
-    // these will be filled in as workers show up
+    // these will be filled in by the thread that launches the workers
     worker_threads.resize(num_workers, 0);
 
     worker_infos.resize(num_workers + 1);
@@ -357,10 +357,6 @@ namespace Realm {
       assert(id <= num_workers);
     }
 
-    // subtract 1 because we don't keep a Thread * for master
-    assert(worker_threads[id - 1] == 0);
-    worker_threads[id - 1] = Thread::self();
-
     WorkerInfo *wi = &worker_infos[id];
     ThreadLocal::threadpool_workerinfo = wi;
     log_pool.debug() << "worker: " << Thread::self() << " "
@@ -414,8 +410,9 @@ namespace Realm {
       for(int i = 0; i < num_workers; i++) {
         // the threads we launch will assign ids themselves
         ThreadLaunchParameters tlp;
-        Thread::create_kernel_thread<ThreadPool, &ThreadPool::worker_entry>(
-            this, tlp, *core_rsrvs[i]);
+        worker_threads[i] =
+            Thread::create_kernel_thread<ThreadPool, &ThreadPool::worker_entry>(
+                this, tlp, *core_rsrvs[i]);
       }
 
       workers_running = true;
@@ -428,6 +425,9 @@ namespace Realm {
     if(workers_running) {
       // tell all workers to shutdown
       for(int i = 0; i < num_workers; i++) {
+        // A worker may not have entered worker_entry yet if the pool was unused.
+        while(worker_infos[i + 1].status.load_acquire() == WorkerInfo::WORKER_STARTING)
+          std::this_thread::yield();
         int expval = WorkerInfo::WORKER_IDLE;
         bool ok = worker_infos[i + 1].status.compare_exchange(
             expval, WorkerInfo::WORKER_SHUTDOWN);
