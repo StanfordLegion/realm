@@ -138,7 +138,6 @@ namespace Realm {
     int num_workers;
     bool workers_running;
     std::vector<CoreReservation *> core_rsrvs;
-    // Owned by the launching thread, in creation order (not worker id order).
     std::vector<Thread *> worker_threads;
     std::vector<WorkerInfo> worker_infos;
   };

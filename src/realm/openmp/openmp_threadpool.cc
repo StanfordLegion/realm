@@ -291,7 +291,7 @@ namespace Realm {
       core_rsrvs[i] = new CoreReservation(
           stringbuilder() << _name_prefix << " (worker " << (i + 1) << ")", crs, params);
 
-    // these will be filled in by start_worker_threads
+    // these will be filled in by the thread that launches the workers
     worker_threads.resize(num_workers, 0);
 
     worker_infos.resize(num_workers + 1);
@@ -408,8 +408,7 @@ namespace Realm {
       }
 
       for(int i = 0; i < num_workers; i++) {
-        // Workers assign their own ids, but only the launching thread touches
-        // worker_threads.  A worker can publish IDLE before this call returns.
+        // the threads we launch will assign ids themselves
         ThreadLaunchParameters tlp;
         worker_threads[i] =
             Thread::create_kernel_thread<ThreadPool, &ThreadPool::worker_entry>(
@@ -426,14 +425,13 @@ namespace Realm {
     if(workers_running) {
       // tell all workers to shutdown
       for(int i = 0; i < num_workers; i++) {
-        int expval = WorkerInfo::WORKER_IDLE;
-        while(!worker_infos[i + 1].status.compare_exchange(expval,
-                                                           WorkerInfo::WORKER_SHUTDOWN)) {
-          // An unused pool may shut down before its workers finish starting.
-          assert(expval == WorkerInfo::WORKER_STARTING);
+        // A worker may not have entered worker_entry yet if the pool was unused.
+        while(worker_infos[i + 1].status.load_acquire() == WorkerInfo::WORKER_STARTING)
           std::this_thread::yield();
-          expval = WorkerInfo::WORKER_IDLE;
-        }
+        int expval = WorkerInfo::WORKER_IDLE;
+        bool ok = worker_infos[i + 1].status.compare_exchange(
+            expval, WorkerInfo::WORKER_SHUTDOWN);
+        assert(ok);
       }
 
       // now join on all threads

@@ -20,7 +20,6 @@ set(TEST_ARGS
     ""
     CACHE STRING "Default arguments for tests"
 )
-set(TEST_LAUNCHER ${CMAKE_TEST_LAUNCHER})
 
 if(NOT TEST_PROCESSORS)
   if(MPIEXEC_EXECUTABLE)
@@ -30,9 +29,15 @@ if(NOT TEST_PROCESSORS)
   endif()
 endif()
 
+# The MPI launcher goes in front of the integration tests' commands rather than into
+#  the TEST_LAUNCHER test property: that property only exists from CMake 3.29, and even
+#  there it is only applied when the command names an executable target - the
+#  integration tests use $<TARGET_FILE:...>, so with the property every one of them ran
+#  on a single rank.
+set(TEST_COMMAND_PREFIX ${CMAKE_TEST_LAUNCHER})
 if(MPIEXEC_EXECUTABLE)
-  list(PREPEND TEST_LAUNCHER "${MPIEXEC_EXECUTABLE}" ${MPIEXEC_NUMPROC_FLAG} ${TEST_PROCESSORS}
-       ${MPIEXEC_PREFLAGS}
+  list(APPEND TEST_COMMAND_PREFIX "${MPIEXEC_EXECUTABLE}" ${MPIEXEC_NUMPROC_FLAG}
+       ${TEST_PROCESSORS} ${MPIEXEC_PREFLAGS}
   )
   list(APPEND TEST_RESOURCE_LOCK network)
 endif()
@@ -60,6 +65,12 @@ if(REALM_USE_UCX)
   list(APPEND TEST_LIB_PATH "$<TARGET_FILE_DIR:realm_ucp_bootstrap_mpi>")
 endif()
 cmake_path(CONVERT "${TEST_LIB_PATH}" TO_NATIVE_PATH_LIST TEST_LIB_PATH NORMALIZE)
+
+# tells rank_count_check how many ranks the launcher below is supposed to start, so
+#  that a launcher that silently stops applying fails the suite instead of turning
+#  every multi-rank test into a single-rank one
+list(APPEND TEST_ENV "REALM_TEST_EXPECTED_RANKS=${TEST_PROCESSORS}")
+
 #endregion
 
 # TODO(cperry): Move these tests to this directory
@@ -95,6 +106,7 @@ list(
   REALM_UNIT_TESTS
   striped_rwlock_test.cc
   actmsg_fragmentation_test.cc
+  actmsg_chunked_send_test.cc
   fragmented_message_test.cc
   incoming_message_manager_test.cc
   memcpy_channel_test.cc
@@ -181,6 +193,19 @@ if(NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
 endif()
 
 include(GoogleTest)
+if(REALM_USE_PYTHON)
+  add_executable(realm_python_interpreter_test unit_tests/python_interpreter_test.cc)
+  target_link_libraries(
+    realm_python_interpreter_test PRIVATE realm_obj GTest::gmock_main ${REALM_LIBRARIES}
+                                          ${REALM_EXTRA_OBJS}
+  )
+  add_test(NAME python_interpreter_shutdown COMMAND realm_python_interpreter_test)
+  set_tests_properties(
+    python_interpreter_shutdown PROPERTIES LABELS "unit" ENVIRONMENT
+                                           "REALM_PYTHON_LIB=$<TARGET_FILE:Python3::Python>"
+  )
+endif()
+
 if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
    AND NOT WIN32
    AND NOT CMAKE_CROSSCOMPILING
@@ -279,7 +304,9 @@ macro(add_integration_test target)
     set_source_files_properties(${SRC_LIST} PROPERTIES LANGUAGE HIP)
   endif()
   target_link_libraries(${target} Realm::Realm)
-  add_test(NAME ${target} COMMAND $<TARGET_FILE:${target}> ${${target}_ARGS})
+  add_test(NAME ${target} COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:${target}>
+                                  ${MPIEXEC_POSTFLAGS} ${${target}_ARGS}
+  )
   set_property(
     TEST ${target} PROPERTY RESOURCE_LOCK $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}
                             ${${target}_RESOURCE_LOCK}>
@@ -291,6 +318,7 @@ macro(add_integration_test target)
 endmacro()
 
 add_integration_test(version_check "${REALM_TEST_DIR}/version_check.cc")
+add_integration_test(rank_count_check "${REALM_TEST_DIR}/rank_count_check.cc")
 add_integration_test(serializing "${REALM_TEST_DIR}/serializing.cc")
 set(ctxswitch_ARGS -ll:io 1 -t 30 -i 10000)
 add_integration_test(ctxswitch "${REALM_TEST_DIR}/ctxswitch.cc")
@@ -318,6 +346,33 @@ add_integration_test(coverings "${REALM_TEST_DIR}/coverings.cc")
 set(alltoall_ARGS -ll:csize 1024)
 add_integration_test(alltoall "${REALM_TEST_DIR}/alltoall.cc")
 add_integration_test(realm_reinit "${REALM_TEST_DIR}/realm_reinit.cc")
+# Large and fragmented active message payloads between real ranks.  Uses the internals
+#  (activemsg.h), so it links realm_obj the way the unit tests do rather than the public
+#  Realm::Realm, but otherwise joins the integration tests (and their launcher).
+add_executable(actmsg_chunking "${REALM_TEST_DIR}/actmsg_chunking.cc")
+target_link_libraries(actmsg_chunking PRIVATE realm_obj ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS})
+# global task registration needs the task's symbol in the dynamic symbol table
+set_target_properties(actmsg_chunking PROPERTIES ENABLE_EXPORTS TRUE)
+set(actmsg_chunking_ARGS -ll:cpu 3)
+add_test(NAME actmsg_chunking COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:actmsg_chunking>
+                                      ${MPIEXEC_POSTFLAGS} ${actmsg_chunking_ARGS}
+)
+set_property(TEST actmsg_chunking PROPERTY RESOURCE_LOCK $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}>)
+set_tests_properties(actmsg_chunking PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 240)
+if(REALM_USE_UCX)
+  add_dependencies(actmsg_chunking realm_ucp_bootstrap_mpi)
+endif()
+list(APPEND _integ_list actmsg_chunking)
+if(REALM_USE_GASNETEX)
+  # Exercise fragmentation even when the conduit normally supports large messages.
+  add_test(NAME actmsg_chunking_small_medium
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:actmsg_chunking>
+                   ${MPIEXEC_POSTFLAGS} ${actmsg_chunking_ARGS} -gex:maxmed 1024)
+  set_tests_properties(actmsg_chunking_small_medium PROPERTIES
+                       RESOURCE_LOCK "$<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}>"
+                       SKIP_RETURN_CODE 77 TIMEOUT 240)
+  list(APPEND _integ_list actmsg_chunking_small_medium)
+endif()
 set(sparse_construct_ARGS -verbose)
 add_integration_test(sparse_construct "${REALM_TEST_DIR}/sparse_construct.cc")
 add_integration_test(extres_alias "${REALM_TEST_DIR}/extres_alias.cc")
@@ -326,8 +381,10 @@ set(machine_queries_ARGS -ll:cpu 4 -ll:util 2)
 add_integration_test(machine_queries "${REALM_TEST_DIR}/machine_queries.cc")
 # the same checks with the shared query cache disabled, so the uncached query
 # paths are exercised too (they only differ from the cached ones on multi-node runs)
-add_test(NAME machine_queries_nocache COMMAND $<TARGET_FILE:machine_queries>
-                                              ${machine_queries_ARGS} -ll:machine_query_cache 0)
+add_test(NAME machine_queries_nocache
+         COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:machine_queries> ${MPIEXEC_POSTFLAGS}
+                 ${machine_queries_ARGS} -ll:machine_query_cache 0
+)
 set_property(
   TEST machine_queries_nocache
   PROPERTY RESOURCE_LOCK $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK} ${machine_queries_RESOURCE_LOCK}>
@@ -548,9 +605,7 @@ endif()
 
 set_tests_properties(
   ${_integ_list} ${_integ_extra_tests}
-  PROPERTIES TEST_LAUNCHER
-             "${TEST_LAUNCHER}"
-             PROCESSORS
+  PROPERTIES PROCESSORS
              ${TEST_PROCESSORS}
              ENVIRONMENT
              "${TEST_ENV}"

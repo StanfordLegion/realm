@@ -83,8 +83,12 @@ namespace Realm {
     // providing the payload (as a 1D reference, which must be PAYLOAD_KEEP)
     //  up front can avoid a copy if the source location is directly accessible
     //  by the networking hardware
-    //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer
-    //  alive and unmodified until the call to commit or cancel returns
+    //  Per the semantics of PAYLOAD_KEEP, you must keep the payload buffer alive
+    //  and unmodified until LOCAL COMPLETION - NOT merely until commit() returns.
+    //  A backend may hand the pointer straight to the network and return before it
+    //  has been read.  Use add_local_completion() to learn when the buffer is free,
+    //  or use the (target, max_payload_size) constructor with add_payload(), which
+    //  copies during commit().
     ActiveMessage(NodeID _target, const void *_data, size_t _datalen);
     ActiveMessage(NodeID _target, const LocalAddress &_src_payload_addr, size_t _datalen,
                   const RemoteAddress &_dest_payload_addr);
@@ -180,12 +184,25 @@ namespace Realm {
     std::vector<std::byte>
         chunk_alloc_; // owned buffer for network-allocated chunked mode
 
+    // Completion callbacks registered before commit(), held here because chunked mode
+    //  has no ActiveMessageImpl to hand them to until commit() builds the chunks.
+    std::vector<char> chunk_local_comp_;
+    std::vector<char> chunk_remote_comp_;
+
     void init_chunked(NodeID _target, size_t _max_payload_size);
     void init_chunked(const NodeSet &_targets, size_t _max_payload_size);
     void init_chunked_data(NodeID _target, const void *_data, size_t _datalen);
     void init_chunked_data(const NodeSet &_targets, const void *_data, size_t _datalen);
     void commit_chunked(void);
-    static uint64_t next_chunk_message_id(NodeID node_id);
+    // makes room for one more completion callback, growing by cloning rather than
+    //  letting the vector memcpy polymorphic objects
+    static void *reserve_chunked_completion(std::vector<char> &buf, size_t bytes);
+    static void discard_chunked_completions(std::vector<char> &buf);
+
+    // so that commit_chunked() can hand a completion to the per-chunk message, which
+    //  is a different instantiation of this same template
+    template <typename, size_t>
+    friend class ActiveMessage;
   };
 
   // type-erased wrappers for completion callbacks
@@ -250,6 +267,23 @@ namespace Realm {
     uint64_t msg_id{0};
   };
 
+  // Allocates the next chunked-message id for this process.  Deliberately a free
+  //  function rather than a member of ActiveMessage<T>: a function-local static inside
+  //  a member of a class template gets one instance per instantiation, so each message
+  //  type would restart the sequence at zero and hand out ids that collide with every
+  //  other type's.
+  REALM_INTERNAL_API_EXTERNAL_LINKAGE uint64_t next_chunk_message_id(NodeID node_id);
+
+  // Called when an ActiveMessage's payload is too large to send as one message and
+  //  the network cannot carry it as fragments either - Network::max_payload_size()
+  //  returned 0 for the fragment header (sizeof(WrappedWithFragInfo<T>)), which a
+  //  backend does when that header exceeds what it can put on the wire.  Reports the
+  //  message type and sizes and aborts: failing at the first such send, on every
+  //  network, beats a backend overrunning its header buffer later.
+  [[noreturn]] REALM_INTERNAL_API_EXTERNAL_LINKAGE void
+  report_unfragmentable_message(unsigned short msgid, size_t header_size,
+                                size_t wrapped_header_size, size_t payload_size);
+
   // singleton class that can convert message type->ID and ID->handler
   class ActiveMessageHandlerTable {
   public:
@@ -269,6 +303,10 @@ namespace Realm {
     MessageID lookup_message_id(void) const;
 
     const char *lookup_message_name(MessageID id);
+
+    // number of registered handlers (and so one more than the largest MessageID) -
+    //  networks with a narrower message ID field than MessageID need to check this
+    size_t num_handlers(void) const { return handlers.size(); }
     void record_message_handler_call(MessageID id, long long t_start, long long t_end);
     void report_message_handler_stats();
 
@@ -371,6 +409,9 @@ namespace Realm {
     // returns true if the call was handled immediately (in which case the
     //  callback, if present, will NOT be called), or false if the message
     //  will be processed later
+    // a callback is only ever invoked where queued messages are handled (a handler
+    //  thread or do_work), never from within this call, so a backend may call it
+    //  from a receive path where its own callback would not be legal
     bool add_incoming_message(NodeID sender, ActiveMessageHandlerTable::MessageID msgid,
                               const void *hdr, size_t hdr_size, int hdr_mode,
                               const void *payload, size_t payload_size, int payload_mode,
@@ -392,6 +433,16 @@ namespace Realm {
   protected:
     struct MessageBlock;
 
+    // A remote completion rides on one fragment (see ActiveMessage<T>'s chunked mode),
+    //  but "the target has handled it" is only true once the whole message has been
+    //  reassembled and run.  A callback arriving on a fragment is therefore held here
+    //  until then.
+    struct DeferredCallback {
+      CallbackFnptr fnptr;
+      CallbackData data1;
+      CallbackData data2;
+    };
+
     struct Message {
       MessageBlock *block;
       Message *next_msg;
@@ -405,6 +456,9 @@ namespace Realm {
       bool payload_needs_free;
       CallbackFnptr callback_fnptr;
       CallbackData callback_data1, callback_data2;
+      // callbacks that arrived on earlier fragments of this message and could not be
+      //  fired then - null for every message that was not reassembled
+      std::vector<DeferredCallback> *deferred_callbacks;
     };
 
     struct MessageBlock {
@@ -416,6 +470,11 @@ namespace Realm {
       // called with message manager lock held
       Message *append_message(size_t hdr_bytes_needed, size_t payload_bytes_needed);
 
+      // total bytes a message with these requirements would occupy in a freshly
+      //  reset block - a request larger than the configured block size can never
+      //  be satisfied by any block, no matter how many are tried
+      static size_t bytes_needed(size_t hdr_bytes_needed, size_t payload_bytes_needed);
+
       // called _without_ message manager lock held
       void recycle_message(Message *msg, IncomingMessageManager *manager);
 
@@ -423,6 +482,9 @@ namespace Realm {
       atomic<unsigned> use_count;
       MessageBlock *next_free;
     };
+
+    // fires and releases any callbacks held from this message's fragments
+    static void invoke_deferred_callbacks(Message *msg);
 
     int get_messages(Message *&head, Message **&tail, bool wait);
     bool return_messages(int sender, size_t num_handled, Message *head, Message **tail);
@@ -448,16 +510,35 @@ namespace Realm {
     size_t num_available_blocks;
     size_t cfg_max_available_blocks, cfg_message_block_size;
 
-    struct PairHash {
-      std::size_t operator()(const std::pair<NodeID, uint64_t> &p) const
+    // An in-flight reassembly is identified by (sender, message type, sender-chosen
+    //  id).  The message type is part of the key as defence in depth: ids are unique
+    //  per sender process, but including the type means any future regression in id
+    //  allocation fails loudly instead of silently interleaving two messages' bytes.
+    struct FragmentKey {
+      NodeID sender;
+      ActiveMessageHandlerTable::MessageID msgid;
+      uint64_t msg_id;
+
+      bool operator==(const FragmentKey &rhs) const
       {
-        return std::hash<NodeID>()(p.first) ^ (std::hash<uint64_t>()(p.second) << 1);
+        return ((sender == rhs.sender) && (msgid == rhs.msgid) && (msg_id == rhs.msg_id));
       }
     };
 
-    std::unordered_map<std::pair<NodeID, uint64_t>, std::unique_ptr<FragmentedMessage>,
-                       PairHash>
-        frag_message;
+    struct FragmentKeyHash {
+      std::size_t operator()(const FragmentKey &k) const
+      {
+        return (std::hash<NodeID>()(k.sender) ^ (std::hash<unsigned>()(k.msgid) << 1) ^
+                (std::hash<uint64_t>()(k.msg_id) << 2));
+      }
+    };
+
+    struct FragmentReassembly {
+      std::unique_ptr<FragmentedMessage> message;
+      std::vector<DeferredCallback> deferred;
+    };
+
+    std::unordered_map<FragmentKey, FragmentReassembly, FragmentKeyHash> frag_message;
   };
 
   template <typename UserHdr>
@@ -476,6 +557,22 @@ namespace Realm {
   struct is_wrapped_with_frag_info : std::false_type {};
   template <typename U>
   struct is_wrapped_with_frag_info<WrappedWithFragInfo<U>> : std::true_type {};
+
+  // The largest fragment header, sizeof(WrappedWithFragInfo<T>), that every network
+  //  must be able to send; a network with a tight header limit checks this against
+  //  it where that limit is defined.  ActiveMessageHandlerReg checks every type
+  //  against it, so a header that grows too large fails the build, rather than
+  //  aborting in report_unfragmentable_message the first time the type carries a
+  //  large payload.
+  static constexpr size_t MAX_FRAGMENT_HEADER_BYTES = 56;
+
+  // Specialize to std::true_type to register a type whose fragment header exceeds
+  //  MAX_FRAGMENT_HEADER_BYTES anyway.  It can still be sent, but where the network
+  //  cannot fit its fragment header a payload too large for one message aborts in
+  //  report_unfragmentable_message.  Only test types, which never travel over a real
+  //  network, should need this.
+  template <typename T>
+  struct allow_unfragmentable_header : std::false_type {};
 
 } // namespace Realm
 
