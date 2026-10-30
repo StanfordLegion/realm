@@ -45,6 +45,7 @@ typedef pthread_rwlock_t NativeRWLock;
 #include "realm/mutex.h"
 #include "realm/timers.h"
 #include "realm/faults.h"
+#include "realm/threads.h"
 
 #include <assert.h>
 #include <new>
@@ -1192,6 +1193,130 @@ namespace Realm {
     int ret = pthread_rwlock_trywrlock(rwlock);
     return (ret == 0);
 #endif
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class StripedRWLock
+  //
+
+  namespace {
+    // slot ids are handed out to threads on their first read acquire; a
+    //  thread remembers its id plus one, so that zero means "none yet"
+    std::atomic<unsigned> next_striped_slot_id(0);
+    thread_local unsigned striped_slot_id = 0;
+  } // namespace
+
+  StripedRWLock::StripedRWLock()
+    : writer_active(0)
+    , waiting_readers(0)
+    , writer_done(wait_mutex)
+  {
+    static_assert(sizeof(Slot) == 64, "reader slots must be a cache line apart");
+  }
+
+  StripedRWLock::~StripedRWLock()
+  {
+#ifdef DEBUG_REALM
+    for(unsigned i = 0; i < NUM_SLOTS; i++)
+      assert(slots[i].readers.load() == 0);
+    assert(writer_active.load() == 0);
+#endif
+  }
+
+  /*static*/ unsigned StripedRWLock::my_slot()
+  {
+    unsigned id = striped_slot_id;
+    if(id == 0) {
+      id = next_striped_slot_id.fetch_add(1) + 1;
+      striped_slot_id = id;
+    }
+    return (id - 1) % NUM_SLOTS;
+  }
+
+  unsigned StripedRWLock::rdlock()
+  {
+    const unsigned slot = my_slot();
+    Slot &s = slots[slot];
+    bool waiting = false;
+    while(true) {
+      // count ourselves in, then look for a writer - both with sequential
+      //  consistency so that this and the writer's announce-then-look can
+      //  not both miss each other (the writer does the same in wrlock)
+      s.readers.fetch_add(1, std::memory_order_seq_cst);
+      if(writer_active.load(std::memory_order_seq_cst) == 0) {
+        if(waiting)
+          waiting_readers.fetch_sub(1, std::memory_order_release);
+        return slot;
+      }
+      // a writer is waiting or working: get out of its way and wait for it,
+      //  but count ourselves as waiting so the next writer lets us in first
+      s.readers.fetch_sub(1, std::memory_order_release);
+      if(!waiting) {
+        waiting_readers.fetch_add(1, std::memory_order_seq_cst);
+        waiting = true;
+      }
+      wait_for_writer();
+    }
+  }
+
+  void StripedRWLock::rdunlock(unsigned slot)
+  {
+    slots[slot].readers.fetch_sub(1, std::memory_order_release);
+  }
+
+  void StripedRWLock::wait_for_writer()
+  {
+    // writers are short, so spin a little before sleeping
+    for(int i = 0; i < 256; i++) {
+      if(writer_active.load(std::memory_order_acquire) == 0)
+        return;
+      REALM_SPIN_YIELD();
+    }
+    AutoLock<Mutex> al(wait_mutex);
+    while(writer_active.load(std::memory_order_acquire) != 0)
+      writer_done.wait();
+  }
+
+  void StripedRWLock::wrlock()
+  {
+    writer_mutex.lock();
+    // readers that backed off for the previous writer go first, so that
+    //  back-to-back writers can not starve them (they are quick: each one
+    //  only has to count itself in)
+    {
+      int spins = 0;
+      while(waiting_readers.load(std::memory_order_seq_cst) != 0) {
+        if(++spins < 1024)
+          REALM_SPIN_YIELD();
+        else
+          Thread::yield();
+      }
+    }
+    // announce ourselves (new readers now wait), then wait for the readers
+    //  already counted in to leave
+    writer_active.store(1, std::memory_order_seq_cst);
+    for(unsigned i = 0; i < NUM_SLOTS; i++) {
+      int spins = 0;
+      while(slots[i].readers.load(std::memory_order_seq_cst) != 0) {
+        if(++spins < 1024)
+          REALM_SPIN_YIELD();
+        else
+          Thread::yield();
+      }
+    }
+  }
+
+  void StripedRWLock::wrunlock()
+  {
+    {
+      // the flag is cleared under wait_mutex so a reader can not check it,
+      //  miss the broadcast, and then sleep
+      AutoLock<Mutex> al(wait_mutex);
+      writer_active.store(0, std::memory_order_release);
+      writer_done.broadcast();
+    }
+    writer_mutex.unlock();
   }
 
 }; // namespace Realm
