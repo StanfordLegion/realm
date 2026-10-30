@@ -19,27 +19,11 @@
 #define REALM_OPENMP_MODULE_H
 
 #include "realm/module.h"
+#include "realm/openmp/openmp_module_config.h"
 
 namespace Realm {
 
   namespace OpenMP {
-
-    class OpenMPModuleConfig : public ModuleConfig {
-      friend class OpenMPModule;
-
-    protected:
-      OpenMPModuleConfig(void);
-
-    public:
-      virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
-
-    protected:
-      int cfg_num_openmp_cpus = 0;
-      int cfg_num_threads_per_cpu = 1;
-      bool cfg_use_numa = true;
-      bool cfg_fake_cpukind = false;
-      size_t cfg_stack_size = 2 << 20;
-    };
 
     // our interface to the rest of the runtime
     class OpenMPModule : public Module {

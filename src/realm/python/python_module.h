@@ -20,31 +20,13 @@
 
 #include "realm/realm_config.h"
 #include "realm/module.h"
+#include "realm/python/python_module_config.h"
 
 #include <set>
 
 namespace Realm {
 
   namespace Python {
-
-    class PythonModuleConfig : public ModuleConfig {
-      friend class PythonModule;
-
-    protected:
-      PythonModuleConfig(void);
-
-    public:
-      virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
-
-    protected:
-      int cfg_num_python_cpus = 0;
-      size_t cfg_stack_size = 2 << 20;
-#ifdef REALM_USE_OPENMP
-      int cfg_pyomp_threads = 0;
-#endif
-      std::vector<std::string> cfg_import_modules;
-      std::vector<std::string> cfg_init_scripts;
-    };
 
     // our interface to the rest of the runtime
     class REALM_PUBLIC_API PythonModule : public Module {

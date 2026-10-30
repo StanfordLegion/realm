@@ -2765,24 +2765,6 @@ namespace Realm {
     //
     // class CudaModuleConfig
 
-    CudaModuleConfig::CudaModuleConfig(void)
-      : ModuleConfig("cuda")
-    {
-      config_map.insert({"gpu", &cfg_num_gpus});
-      config_map.insert({"zcmem", &cfg_zc_mem_size});
-      config_map.insert({"fbmem", &cfg_fb_mem_size});
-      config_map.insert({"ib_fbmem", &cfg_fb_ib_size});
-      config_map.insert({"ib_zcmem", &cfg_zc_ib_size});
-      config_map.insert({"uvmem", &cfg_uvm_mem_size});
-      config_map.insert({"use_dynamic_fb", &cfg_use_dynamic_fb});
-      config_map.insert({"dynfb_max_size", &cfg_dynfb_max_size});
-      config_map.insert({"task_streams", &cfg_task_streams});
-      config_map.insert({"d2d_streams", &cfg_d2d_streams});
-
-      resource_map.insert({"gpu", &res_num_gpus});
-      resource_map.insert({"fbmem", &res_min_fbmem_size});
-    }
-
     bool CudaModuleConfig::discover_resource(void)
     {
       CUresult ret = CUDA_DRIVER_FNPTR(cuInit)(0);
@@ -2808,7 +2790,7 @@ namespace Realm {
       return resource_discover_finished;
     }
 
-    void CudaModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void CudaModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       assert(finish_configured == false);
       // first order of business - read command line parameters
@@ -2843,10 +2825,8 @@ namespace Realm {
           .add_option_int("-cuda:pageable_access", cfg_pageable_access)
           .add_option_int("-cuda:cupti", cfg_enable_cupti)
           .add_option_int("-cuda:ipc", cfg_use_cuda_ipc)
-          .add_option_bool("-cuda:validation", cfg_enable_cuhook);
-#ifdef REALM_USE_CUDART_HIJACK
-      cp.add_option_int("-cuda:nongpusync", Cuda::cudart_hijack_nongpu_sync);
-#endif
+          .add_option_bool("-cuda:validation", cfg_enable_cuhook)
+          .add_option_int("-cuda:nongpusync", cfg_hijack_nongpu_sync);
 
       bool ok = cp.parse_command_line(cmdline);
       if(!ok) {
@@ -3075,7 +3055,58 @@ namespace Realm {
 
     /*static*/ ModuleConfig *CudaModule::create_module_config(RuntimeImpl *runtime)
     {
+      static constexpr ModuleConfig::Property properties[] = {
+          ModuleConfig::property<&CudaModuleConfig::cfg_num_gpus>("gpu"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_zc_mem_size>("zcmem"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_fb_mem_size>("fbmem"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_fb_ib_size>("ib_fbmem"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_zc_ib_size>("ib_zcmem"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_uvm_mem_size>("uvmem"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_use_dynamic_fb>("use_dynamic_fb"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_dynfb_max_size>("dynfb_max_size"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_task_streams>("task_streams"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_d2d_streams>("d2d_streams"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_d2d_stream_priority>(
+              "d2d_stream_priority"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_use_worker_threads>(
+              "use_worker_threads"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_use_shared_worker>(
+              "use_shared_worker"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_pin_sysmem>("pin_sysmem"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_fences_use_callbacks>(
+              "fences_use_callbacks"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_suppress_hijack_warning>(
+              "suppress_hijack_warning"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_skip_gpu_count>("skip_gpu_count"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_skip_busy_gpus>("skip_busy_gpus"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_min_avail_mem>("min_avail_mem"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_task_legacy_sync>(
+              "task_legacy_sync"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_task_context_sync>(
+              "task_context_sync"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_max_ctxsync_threads>(
+              "max_ctxsync_threads"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_lmem_resize_to_max>(
+              "lmem_resize_to_max"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_multithread_dma>(
+              "multithread_dma"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_hostreg_limit>("hostreg_limit"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_use_cuda_ipc>("use_cuda_ipc"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_pageable_access>(
+              "pageable_access"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_enable_cupti>("enable_cupti"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_enable_cuhook>("enable_cuhook"),
+          ModuleConfig::property<&CudaModuleConfig::cfg_hijack_nongpu_sync>(
+              "hijack_nongpu_sync"),
+      };
+      static constexpr ModuleConfig::Property resources[] = {
+          ModuleConfig::property<CudaModuleConfig, &CudaModuleConfig::res_num_gpus>(
+              "gpu"),
+          ModuleConfig::property<CudaModuleConfig, &CudaModuleConfig::res_min_fbmem_size>(
+              "fbmem"),
+      };
       CudaModuleConfig *config = new CudaModuleConfig();
+      ModuleConfig::bind<CudaModuleConfig>(properties, resources);
       // load the cuda lib
       if(!resolve_cuda_api_fnptrs()) {
         // warning was printed in resolve function
@@ -3333,19 +3364,19 @@ namespace Realm {
 
     /*static*/ Module *CudaModule::create_module(RuntimeImpl *runtime)
     {
-      ModuleConfig *uncasted_config = runtime->get_module_config("cuda");
-      if(!uncasted_config) {
+      CudaModuleConfig *config = runtime->get_module_config<CudaModuleConfig>();
+      if(!config) {
         return nullptr;
       }
 
       CudaModule *m = new CudaModule(runtime);
-
-      CudaModuleConfig *config = checked_cast<CudaModuleConfig *>(uncasted_config);
-      assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());
       assert(m->config == nullptr);
       m->config = config;
+#ifdef REALM_USE_CUDART_HIJACK
+      cudart_hijack_nongpu_sync = config->cfg_hijack_nongpu_sync;
+#endif
 
       // check if gpus have been requested
       bool init_required =

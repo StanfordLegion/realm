@@ -1175,8 +1175,8 @@ namespace Realm {
   {
     comp_reply_data = new gex_am_arg_t[comp_reply_capacity];
 
-    if(internal->module->cfg_am_limit > 0)
-      am_credits.store(internal->module->cfg_am_limit);
+    if(internal->module->config->cfg_am_limit > 0)
+      am_credits.store(internal->module->config->cfg_am_limit);
   }
 
   XmitSrcDestPair::~XmitSrcDestPair() { delete[] comp_reply_data; }
@@ -1584,7 +1584,7 @@ namespace Realm {
     // attempt an immediate send if they are enabled and we don't appear
     //  to have any completion replies queued up - as for packets, we can't
     //  inject if we're inside an AM request/reply handler
-    if(internal->module->cfg_use_immediate && !ThreadLocal::in_am_handler &&
+    if(internal->module->config->cfg_use_immediate && !ThreadLocal::in_am_handler &&
        (comp_reply_count.load() == 0)) {
       // always in immediate mode
       gex_flags_t flags = GEX_WRAPPER_FLAG_IMMEDIATE;
@@ -1639,7 +1639,7 @@ namespace Realm {
 
     // attempt an immediate injection if it is permitted (this is always older
     //  than any queued messages, so gets to jump ahead of them)
-    if(internal->module->cfg_use_immediate) {
+    if(internal->module->config->cfg_use_immediate) {
       gex_event_opaque_t *lc_opt =
           GEX_WRAPPER_EVENT_NOW; // insist on local copy of header
       gex_flags_t flags = GEX_WRAPPER_FLAG_IMMEDIATE;
@@ -1676,7 +1676,7 @@ namespace Realm {
     //  push_packets so the mutual exclusion zone starts now
     push_mutex_check.lock();
 
-    if(!force_critical && (internal->module->cfg_crit_timeout >= 0))
+    if(!force_critical && (internal->module->config->cfg_crit_timeout >= 0))
       internal->injector.add_ready_xpair(this);
     else
       internal->poller.add_critical_xpair(this);
@@ -1932,7 +1932,7 @@ namespace Realm {
         // has to be enabled, and the first packet has to be INLINE or RGET
         int batch_size = 1;
         static const int MAX_BATCH_SIZE = 16;
-        if(internal->module->cfg_batch_messages &&
+        if(internal->module->config->cfg_batch_messages &&
            ((pkttype == OutbufMetadata::PKTTYPE_INLINE) ||
             (pkttype == OutbufMetadata::PKTTYPE_RGET))) {
           while(((head->pktbuf_sent_packets + batch_size) < ready_packets) &&
@@ -2048,7 +2048,7 @@ namespace Realm {
               2 * sizeof(gex_am_arg_t), /* header_size */
               lc_opt, GEX_WRAPPER_FLAG_AM_PREPARE_LEAST_CLIENT);
           if((min_size <= max_payload) &&
-             (!internal->module->cfg_am_limit || try_consume_am_credit())) {
+             (!internal->module->config->cfg_am_limit || try_consume_am_credit())) {
             batch_attempted = true;
 
             sd = gex_wrapper_handle.prepare_request_batch(
@@ -2076,7 +2076,7 @@ namespace Realm {
               }
 
               uint32_t cksum = 0;
-              if(internal->module->cfg_do_checksums) {
+              if(internal->module->config->cfg_do_checksums) {
                 uint32_t accum = 0xFFFFFFFF;
                 accum = crc32c_accumulate(accum, &batch_size, sizeof(batch_size));
                 accum = crc32c_accumulate(accum, &max_size, sizeof(max_size));
@@ -2167,7 +2167,7 @@ namespace Realm {
               ev->set_pktbuf(realbuf);
               internal->poller.add_pending_event(ev);
             } else {
-              if(internal->module->cfg_am_limit)
+              if(internal->module->config->cfg_am_limit)
                 return_am_credits(1);
               else
                 assert(immediate_mode); // should not happen without immediate
@@ -2197,11 +2197,11 @@ namespace Realm {
                 flags |= GEX_WRAPPER_FLAG_IMMEDIATE;
 
               int ret;
-              if(!internal->module->cfg_am_limit || try_consume_am_credit()) {
+              if(!internal->module->config->cfg_am_limit || try_consume_am_credit()) {
                 ret = gex_wrapper_handle.send_request_short(internal->eps[src_ep_index],
                                                             tgt_rank, tgt_ep_index, arg0,
                                                             hdr_data, hdr_bytes, flags);
-                if((ret != GEX_WRAPPER_OK) && internal->module->cfg_am_limit)
+                if((ret != GEX_WRAPPER_OK) && internal->module->config->cfg_am_limit)
                   return_am_credits(1);
               } else
                 ret = GEX_WRAPPER_ERR_NOT_READY;
@@ -2217,7 +2217,7 @@ namespace Realm {
                 packets_sent.fetch_add(1);
               } else {
                 assert(immediate_mode ||
-                       internal->module
+                       internal->module->config
                            ->cfg_am_limit); // should not happen without immediate
                 log_gex_xpair.info() << "xpair retry: xpair=" << this;
               }
@@ -2249,11 +2249,11 @@ namespace Realm {
 #endif
 
               int ret;
-              if(!internal->module->cfg_am_limit || try_consume_am_credit()) {
+              if(!internal->module->config->cfg_am_limit || try_consume_am_credit()) {
                 ret = gex_wrapper_handle.send_request_medium(
                     internal->eps[src_ep_index], tgt_rank, tgt_ep_index, arg0, hdr_data,
                     hdr_bytes, payload_data, payload_bytes, lc_opt, flags);
-                if((ret != GEX_WRAPPER_OK) && internal->module->cfg_am_limit)
+                if((ret != GEX_WRAPPER_OK) && internal->module->config->cfg_am_limit)
                   return_am_credits(1);
               } else
                 ret = GEX_WRAPPER_ERR_NOT_READY;
@@ -2274,7 +2274,7 @@ namespace Realm {
                 internal->poller.add_pending_event(ev);
               } else {
                 assert(immediate_mode ||
-                       internal->module
+                       internal->module->config
                            ->cfg_am_limit); // should not happen without immediate
                 log_gex_xpair.info() << "xpair retry: xpair=" << this;
               }
@@ -2324,12 +2324,12 @@ namespace Realm {
 #endif
 
             int ret;
-            if(!internal->module->cfg_am_limit || try_consume_am_credit()) {
+            if(!internal->module->config->cfg_am_limit || try_consume_am_credit()) {
               ret = gex_wrapper_handle.send_request_long(
                   internal->eps[src_ep_index], tgt_rank, tgt_ep_index, arg0, hdr_data,
                   hdr_bytes, extra->payload_base, extra->payload_bytes, lc_opt, flags,
                   extra->dest_addr);
-              if((ret != GEX_WRAPPER_OK) && internal->module->cfg_am_limit)
+              if((ret != GEX_WRAPPER_OK) && internal->module->config->cfg_am_limit)
                 return_am_credits(1);
             } else
               ret = GEX_WRAPPER_ERR_NOT_READY;
@@ -2351,9 +2351,9 @@ namespace Realm {
                 internal->poller.add_pending_event(ev);
               }
             } else {
-              assert(
-                  immediate_mode ||
-                  internal->module->cfg_am_limit); // should not happen without immediate
+              assert(immediate_mode ||
+                     internal->module->config
+                         ->cfg_am_limit); // should not happen without immediate
               log_gex_xpair.info() << "xpair retry: xpair=" << this;
             }
             break;
@@ -2482,7 +2482,7 @@ namespace Realm {
           first_fail_time = -1;
           // switch back to immediate mode after a successful packet send
           //  unless it's disabled
-          if(internal->module->cfg_crit_timeout >= 0)
+          if(internal->module->config->cfg_crit_timeout >= 0)
             immediate_mode = true;
         } else {
           // if we failed to send a packet, stop trying and reenqueue ourselves
@@ -2990,11 +2990,11 @@ namespace Realm {
 
       // even a critical xpair will stay in immediate mode until it times out
       bool immediate_mode;
-      if(internal->module->cfg_crit_timeout < 0)
+      if(internal->module->config->cfg_crit_timeout < 0)
         immediate_mode = false;
       else
         immediate_mode =
-            (xpair->time_since_failure() < internal->module->cfg_crit_timeout);
+            (xpair->time_since_failure() < internal->module->config->cfg_crit_timeout);
 
       // if we're not in immediate mode, do some polling to hopefully free up
       //  resources
@@ -3404,7 +3404,8 @@ namespace Realm {
     // 1) storage for any NetworkSegments we're allowed to allocate
     // 2) outbufs
     size_t user_size = roundup_pow2(size, 128);
-    prim_segsize = (user_size + (module->cfg_outbuf_count * module->cfg_outbuf_size));
+    prim_segsize = (user_size +
+                    (module->config->cfg_outbuf_count * module->config->cfg_outbuf_size));
 
     log_gex.debug() << "attaching prim segment: size=" << prim_segsize;
     void *base = gex_wrapper_handle.gex_segment_attach_query_addr(&prim_segment, prim_tm,
@@ -3415,7 +3416,7 @@ namespace Realm {
     segments_by_addr.push_back({base_as_uint, base_as_uint + prim_segsize, 0,
                                 prim_segment, NetworkSegmentInfo::HostMem, 0});
 
-    obmgr.init(module->cfg_outbuf_count, module->cfg_outbuf_size,
+    obmgr.init(module->config->cfg_outbuf_count, module->config->cfg_outbuf_size,
                base_as_uint + user_size);
 
     return base_as_uint;
@@ -3443,14 +3444,15 @@ namespace Realm {
 
     // see if we can get/make a supported memory kind for this segment
     do {
-      if(module->cfg_bind_hostmem && (memtype == NetworkSegmentInfo::HostMem)) {
+      if(module->config->cfg_bind_hostmem && (memtype == NetworkSegmentInfo::HostMem)) {
         mk = GEX_WRAPPER_MK_HOST;
         break;
       }
 
 #if defined(REALM_USE_CUDA)
       // create a gex_MK_t for the GPU that owns this memory
-      if(gex_wrapper_handle.GEX_HAVE_MK_CLASS_CUDA_UVA && module->cfg_bind_cudamem &&
+      if(gex_wrapper_handle.GEX_HAVE_MK_CLASS_CUDA_UVA &&
+         module->config->cfg_bind_cudamem &&
          (memtype == NetworkSegmentInfo::CudaDeviceMem)) {
         const Cuda::GPU *gpu = reinterpret_cast<Cuda::GPU *>(memextra);
         int ret = gex_wrapper_handle.gex_mk_create_cuda(&mk, client, gpu->info->device,
@@ -3468,7 +3470,7 @@ namespace Realm {
 #if defined(REALM_USE_HIP) && defined(__HIP_PLATFORM_HCC__)
       // create a gex_MK_t for the GPU that owns this memory, it only supports building
       // HIP for AMD GPU (__HIP_PLATFORM_HCC_)
-      if(gex_wrapper_handle.GEX_HAVE_MK_CLASS_HIP && module->cfg_bind_hipmem &&
+      if(gex_wrapper_handle.GEX_HAVE_MK_CLASS_HIP && module->config->cfg_bind_hipmem &&
          (memtype == NetworkSegmentInfo::HipDeviceMem)) {
         const Hip::GPU *gpu = reinterpret_cast<Hip::GPU *>(memextra);
         int ret = gex_wrapper_handle.gex_mk_create_hip(&mk, client, gpu->info->device,
@@ -3772,11 +3774,11 @@ namespace Realm {
 
       // message goes inline into pktbuf, so limit to that size as well
       size_t pad_hdr_bytes = roundup_pow2(header_size + 2 * sizeof(gex_am_arg_t), 16);
-      limit = std::min(limit, module->cfg_outbuf_size - pad_hdr_bytes);
+      limit = std::min(limit, module->config->cfg_outbuf_size - pad_hdr_bytes);
 
       // also use a hard limit from the command line, if present
-      if(module->cfg_max_medium)
-        limit = std::min(limit, module->cfg_max_medium);
+      if(module->config->cfg_max_medium)
+        limit = std::min(limit, module->config->cfg_max_medium);
 
       return limit;
     } else {
@@ -3796,8 +3798,8 @@ namespace Realm {
       limit = std::min(limit, size_t(16384 /*TODO*/));
       // generally we'll want to avoid enormous packets clogging up the
       //  tubes
-      if(module->cfg_max_long > 0)
-	limit = std::min(limit, module->cfg_max_long);
+      if(module->config->cfg_max_long > 0)
+	limit = std::min(limit, module->config->cfg_max_long);
 
       return limit;
 #endif
@@ -3821,11 +3823,11 @@ namespace Realm {
 
       // message goes inline into pktbuf, so limit to that size as well
       size_t pad_hdr_bytes = roundup_pow2(header_size + 2 * sizeof(gex_am_arg_t), 16);
-      limit = std::min(limit, module->cfg_outbuf_size - pad_hdr_bytes);
+      limit = std::min(limit, module->config->cfg_outbuf_size - pad_hdr_bytes);
 
       // also use a hard limit from the command line, if present
-      if(module->cfg_max_medium)
-        limit = std::min(limit, module->cfg_max_medium);
+      if(module->config->cfg_max_medium)
+        limit = std::min(limit, module->config->cfg_max_medium);
 
       return limit;
     } else {
@@ -3858,8 +3860,8 @@ namespace Realm {
       }
       // generally we'll want to avoid enormous packets clogging up the
       //  tubes
-      if(module->cfg_max_long > 0)
-        limit = std::min(limit, module->cfg_max_long);
+      if(module->config->cfg_max_long > 0)
+        limit = std::min(limit, module->config->cfg_max_long);
 
       return limit;
     }
@@ -3876,11 +3878,11 @@ namespace Realm {
 
     // message goes inline into pktbuf, so limit to that size as well
     size_t pad_hdr_bytes = roundup_pow2(header_size + 2 * sizeof(gex_am_arg_t), 16);
-    limit = std::min(limit, module->cfg_outbuf_size - pad_hdr_bytes);
+    limit = std::min(limit, module->config->cfg_outbuf_size - pad_hdr_bytes);
 
     // also use a hard limit from the command line, if present
-    if(module->cfg_max_medium)
-      limit = std::min(limit, module->cfg_max_medium);
+    if(module->config->cfg_max_medium)
+      limit = std::min(limit, module->config->cfg_max_medium);
 
     return limit;
   }
@@ -3909,7 +3911,7 @@ namespace Realm {
 
     // even if immediates are allowed via configuration, we can't inject
     //  messages if we're inside an AM request/reply handler
-    bool imm_ok = (module->cfg_use_immediate && !ThreadLocal::in_am_handler);
+    bool imm_ok = (module->config->cfg_use_immediate && !ThreadLocal::in_am_handler);
 
     // TODO: document this decision tree rigorously so that it can be
     //  optimized and missing leaves found
@@ -3959,8 +3961,8 @@ namespace Realm {
         do {
           // choice 1: negotiated payload
           if(gex_wrapper_handle.GEX_NATIVE_NP_ALLOC_REQ_MEDIUM && imm_ok &&
-             module->cfg_use_negotiated &&
-             (!module->cfg_am_limit || xpair->try_consume_am_credit())) {
+             module->config->cfg_use_negotiated &&
+             (!module->config->cfg_am_limit || xpair->try_consume_am_credit())) {
             // we want a GASNet-allocated buffer, so do NOT offer our own,
             //  even if we have it (TODO: get guidance on whether this is
             //  always the right choice)
@@ -3986,7 +3988,7 @@ namespace Realm {
             } else {
               // failure - fall through to the next choice(s)
               // give back the AM credit if we took one
-              if(module->cfg_am_limit)
+              if(module->config->cfg_am_limit)
                 xpair->return_am_credits(1);
             }
           }
@@ -4037,11 +4039,11 @@ namespace Realm {
 
         // we can use long if both endpoints are AM-capable (currently only
         //  prim endpoint is), otherwise rget
-        bool use_long = (!module->cfg_force_rma && (!srcseg || (srcseg->ep_index == 0)) &&
-                         (target_ep_index == 0));
+        bool use_long = (!module->config->cfg_force_rma &&
+                         (!srcseg || (srcseg->ep_index == 0)) && (target_ep_index == 0));
         // TODO: will we never need to make a put vs. get decision on a
         //  per-endpoint basis?
-        bool use_rmaput = (!use_long && module->cfg_use_rma_put);
+        bool use_rmaput = (!use_long && module->config->cfg_use_rma_put);
         // if we're using RMA put and the conduit doesn't actually honor
         //  GEX_WRAPPER_FLAG_IMMEDIATE, disable immediate mode
         if(!gex_wrapper_handle.GEX_RMA_HONORS_IMMEDIATE_FLAG && use_rmaput) {
@@ -4087,7 +4089,7 @@ namespace Realm {
 
         do {
           // choice 1: negotiated payload
-          if(imm_ok && use_long && module->cfg_use_negotiated) {
+          if(imm_ok && use_long && module->config->cfg_use_negotiated) {
             // TODO: NPAM (only if native!)
           }
 
@@ -4177,14 +4179,14 @@ namespace Realm {
         }
       }
 
-      if(module->cfg_do_checksums)
+      if(module->config->cfg_do_checksums)
         insert_packet_crc(arg0, header_base, header_size, nullptr, 0);
 
       // this is always done with immediate mode
       gex_flags_t flags = GEX_WRAPPER_FLAG_IMMEDIATE;
 
       bool enqueue;
-      if(!module->cfg_am_limit || xpair->try_consume_am_credit()) {
+      if(!module->config->cfg_am_limit || xpair->try_consume_am_credit()) {
         int ret = gex_wrapper_handle.send_request_short(eps[0], msg->target,
                                                         msg->target_ep_index, arg0,
                                                         header_base, header_size, flags);
@@ -4195,7 +4197,7 @@ namespace Realm {
         } else {
           log_gex_msg.info() << "immediate failed - queueing message";
           enqueue = true;
-          if(module->cfg_am_limit)
+          if(module->config->cfg_am_limit)
             xpair->return_am_credits(1);
         }
       } else {
@@ -4239,7 +4241,7 @@ namespace Realm {
         }
       }
 
-      if(module->cfg_do_checksums)
+      if(module->config->cfg_do_checksums)
         insert_packet_crc(arg0, header_base, header_size, nullptr, 0);
 
       XmitSrcDestPair *xpair =
@@ -4270,7 +4272,7 @@ namespace Realm {
         }
       }
 
-      if(module->cfg_do_checksums)
+      if(module->config->cfg_do_checksums)
         insert_packet_crc(arg0, header_base, header_size, payload_base, payload_size);
 
       // this is always done with immediate mode, and force GASNet to copy
@@ -4294,7 +4296,7 @@ namespace Realm {
 #endif
 
       bool enqueue;
-      if(!module->cfg_am_limit || xpair->try_consume_am_credit()) {
+      if(!module->config->cfg_am_limit || xpair->try_consume_am_credit()) {
         int ret = gex_wrapper_handle.send_request_medium(
             eps[0], msg->target, msg->target_ep_index, arg0, header_base, header_size,
             payload_base, payload_size, lc_opt, flags);
@@ -4305,7 +4307,7 @@ namespace Realm {
         } else {
           log_gex_msg.info() << "immediate failed - queueing message";
           enqueue = true;
-          if(module->cfg_am_limit)
+          if(module->config->cfg_am_limit)
             xpair->return_am_credits(1);
         }
       } else {
@@ -4353,7 +4355,7 @@ namespace Realm {
         }
       }
 
-      if(module->cfg_do_checksums)
+      if(module->config->cfg_do_checksums)
         insert_packet_crc(arg0, header_base, header_size, payload_base, payload_size);
 
       XmitSrcDestPair *xpair =
@@ -4411,7 +4413,7 @@ namespace Realm {
         }
       }
 
-      if(module->cfg_do_checksums)
+      if(module->config->cfg_do_checksums)
         insert_packet_crc(arg0, header_base, header_size, payload_base, payload_size);
 
       gex_wrapper_handle.commit_request_medium(msg->srcdesc, arg0, header_base,
@@ -4473,7 +4475,7 @@ namespace Realm {
       }
 
       // don't include the actual payload in crc for longs
-      if(module->cfg_do_checksums)
+      if(module->config->cfg_do_checksums)
         insert_packet_crc(arg0, header_base, header_size, nullptr, payload_size);
 
 #ifdef DEBUG_REALM
@@ -4491,7 +4493,7 @@ namespace Realm {
 #endif
 
       bool enqueue;
-      if(!module->cfg_am_limit || xpair->try_consume_am_credit()) {
+      if(!module->config->cfg_am_limit || xpair->try_consume_am_credit()) {
         int ret = gex_wrapper_handle.send_request_long(
             eps[0], msg->target, msg->target_ep_index, arg0, header_base, header_size,
             payload_base, payload_size, lc_opt, flags, msg->dest_payload_addr);
@@ -4509,7 +4511,7 @@ namespace Realm {
           }
         } else {
           log_gex_msg.info() << "immediate failed - queueing message";
-          if(module->cfg_am_limit)
+          if(module->config->cfg_am_limit)
             xpair->return_am_credits(1);
           enqueue = true;
         }
@@ -4565,7 +4567,7 @@ namespace Realm {
       }
 
       // don't include the actual payload in crc for longs
-      if(module->cfg_do_checksums) {
+      if(module->config->cfg_do_checksums) {
         // yuck...  push_packets is going to remove the local completion
         // so make sure we compute the crc appropriately
         gex_am_arg_t arg0_without_local;
@@ -4668,7 +4670,7 @@ namespace Realm {
 
       // do not include payload in rget checksum - we may not be able to
       //  read it
-      if(module->cfg_do_checksums)
+      if(module->config->cfg_do_checksums)
         insert_packet_crc(arg0, header_base, header_size, nullptr, payload_size);
 
       // look up the source segment so we can send the ep_index to target
@@ -4731,7 +4733,7 @@ namespace Realm {
 
       // do not include payload in rget checksum - we may not be able to
       //  read it
-      if(module->cfg_do_checksums)
+      if(module->config->cfg_do_checksums)
         insert_packet_crc(arg0, header_base, header_size, nullptr, payload_size);
 
       // look up the source segment so we can send the ep_index to target
@@ -4773,7 +4775,7 @@ namespace Realm {
         msg->put->payload_bytes = payload_size;
 
         // don't include the actual payload in crc for longs
-        if(module->cfg_do_checksums) {
+        if(module->config->cfg_do_checksums) {
           insert_packet_crc(arg0, header_base, header_size, nullptr, payload_size);
         }
 
@@ -4858,7 +4860,7 @@ namespace Realm {
       msg->put->payload_bytes = payload_size;
 
       // don't include the actual payload in crc for longs
-      if(module->cfg_do_checksums) {
+      if(module->config->cfg_do_checksums) {
         insert_packet_crc(arg0, header_base, header_size, nullptr, payload_size);
       }
 
@@ -5133,7 +5135,7 @@ namespace Realm {
     log_gex_msg.info() << "got short: " << srcrank << " " << arg0 << " " << hdr_bytes;
     total_packets_received.fetch_add(1);
 
-    if(module->cfg_do_checksums) {
+    if(module->config->cfg_do_checksums) {
       verify_packet_crc(arg0, hdr, hdr_bytes, nullptr, 0);
       hdr_bytes -= sizeof(gex_am_arg_t);
     }
@@ -5170,11 +5172,11 @@ namespace Realm {
         return comp_info | (1U << 31);
       // with nothing to complete, the only reply is the dummy for AM credits -
       //  an MSB-only word would read as a completion with neither bit set
-      return (module->cfg_am_limit ? ~0U : 0);
+      return (module->config->cfg_am_limit ? ~0U : 0);
     } else {
       // remote isn't done and there's no local completion for shorts
       //  but we have to send a dummy response if we're counting AM credits
-      if(module->cfg_am_limit)
+      if(module->config->cfg_am_limit)
         return ~0U;
       else
         return 0;
@@ -5189,7 +5191,7 @@ namespace Realm {
                        << " " << data_bytes;
     total_packets_received.fetch_add(1);
 
-    if(module->cfg_do_checksums) {
+    if(module->config->cfg_do_checksums) {
       verify_packet_crc(arg0, hdr, hdr_bytes, data, data_bytes);
       hdr_bytes -= sizeof(gex_am_arg_t);
     }
@@ -5223,14 +5225,14 @@ namespace Realm {
         return comp_info | (1U << 31);
       // with nothing to complete, the only reply is the dummy for AM credits
       //  (see handle_short)
-      return (module->cfg_am_limit ? ~0U : 0);
+      return (module->config->cfg_am_limit ? ~0U : 0);
     } else {
       if((comp_info & PendingCompletion::LOCAL_PENDING_BIT) != 0) {
         // reply is allowed for local completion, but remote isn't done
         return (comp_info & ~PendingCompletion::REMOTE_PENDING_BIT) | (1U << 31);
       } else {
         // we have to send a dummy response if we're counting AM credits
-        if(module->cfg_am_limit)
+        if(module->config->cfg_am_limit)
           return ~0U;
         else
           return 0;
@@ -5246,7 +5248,7 @@ namespace Realm {
                        << " " << data_bytes << " " << data;
     total_packets_received.fetch_add(1);
 
-    if(module->cfg_do_checksums) {
+    if(module->config->cfg_do_checksums) {
       verify_packet_crc(arg0, hdr, hdr_bytes, nullptr, data_bytes);
       hdr_bytes -= sizeof(gex_am_arg_t);
     }
@@ -5278,14 +5280,14 @@ namespace Realm {
         return comp_info | (1U << 31);
       // with nothing to complete, the only reply is the dummy for AM credits
       //  (see handle_short)
-      return (module->cfg_am_limit ? ~0U : 0);
+      return (module->config->cfg_am_limit ? ~0U : 0);
     } else {
       if((comp_info & PendingCompletion::LOCAL_PENDING_BIT) != 0) {
         // reply is allowed for local completion, but remote isn't done
         return (comp_info & ~PendingCompletion::REMOTE_PENDING_BIT) | (1U << 31);
       } else {
         // we have to send a dummy response if we're counting AM credits
-        if(module->cfg_am_limit)
+        if(module->config->cfg_am_limit)
           return ~0U;
         else
           return 0;
@@ -5308,7 +5310,7 @@ namespace Realm {
     // verify the crc here so that we can trust the payload_bytes amount,
     //  but don't shorten the packet because handle_long will want to check
     //  again
-    if(module->cfg_do_checksums)
+    if(module->config->cfg_do_checksums)
       verify_packet_crc(arg0, hdr, hdr_bytes, nullptr, payload_bytes);
 
     rgetter.add_reverse_get(srcrank, src_ep_index, tgt_ep_index, arg0, hdr, hdr_bytes,
@@ -5326,7 +5328,7 @@ namespace Realm {
     uintptr_t baseptr = reinterpret_cast<uintptr_t>(data);
     uintptr_t ofs = 0;
 
-    if(module->cfg_do_checksums) {
+    if(module->config->cfg_do_checksums) {
       uint32_t accum = 0xFFFFFFFF;
       accum = crc32c_accumulate(accum, &npkts, sizeof(npkts));
       accum = crc32c_accumulate(accum, &data_bytes, sizeof(data_bytes));
@@ -5394,7 +5396,7 @@ namespace Realm {
     assert(ofs == data_bytes);
 
     // if we're counting AM credits, make sure we have at least a dummy response
-    if(module->cfg_am_limit && (ncomps == 0))
+    if(module->config->cfg_am_limit && (ncomps == 0))
       comps[ncomps++] = ~0U;
 
     return ncomps;
@@ -5431,7 +5433,7 @@ namespace Realm {
       compmgr.invoke_completions(comp, do_local, do_remote);
     }
 
-    if(was_reply && module->cfg_am_limit) {
+    if(was_reply && module->config->cfg_am_limit) {
       log_gex_amcredit.debug() << "credit received: peer=" << srcrank;
       // assume src and dest ep indices are 0 (current GASNetEX limitation)
       XmitSrcDestPair *xpair = xmitsrcs[0]->lookup_pair(srcrank, 0);

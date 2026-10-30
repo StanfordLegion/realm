@@ -21,6 +21,7 @@
 #define UCP_MODULE_H
 
 #include "realm/network.h"
+#include "realm/ucx/ucp_module_config.h"
 
 namespace Realm {
 
@@ -45,10 +46,11 @@ namespace Realm {
     // Enumerates all the peers that the current node could potentially share memory with
     virtual void get_shared_peers(NodeSet &shared_peers);
 
-    // actual parsing of the command line should wait until here if at all
-    //  possible
-    virtual void parse_command_line(RuntimeImpl *runtime,
-                                    std::vector<std::string> &cmdline);
+    // creates this module's configuration object (see NetworkModule)
+    virtual ModuleConfig *create_module_config(RuntimeImpl *runtime);
+
+    // initializes the UCP internals from the (complete) configuration
+    virtual void finish_configure(RuntimeImpl *runtime);
 
     // "attaches" to the network, if that is meaningful - attempts to
     //  bind/register/(pick your network-specific verb) the requested memory
@@ -123,6 +125,9 @@ namespace Realm {
                                            bool with_congestion, size_t header_size);
 
     virtual size_t max_payload_size(size_t header_size, const void *src_payload_addr);
+
+  public:
+    UCPModuleConfig *config;
 
   protected:
     Realm::UCP::UCPInternal *internal;

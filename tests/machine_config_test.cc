@@ -60,7 +60,7 @@ namespace TestConfig {
 
   // numa module
   size_t numa_mem_size = 2 * 1024 * 1024;
-  size_t numa_nocpu_mem_size = 1 * 1024 * 1024;
+  ssize_t numa_nocpu_mem_size = 1 * 1024 * 1024;
   int num_numa_cpus = 1;
   bool numa_pin_memory = true;
 
@@ -175,7 +175,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     ret_value = numa_config->get_resource("numa_mems", numa_mems);
     if(ret_value == REALM_SUCCESS) {
       size_t numa_mem_size = 0;
-      size_t numa_nocpu_mem_size = 0;
+      ssize_t numa_nocpu_mem_size = 0;
       int num_numa_cpus = 0;
       bool numa_pin_memory = false;
       ASSERT_REALM(numa_config->get_property("numamem", numa_mem_size));
@@ -189,7 +189,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
       // test wrong property
       ret_value = numa_config->get_property("get_error_numa", wrong_config);
       assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
-      log_app.print("numa numamem %zu, numa_nocpumem %zu, numacpsus %d, numa_pin_memory "
+      log_app.print("numa numamem %zu, numa_nocpumem %zd, numacpsus %d, numa_pin_memory "
                     "%d",
                     numa_mem_size, numa_nocpu_mem_size, num_numa_cpus, numa_pin_memory);
     } else {
@@ -293,6 +293,126 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     log_app.print("python procs %d, stack_size %zu", num_python_cpus, py_stack_size);
   } else {
     log_app.print("python is not loaded");
+  }
+
+  // typed access to the same configurations - every *ModuleConfig type can be
+  //  named unconditionally (the headers are always installed), and the typed
+  //  getter returns a null pointer for modules that are not present
+  {
+    CoreModuleConfig *core = rt.get_module_config<CoreModuleConfig>();
+    assert(core != nullptr);
+    assert(static_cast<ModuleConfig *>(core) == rt.get_module_config("core"));
+    assert(core->num_cpu_procs == TestConfig::num_cpu_procs);
+    assert(core->num_util_procs == TestConfig::num_util_procs);
+    assert(core->num_io_procs == TestConfig::num_io_procs);
+    assert(core->sysmem_size == TestConfig::sysmem_size);
+    assert(core->stack_size == TestConfig::stack_size);
+    assert(core->pin_util_procs == TestConfig::pin_util_procs);
+    assert(core->use_ext_sysmem == TestConfig::use_ext_sysmem);
+    assert(core->reg_mem_size == TestConfig::regmem_size);
+    // the "pick based on node count" default must have been resolved by now
+    assert(core->reg_ib_mem_size != ~size_t(0));
+
+    Numa::NumaModuleConfig *numa = rt.get_module_config<Numa::NumaModuleConfig>();
+    Cuda::CudaModuleConfig *cuda = rt.get_module_config<Cuda::CudaModuleConfig>();
+    Hip::HipModuleConfig *hip = rt.get_module_config<Hip::HipModuleConfig>();
+    OpenMP::OpenMPModuleConfig *openmp =
+        rt.get_module_config<OpenMP::OpenMPModuleConfig>();
+    Python::PythonModuleConfig *python =
+        rt.get_module_config<Python::PythonModuleConfig>();
+    HDF5::HDF5ModuleConfig *hdf5 = rt.get_module_config<HDF5::HDF5ModuleConfig>();
+    ProcSet::ProcSetModuleConfig *procset =
+        rt.get_module_config<ProcSet::ProcSetModuleConfig>();
+    GASNetEXModuleConfig *gasnetex = rt.get_module_config<GASNetEXModuleConfig>();
+    UCPModuleConfig *ucx = rt.get_module_config<UCPModuleConfig>();
+    MPIModuleConfig *mpi = rt.get_module_config<MPIModuleConfig>();
+
+    // typed and string-based lookups must agree
+    assert(static_cast<ModuleConfig *>(numa) == rt.get_module_config("numa"));
+    assert(static_cast<ModuleConfig *>(cuda) == rt.get_module_config("cuda"));
+    assert(static_cast<ModuleConfig *>(hip) == rt.get_module_config("hip"));
+    assert(static_cast<ModuleConfig *>(openmp) == rt.get_module_config("openmp"));
+    assert(static_cast<ModuleConfig *>(python) == rt.get_module_config("python"));
+    assert(static_cast<ModuleConfig *>(hdf5) == rt.get_module_config("hdf5"));
+    assert(static_cast<ModuleConfig *>(procset) == rt.get_module_config("procset"));
+    assert(static_cast<ModuleConfig *>(gasnetex) == rt.get_module_config("gasnetex"));
+    assert(static_cast<ModuleConfig *>(ucx) == rt.get_module_config("ucx"));
+    assert(static_cast<ModuleConfig *>(mpi) == rt.get_module_config("mpi"));
+
+    // modules that are not compiled in must not have a config
+    assert(procset != nullptr);
+#ifndef REALM_USE_CUDA
+    assert(cuda == nullptr);
+#endif
+#ifndef REALM_USE_HIP
+    assert(hip == nullptr);
+#endif
+#ifndef REALM_USE_OPENMP
+    assert(openmp == nullptr);
+#endif
+#ifndef REALM_USE_PYTHON
+    assert(python == nullptr);
+#endif
+#ifndef REALM_USE_HDF5
+    assert(hdf5 == nullptr);
+#endif
+#ifndef REALM_USE_GASNETEX
+    assert(gasnetex == nullptr);
+#endif
+#ifndef REALM_USE_UCX
+    assert(ucx == nullptr);
+#endif
+#ifndef REALM_USE_MPI
+    assert(mpi == nullptr);
+#endif
+
+    std::vector<size_t> numa_mems;
+    if(numa && (numa->get_resource("numa_mems", numa_mems) == REALM_SUCCESS) &&
+       !numa_mems.empty()) {
+      assert(numa->cfg_numa_mem_size == TestConfig::numa_mem_size);
+      assert(numa->cfg_numa_nocpu_mem_size == TestConfig::numa_nocpu_mem_size);
+      assert(numa->cfg_num_numa_cpus == TestConfig::num_numa_cpus);
+      assert(numa->cfg_pin_memory == TestConfig::numa_pin_memory);
+    }
+    if(cuda) {
+      assert(cuda->cfg_num_gpus == TestConfig::num_gpus);
+      assert(cuda->cfg_fb_mem_size == TestConfig::fb_mem_size);
+      assert(cuda->cfg_zc_mem_size == TestConfig::zc_mem_size);
+      assert(cuda->cfg_fb_ib_size == TestConfig::fb_ib_size);
+      assert(cuda->cfg_zc_ib_size == TestConfig::zc_ib_size);
+      assert(cuda->cfg_uvm_mem_size == TestConfig::uvm_mem_size);
+      assert(cuda->cfg_use_dynamic_fb == TestConfig::use_dynamic_fb);
+      assert(cuda->cfg_dynfb_max_size == TestConfig::dynfb_max_size);
+      assert(cuda->cfg_task_streams == TestConfig::task_streams);
+      assert(cuda->cfg_d2d_streams == TestConfig::d2d_streams);
+    }
+    if(hip) {
+      assert(hip->cfg_num_gpus == TestConfig::num_gpus);
+      assert(hip->cfg_fb_mem_size == TestConfig::fb_mem_size);
+      assert(hip->cfg_zc_mem_size == TestConfig::zc_mem_size);
+      assert(hip->cfg_fb_ib_size == TestConfig::fb_ib_size);
+      assert(hip->cfg_zc_ib_size == TestConfig::zc_ib_size);
+      assert(hip->cfg_use_dynamic_fb == TestConfig::use_dynamic_fb);
+      assert(hip->cfg_dynfb_max_size == TestConfig::dynfb_max_size);
+      assert(hip->cfg_task_streams == TestConfig::task_streams);
+      assert(hip->cfg_d2d_streams == TestConfig::d2d_streams);
+    }
+    if(openmp) {
+      assert(openmp->cfg_num_openmp_cpus == TestConfig::num_openmp_cpus);
+      assert(openmp->cfg_num_threads_per_cpu == TestConfig::num_threads_per_cpu);
+      assert(openmp->cfg_use_numa == TestConfig::openmp_use_numa);
+      assert(openmp->cfg_stack_size == TestConfig::openmp_stack_size);
+    }
+    if(python) {
+      assert(python->cfg_num_python_cpus == TestConfig::num_python_cpus);
+      assert(python->cfg_stack_size == TestConfig::py_stack_size);
+    }
+    log_app.print("typed module configs: core cpus=%d, present: numa=%d cuda=%d hip=%d "
+                  "openmp=%d python=%d hdf5=%d procset=%d gasnetex=%d ucx=%d mpi=%d",
+                  core->num_cpu_procs, numa != nullptr, cuda != nullptr, hip != nullptr,
+                  openmp != nullptr, python != nullptr, hdf5 != nullptr,
+                  procset != nullptr, gasnetex != nullptr, ucx != nullptr,
+                  mpi != nullptr);
   }
 
   if(Network::my_node_id == 0) {
@@ -535,6 +655,16 @@ int main(int argc, char **argv)
       // test wrong config
       ret_value = core_config->set_property("set_error_core", TestConfig::sysmem_size);
       assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
+      // test wrong type - "cpu" is an int, so neither a size_t write nor a
+      //  bool read may touch it
+      ret_value = core_config->set_property<size_t>("cpu", 1);
+      assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_TYPE);
+      bool wrong_type = true;
+      ret_value = core_config->get_property("cpu", wrong_type);
+      assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_TYPE);
+      int cpus_after = 0;
+      ASSERT_REALM(core_config->get_property("cpu", cpus_after));
+      assert(cpus_after == TestConfig::num_cpu_procs);
     }
 
     // numa module
@@ -547,8 +677,8 @@ int main(int argc, char **argv)
         log_app.info() << "numa mems:" << PrettyVector<size_t>(numa_mems);
         ASSERT_REALM(
             numa_config->set_property<size_t>("numamem", TestConfig::numa_mem_size));
-        ASSERT_REALM(numa_config->set_property<size_t>("numa_nocpumem",
-                                                       TestConfig::numa_nocpu_mem_size));
+        ASSERT_REALM(numa_config->set_property<ssize_t>("numa_nocpumem",
+                                                        TestConfig::numa_nocpu_mem_size));
         ASSERT_REALM(
             numa_config->set_property<int>("numacpus", TestConfig::num_numa_cpus));
         ASSERT_REALM(
@@ -643,6 +773,143 @@ int main(int argc, char **argv)
       ret_value =
           python_config->set_property("set_error_openmp", TestConfig::num_openmp_cpus);
       assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
+    } else {
+      log_app.print("python is not loaded");
+    }
+  } else if(test_args == 2) {
+    // configure through the typed structs instead of the string API - the
+    //  config types for modules that are not compiled in can still be named
+    //  here, their pointers are simply null
+    CoreModuleConfig *core = rt.get_module_config<CoreModuleConfig>();
+    assert(core != nullptr);
+    {
+      int ncores = 0;
+      size_t sysmem = 0;
+      ASSERT_REALM(core->get_resource("cpu", ncores));
+      ASSERT_REALM(core->get_resource("sysmem", sysmem));
+      log_app.print("Discover number of CPU cores %d, sysmem %zu", ncores, sysmem);
+
+      // a configuration can be prepared by value (starting from Realm's
+      //  defaults, or as a copy of the runtime's object) and then assigned to
+      //  the runtime's object - that copies the settings, but leaves the
+      //  discovered resources (which are not settings) alone
+      CoreModuleConfig cfg;
+      assert(cfg.num_cpu_procs == 1); // Realm's default
+      cfg.num_cpu_procs = TestConfig::num_cpu_procs;
+      cfg.num_util_procs = TestConfig::num_util_procs;
+      cfg.num_io_procs = TestConfig::num_io_procs;
+      cfg.sysmem_size = TestConfig::sysmem_size;
+      cfg.stack_size = TestConfig::stack_size;
+      cfg.pin_util_procs = TestConfig::pin_util_procs;
+      cfg.use_ext_sysmem = TestConfig::use_ext_sysmem;
+      cfg.reg_mem_size = TestConfig::regmem_size;
+      *core = cfg;
+      assert(core->num_cpu_procs == TestConfig::num_cpu_procs);
+      assert(core->get_name() == CoreModuleConfig::MODULE_NAME);
+      int ncores_after = 0;
+      size_t sysmem_after = 0;
+      ASSERT_REALM(core->get_resource("cpu", ncores_after));
+      ASSERT_REALM(core->get_resource("sysmem", sysmem_after));
+      assert((ncores_after == ncores) && (sysmem_after == sysmem));
+
+      // a copy of the runtime's object agrees with it, including through the
+      //  string interface, and modifying the copy does not touch the original
+      CoreModuleConfig copy(*core);
+      int copied_cpus = 0;
+      ASSERT_REALM(copy.get_property("cpu", copied_cpus));
+      assert(copied_cpus == TestConfig::num_cpu_procs);
+      ASSERT_REALM(copy.get_resource("cpu", ncores_after));
+      assert(ncores_after == ncores);
+      copy.num_cpu_procs = TestConfig::num_cpu_procs + 1;
+      assert(core->num_cpu_procs == TestConfig::num_cpu_procs);
+
+      // the string interface works on any object of a present module's
+      //  configuration class, not just the runtime's own
+      CoreModuleConfig fresh;
+      ASSERT_REALM(fresh.set_property<int>("cpu", 7));
+      assert(fresh.num_cpu_procs == 7);
+      // ... but a fresh object has not discovered any resources
+      assert(fresh.get_resource("cpu", ncores_after) ==
+             REALM_MODULE_CONFIG_ERROR_NO_RESOURCE);
+      // the configuration class of a module that is not present can be
+      //  constructed and copied, but has nothing to look names up in
+      assert(sizeof(MPIModuleConfig) > 0);
+#ifndef REALM_USE_MPI
+      MPIModuleConfig absent;
+      size_t gsize = 0;
+      assert(absent.get_property("global_mem_size", gsize) ==
+             REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
+#endif
+    }
+
+    Numa::NumaModuleConfig *numa = rt.get_module_config<Numa::NumaModuleConfig>();
+    std::vector<size_t> numa_mems;
+    if(numa && (numa->get_resource("numa_mems", numa_mems) == REALM_SUCCESS) &&
+       !numa_mems.empty()) {
+      log_app.info() << "numa mems:" << PrettyVector<size_t>(numa_mems);
+      numa->cfg_numa_mem_size = TestConfig::numa_mem_size;
+      numa->cfg_numa_nocpu_mem_size = TestConfig::numa_nocpu_mem_size;
+      numa->cfg_num_numa_cpus = TestConfig::num_numa_cpus;
+      numa->cfg_pin_memory = TestConfig::numa_pin_memory;
+    } else {
+      log_app.print("numa is not available");
+    }
+
+    Cuda::CudaModuleConfig *cuda = rt.get_module_config<Cuda::CudaModuleConfig>();
+    if(cuda) {
+      int ngpus = 0;
+      size_t fbmem = 0;
+      ASSERT_REALM(cuda->get_resource("gpu", ngpus));
+      ASSERT_REALM(cuda->get_resource("fbmem", fbmem));
+      log_app.print("number of cuda GPUs %d, fbmem size %zu", ngpus, fbmem);
+      cuda->cfg_num_gpus = TestConfig::num_gpus;
+      cuda->cfg_zc_mem_size = TestConfig::zc_mem_size;
+      cuda->cfg_fb_mem_size = TestConfig::fb_mem_size;
+      cuda->cfg_fb_ib_size = TestConfig::fb_ib_size;
+      cuda->cfg_zc_ib_size = TestConfig::zc_ib_size;
+      cuda->cfg_uvm_mem_size = TestConfig::uvm_mem_size;
+      cuda->cfg_use_dynamic_fb = TestConfig::use_dynamic_fb;
+      cuda->cfg_dynfb_max_size = TestConfig::dynfb_max_size;
+      cuda->cfg_task_streams = TestConfig::task_streams;
+      cuda->cfg_d2d_streams = TestConfig::d2d_streams;
+    }
+    Hip::HipModuleConfig *hip = rt.get_module_config<Hip::HipModuleConfig>();
+    if(hip) {
+      int ngpus = 0;
+      size_t fbmem = 0;
+      ASSERT_REALM(hip->get_resource("gpu", ngpus));
+      ASSERT_REALM(hip->get_resource("fbmem", fbmem));
+      log_app.print("number of hip GPUs %d, fbmem size %zu", ngpus, fbmem);
+      hip->cfg_num_gpus = TestConfig::num_gpus;
+      hip->cfg_zc_mem_size = TestConfig::zc_mem_size;
+      hip->cfg_fb_mem_size = TestConfig::fb_mem_size;
+      hip->cfg_fb_ib_size = TestConfig::fb_ib_size;
+      hip->cfg_zc_ib_size = TestConfig::zc_ib_size;
+      hip->cfg_use_dynamic_fb = TestConfig::use_dynamic_fb;
+      hip->cfg_dynfb_max_size = TestConfig::dynfb_max_size;
+      hip->cfg_task_streams = TestConfig::task_streams;
+      hip->cfg_d2d_streams = TestConfig::d2d_streams;
+    }
+    if(!cuda && !hip) {
+      log_app.print("cuda/hip is not loaded");
+    }
+
+    OpenMP::OpenMPModuleConfig *openmp =
+        rt.get_module_config<OpenMP::OpenMPModuleConfig>();
+    if(openmp) {
+      openmp->cfg_num_openmp_cpus = TestConfig::num_openmp_cpus;
+      openmp->cfg_num_threads_per_cpu = TestConfig::num_threads_per_cpu;
+      openmp->cfg_use_numa = TestConfig::openmp_use_numa;
+      openmp->cfg_stack_size = TestConfig::openmp_stack_size;
+    } else {
+      log_app.print("openmp is not loaded");
+    }
+
+    Python::PythonModuleConfig *python =
+        rt.get_module_config<Python::PythonModuleConfig>();
+    if(python) {
+      python->cfg_num_python_cpus = TestConfig::num_python_cpus;
+      python->cfg_stack_size = TestConfig::py_stack_size;
     } else {
       log_app.print("python is not loaded");
     }

@@ -56,6 +56,23 @@
 #include "realm/subgraph.h"
 #include "realm/module_config.h"
 
+// module configuration structures - these headers contain only plain data
+//  types and are always available, even when the corresponding module is not
+//  compiled into this build of Realm, so that applications can be written
+//  against them unconditionally and use Runtime::get_module_config<T>() to
+//  detect (via a null return) which modules are actually present
+#include "realm/core_module_config.h"
+#include "realm/cuda/cuda_module_config.h"
+#include "realm/hip/hip_module_config.h"
+#include "realm/hdf5/hdf5_module_config.h"
+#include "realm/numa/numa_module_config.h"
+#include "realm/openmp/openmp_module_config.h"
+#include "realm/procset/procset_module_config.h"
+#include "realm/python/python_module_config.h"
+#include "realm/gasnetex/gasnetex_module_config.h"
+#include "realm/ucx/ucp_module_config.h"
+#include "realm/mpi/mpi_module_config.h"
+
 #ifdef REALM_USE_HDF5
 #include "realm/hdf5/hdf5_access.h"
 #endif
