@@ -1,7 +1,7 @@
 var classRealm_1_1ThreadPool =
 [
-    [ "WorkerInfo", "structRealm_1_1ThreadPool_1_1WorkerInfo.html", "structRealm_1_1ThreadPool_1_1WorkerInfo" ],
     [ "WorkItem", "structRealm_1_1ThreadPool_1_1WorkItem.html", "structRealm_1_1ThreadPool_1_1WorkItem" ],
+    [ "WorkerInfo", "structRealm_1_1ThreadPool_1_1WorkerInfo.html", "structRealm_1_1ThreadPool_1_1WorkerInfo" ],
     [ "ThreadPool", "classRealm_1_1ThreadPool.html#a5d251a8c9cbdeec17822687244e48daf", null ],
     [ "~ThreadPool", "classRealm_1_1ThreadPool.html#a88bebc7ba73babdd51b33e412985bc8e", null ],
     [ "associate_as_master", "classRealm_1_1ThreadPool.html#adc87c6ffe0f4b360624d2bd55e0e4046", null ],

@@ -8,6 +8,6 @@ var tasks_8h =
     [ "Realm::TaskContextManager", "classRealm_1_1TaskContextManager.html", "classRealm_1_1TaskContextManager" ],
     [ "Realm::ThreadedTaskScheduler", "classRealm_1_1ThreadedTaskScheduler.html", "classRealm_1_1ThreadedTaskScheduler" ],
     [ "Realm::ThreadedTaskScheduler::WorkCounter", "classRealm_1_1ThreadedTaskScheduler_1_1WorkCounter.html", "classRealm_1_1ThreadedTaskScheduler_1_1WorkCounter" ],
-    [ "Realm::ThreadedTaskScheduler::WorkCounterUpdater< PQ >", "classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html", "classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater" ],
+    [ "Realm::ThreadedTaskScheduler::WorkCounterUpdater&lt; PQ &gt;", "classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html", "classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater" ],
     [ "Realm::KernelThreadTaskScheduler", "classRealm_1_1KernelThreadTaskScheduler.html", "classRealm_1_1KernelThreadTaskScheduler" ]
 ];

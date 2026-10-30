@@ -1,11 +1,11 @@
 var classRealm_1_1IncomingMessageManager =
 [
     [ "DeferredCallback", "structRealm_1_1IncomingMessageManager_1_1DeferredCallback.html", "structRealm_1_1IncomingMessageManager_1_1DeferredCallback" ],
+    [ "Message", "structRealm_1_1IncomingMessageManager_1_1Message.html", "structRealm_1_1IncomingMessageManager_1_1Message" ],
+    [ "MessageBlock", "structRealm_1_1IncomingMessageManager_1_1MessageBlock.html", "structRealm_1_1IncomingMessageManager_1_1MessageBlock" ],
     [ "FragmentKey", "structRealm_1_1IncomingMessageManager_1_1FragmentKey.html", "structRealm_1_1IncomingMessageManager_1_1FragmentKey" ],
     [ "FragmentKeyHash", "structRealm_1_1IncomingMessageManager_1_1FragmentKeyHash.html", "structRealm_1_1IncomingMessageManager_1_1FragmentKeyHash" ],
     [ "FragmentReassembly", "structRealm_1_1IncomingMessageManager_1_1FragmentReassembly.html", "structRealm_1_1IncomingMessageManager_1_1FragmentReassembly" ],
-    [ "Message", "structRealm_1_1IncomingMessageManager_1_1Message.html", "structRealm_1_1IncomingMessageManager_1_1Message" ],
-    [ "MessageBlock", "structRealm_1_1IncomingMessageManager_1_1MessageBlock.html", "structRealm_1_1IncomingMessageManager_1_1MessageBlock" ],
     [ "CallbackData", "classRealm_1_1IncomingMessageManager.html#a39fbc72cbd2b4a7d4c40cba1fbf47bcf", null ],
     [ "CallbackFnptr", "classRealm_1_1IncomingMessageManager.html#aa9f7570bf3c35b239f3695c7ccf65f4c", null ],
     [ "IncomingMessageManager", "classRealm_1_1IncomingMessageManager.html#ab16c946a6b05a1c8b361012de2c10679", null ],

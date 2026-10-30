@@ -1,7 +1,7 @@
 var classRealm_1_1SparsityMapImpl =
 [
-    [ "RemoteSparsityContrib", "structRealm_1_1SparsityMapImpl_1_1RemoteSparsityContrib.html", "structRealm_1_1SparsityMapImpl_1_1RemoteSparsityContrib" ],
     [ "RemoteSparsityRequest", "structRealm_1_1SparsityMapImpl_1_1RemoteSparsityRequest.html", "structRealm_1_1SparsityMapImpl_1_1RemoteSparsityRequest" ],
+    [ "RemoteSparsityContrib", "structRealm_1_1SparsityMapImpl_1_1RemoteSparsityContrib.html", "structRealm_1_1SparsityMapImpl_1_1RemoteSparsityContrib" ],
     [ "SetContribCountMessage", "structRealm_1_1SparsityMapImpl_1_1SetContribCountMessage.html", "structRealm_1_1SparsityMapImpl_1_1SetContribCountMessage" ],
     [ "SparsityMapImpl", "classRealm_1_1SparsityMapImpl.html#ae09f3e8b84c00966dd24c98aa22b818b", null ],
     [ "SparsityMapImpl", "classRealm_1_1SparsityMapImpl.html#aa38c867149ec24999e4c0d293a198535", null ],

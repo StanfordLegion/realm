@@ -1,11 +1,11 @@
 var classRealm_1_1Type =
 [
     [ "CommonFields", "structRealm_1_1Type_1_1CommonFields.html", "structRealm_1_1Type_1_1CommonFields" ],
-    [ "FloatingPointFields", "structRealm_1_1Type_1_1FloatingPointFields.html", "structRealm_1_1Type_1_1FloatingPointFields" ],
-    [ "FunctionPointerFields", "structRealm_1_1Type_1_1FunctionPointerFields.html", "structRealm_1_1Type_1_1FunctionPointerFields" ],
-    [ "IntegerFields", "structRealm_1_1Type_1_1IntegerFields.html", "structRealm_1_1Type_1_1IntegerFields" ],
     [ "OpaqueFields", "structRealm_1_1Type_1_1OpaqueFields.html", "structRealm_1_1Type_1_1OpaqueFields" ],
+    [ "IntegerFields", "structRealm_1_1Type_1_1IntegerFields.html", "structRealm_1_1Type_1_1IntegerFields" ],
+    [ "FloatingPointFields", "structRealm_1_1Type_1_1FloatingPointFields.html", "structRealm_1_1Type_1_1FloatingPointFields" ],
     [ "PointerFields", "structRealm_1_1Type_1_1PointerFields.html", "structRealm_1_1Type_1_1PointerFields" ],
+    [ "FunctionPointerFields", "structRealm_1_1Type_1_1FunctionPointerFields.html", "structRealm_1_1Type_1_1FunctionPointerFields" ],
     [ "Kind", "classRealm_1_1Type.html#a4549b7d79b9089853d802ea9fb682173", [
       [ "InvalidKind", "classRealm_1_1Type.html#a4549b7d79b9089853d802ea9fb682173a4fa0fa28b4b9f85a339389de34be23db", null ]
     ] ],

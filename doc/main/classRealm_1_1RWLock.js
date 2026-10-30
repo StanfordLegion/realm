@@ -1,7 +1,7 @@
 var classRealm_1_1RWLock =
 [
-    [ "Reader", "structRealm_1_1RWLock_1_1Reader.html", "structRealm_1_1RWLock_1_1Reader" ],
     [ "Writer", "structRealm_1_1RWLock_1_1Writer.html", "structRealm_1_1RWLock_1_1Writer" ],
+    [ "Reader", "structRealm_1_1RWLock_1_1Reader.html", "structRealm_1_1RWLock_1_1Reader" ],
     [ "AutoReaderLock", "classRealm_1_1RWLock.html#a5768a705f9ede63744bcd9729607ae5d", null ],
     [ "AutoWriterLock", "classRealm_1_1RWLock.html#a77340f2397f7cb174d6942ae74ba631a", null ],
     [ "RWLock", "classRealm_1_1RWLock.html#ad7e19985be2d27c8277f54ee8bc2146c", null ],

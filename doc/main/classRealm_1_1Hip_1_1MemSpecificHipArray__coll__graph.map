@@ -1,6 +1,6 @@
 <map id="Realm::Hip::MemSpecificHipArray" name="Realm::Hip::MemSpecificHipArray">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,80,212,120"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1MemSpecificInfo.html" title=" " alt="" coords="19,5,199,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="111,44,111,80,106,80,106,44"/>
-<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="214,11,225,18,217,25,199,27,199,22,215,20,220,18,212,16"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,82,212,127"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1MemSpecificInfo.html" title=" " alt="" coords="19,5,198,33"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="110,46,111,83,106,81,107,50"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="214,12,225,19,217,26,199,28,198,23,215,21,220,19,213,17"/>
 </map>

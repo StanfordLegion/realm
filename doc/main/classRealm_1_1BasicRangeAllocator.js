@@ -1,7 +1,7 @@
 var classRealm_1_1BasicRangeAllocator =
 [
-    [ "MemoryStats", "structRealm_1_1BasicRangeAllocator_1_1MemoryStats.html", "structRealm_1_1BasicRangeAllocator_1_1MemoryStats" ],
     [ "Range", "structRealm_1_1BasicRangeAllocator_1_1Range.html", "structRealm_1_1BasicRangeAllocator_1_1Range" ],
+    [ "MemoryStats", "structRealm_1_1BasicRangeAllocator_1_1MemoryStats.html", "structRealm_1_1BasicRangeAllocator_1_1MemoryStats" ],
     [ "BasicRangeAllocator", "classRealm_1_1BasicRangeAllocator.html#ad68e17f48364938effa2dbeb2505939f", null ],
     [ "~BasicRangeAllocator", "classRealm_1_1BasicRangeAllocator.html#ac1a55aa7d7e9ed6d28758187e718e706", null ],
     [ "BasicRangeAllocator", "classRealm_1_1BasicRangeAllocator.html#aa2715a5b2efe6272ad21210c2a170cae", null ],

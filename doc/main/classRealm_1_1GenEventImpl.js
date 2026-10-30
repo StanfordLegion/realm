@@ -1,7 +1,7 @@
 var classRealm_1_1GenEventImpl =
 [
-    [ "ExternalWaiterSync", "structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html", "structRealm_1_1GenEventImpl_1_1ExternalWaiterSync" ],
     [ "GenEventImplAllocator", "structRealm_1_1GenEventImpl_1_1GenEventImplAllocator.html", "structRealm_1_1GenEventImpl_1_1GenEventImplAllocator" ],
+    [ "ExternalWaiterSync", "structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html", "structRealm_1_1GenEventImpl_1_1ExternalWaiterSync" ],
     [ "LaggingViewState", "structRealm_1_1GenEventImpl_1_1LaggingViewState.html", "structRealm_1_1GenEventImpl_1_1LaggingViewState" ],
     [ "GenEventImpl", "classRealm_1_1GenEventImpl.html#a7db05486d3d824d9a92d5bb8f2b1e30b", null ],
     [ "GenEventImpl", "classRealm_1_1GenEventImpl.html#a6d31d186efb3745a821ea4b1056c97db", null ],

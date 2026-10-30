@@ -1,3 +1,17 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1LockedMap.html" title=" " alt="" coords="5,5,281,45"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1noncopyable.html" title=" " alt="" coords="5,161,160,189"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1FIFOCondVar.html" title=" " alt="" coords="213,5,368,33"/>
+<area shape="poly" id="edge275_Node000000_Node000001" title=" " alt="" coords="100,147,145,95,174,67,206,44,235,32,231,35,209,48,178,72,149,99,105,150"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1FIFOMutex.html" title=" " alt="" coords="220,57,362,85"/>
+<area shape="poly" id="edge276_Node000000_Node000002" title=" " alt="" coords="114,150,157,122,207,95,241,84,236,87,209,100,160,127,118,154"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1KernelCondVar.html" title=" " alt="" coords="208,109,374,137"/>
+<area shape="poly" id="edge277_Node000000_Node000003" title=" " alt="" coords="155,155,234,136,230,139,157,159"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1KernelMutex.html" title=" " alt="" coords="214,161,368,189"/>
+<area shape="poly" id="edge278_Node000000_Node000004" title=" " alt="" coords="174,173,216,174,211,176,176,178"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1MutexChecker.html" title=" " alt="" coords="209,213,373,241"/>
+<area shape="poly" id="edge279_Node000000_Node000005" title=" " alt="" coords="156,191,235,211,230,214,156,196"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1UnfairCondVar.html" title=" " alt="" coords="208,265,374,293"/>
+<area shape="poly" id="edge280_Node000000_Node000006" title=" " alt="" coords="116,196,160,224,209,250,241,264,236,265,207,255,157,228,116,201"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1UnfairMutex.html" title=" " alt="" coords="215,317,367,345"/>
+<area shape="poly" id="edge281_Node000000_Node000007" title=" " alt="" coords="103,199,149,252,178,279,209,302,235,317,230,317,206,307,174,283,145,255,102,204"/>
 </map>

@@ -1,6 +1,6 @@
 <map id="Realm::SparsityMapRefCounter::SparsityMapAddReferenceMessage" name="Realm::SparsityMapRefCounter::SparsityMapAddReferenceMessage">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,93,265,133"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Event.html" title=" " alt="" coords="81,5,190,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="138,44,138,93,133,93,133,44"/>
-<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="205,9,217,18,208,26,190,29,190,23,206,21,211,18,202,14"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,106,265,151"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Event.html" title=" " alt="" coords="81,5,189,33"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="137,47,138,106,132,104,133,51"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="205,10,216,19,208,28,191,31,189,26,205,23,211,19,205,15"/>
 </map>

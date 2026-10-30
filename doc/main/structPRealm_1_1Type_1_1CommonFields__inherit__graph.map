@@ -1,0 +1,13 @@
+<map id="PRealm::Type::CommonFields" name="PRealm::Type::CommonFields">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,143,220,171"/>
+<area shape="rect" id="Node000002" href="$structRealm_1_1Type_1_1FloatingPointFields.html" title=" " alt="" coords="275,5,470,50"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="145,132,200,96,267,60,298,49,294,52,269,65,203,100,148,136"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1Type_1_1FunctionPointerFields.html" title=" " alt="" coords="268,75,478,119"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="189,137,275,119,271,121,191,142"/>
+<area shape="rect" id="Node000004" href="$structRealm_1_1Type_1_1IntegerFields.html" title=" " alt="" coords="276,143,470,171"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="235,154,278,156,273,158,236,160"/>
+<area shape="rect" id="Node000005" href="$structRealm_1_1Type_1_1OpaqueFields.html" title=" " alt="" coords="274,195,472,223"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="201,172,302,194,297,195,201,177"/>
+<area shape="rect" id="Node000006" href="$structRealm_1_1Type_1_1PointerFields.html" title=" " alt="" coords="276,247,470,275"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="152,176,207,205,269,232,309,247,304,247,267,237,204,209,151,181"/>
+</map>

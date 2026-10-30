@@ -1,35 +1,35 @@
 <map id="/home/runner/work/realm/realm/realm&#45;src/src/realm/pri_queue.h" name="/home/runner/work/realm/realm/realm&#45;src/src/realm/pri_queue.h">
-<area shape="rect" id="Node000001" title=" " alt="" coords="749,5,944,60"/>
-<area shape="rect" id="Node000002" href="$partitions_8h.html" title=" " alt="" coords="552,108,747,163"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="785,68,702,110,700,106,782,64"/>
-<area shape="rect" id="Node000016" href="$tasks_8h.html" title=" " alt="" coords="1099,211,1293,265"/>
-<area shape="poly" id="edge15_Node000001_Node000016" title=" " alt="" coords="905,65,1152,208,1149,213,902,69"/>
-<area shape="rect" id="Node000003" href="$byfield_8h.html" title=" " alt="" coords="880,211,1075,265"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="749,164,893,208,891,213,747,169"/>
-<area shape="rect" id="Node000004" href="$image_8h.html" title=" " alt="" coords="5,211,200,265"/>
-<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="539,156,384,181,213,213,201,216,200,210,211,208,383,176,538,151"/>
-<area shape="rect" id="Node000005" href="$preimage_8h.html" title=" " alt="" coords="224,211,419,265"/>
-<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="551,169,408,213,406,208,550,164"/>
-<area shape="rect" id="Node000006" href="$setops_8h.html" title=" " alt="" coords="443,211,637,265"/>
-<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="612,174,570,213,567,209,609,170"/>
-<area shape="rect" id="Node000007" href="$runtime__impl_8h.html" title=" " alt="" coords="661,211,856,265"/>
-<area shape="poly" id="edge6_Node000002_Node000007" title=" " alt="" coords="690,170,732,209,728,213,686,174"/>
-<area shape="rect" id="Node000008" href="$proc__impl_8h.html" title=" " alt="" coords="967,313,1161,368"/>
-<area shape="poly" id="edge7_Node000007_Node000008" title=" " alt="" coords="852,267,985,311,984,316,850,272"/>
-<area shape="rect" id="Node000014" href="$lowlevel__dma_8h.html" title=" " alt="" coords="485,313,680,368"/>
-<area shape="poly" id="edge13_Node000007_Node000014" title=" " alt="" coords="702,274,630,315,628,311,700,270"/>
-<area shape="rect" id="Node000009" href="$cuda__internal_8h.html" title=" " alt="" coords="967,416,1161,471"/>
-<area shape="poly" id="edge8_Node000008_Node000009" title=" " alt="" coords="1067,382,1067,416,1061,416,1061,382"/>
-<area shape="rect" id="Node000010" href="$hip__internal_8h.html" title=" " alt="" coords="1185,416,1380,471"/>
-<area shape="poly" id="edge9_Node000008_Node000010" title=" " alt="" coords="1134,371,1227,414,1225,418,1132,376"/>
-<area shape="rect" id="Node000011" href="$kokkos__interop_8h.html" title=" " alt="" coords="529,416,724,471"/>
-<area shape="poly" id="edge10_Node000008_Node000011" title=" " alt="" coords="954,369,737,419,725,421,724,416,735,413,952,364"/>
-<area shape="rect" id="Node000012" href="$openmp__internal_8h.html" title=" " alt="" coords="1404,416,1609,471"/>
-<area shape="poly" id="edge11_Node000008_Node000012" title=" " alt="" coords="1175,364,1393,413,1404,416,1403,421,1391,419,1174,370"/>
-<area shape="rect" id="Node000013" href="$python__internal_8h.html" title=" " alt="" coords="748,416,943,471"/>
-<area shape="poly" id="edge12_Node000008_Node000013" title=" " alt="" coords="996,376,903,418,901,414,994,371"/>
-<area shape="rect" id="Node000015" href="$hdf5__internal_8h.html" title=" " alt="" coords="311,416,505,471"/>
-<area shape="poly" id="edge14_Node000014_Node000015" title=" " alt="" coords="527,377,455,418,452,413,524,372"/>
-<area shape="poly" id="edge17_Node000016_Node000008" title=" " alt="" coords="1152,276,1100,315,1097,311,1149,271"/>
-<area shape="poly" id="edge16_Node000016_Node000012" title=" " alt="" coords="1249,271,1468,413,1465,418,1246,275"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="619,5,813,67"/>
+<area shape="rect" id="Node000002" href="$partitions_8h.html" title=" " alt="" coords="552,115,746,177"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="691,78,670,116,666,113,687,82"/>
+<area shape="rect" id="Node000016" href="$tasks_8h.html" title=" " alt="" coords="1099,225,1293,286"/>
+<area shape="poly" id="edge15_Node000001_Node000016" title=" " alt="" coords="797,71,1132,223,1127,225,796,77"/>
+<area shape="rect" id="Node000003" href="$byfield_8h.html" title=" " alt="" coords="880,225,1074,286"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="756,179,888,224,882,224,756,185"/>
+<area shape="rect" id="Node000004" href="$image_8h.html" title=" " alt="" coords="5,225,200,286"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="534,166,382,193,212,227,202,230,199,225,211,222,381,188,539,163"/>
+<area shape="rect" id="Node000005" href="$preimage_8h.html" title=" " alt="" coords="224,225,418,286"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="540,183,414,227,412,222,545,181"/>
+<area shape="rect" id="Node000006" href="$setops_8h.html" title=" " alt="" coords="443,225,637,286"/>
+<area shape="poly" id="edge5_Node000002_Node000006" title=" " alt="" coords="610,186,572,226,569,222,606,189"/>
+<area shape="rect" id="Node000007" href="$runtime__impl_8h.html" title=" " alt="" coords="661,225,856,286"/>
+<area shape="poly" id="edge6_Node000002_Node000007" title=" " alt="" coords="691,185,730,225,725,224,690,190"/>
+<area shape="rect" id="Node000008" href="$proc__impl_8h.html" title=" " alt="" coords="812,334,1006,396"/>
+<area shape="poly" id="edge7_Node000007_Node000008" title=" " alt="" coords="814,293,870,334,864,334,812,298"/>
+<area shape="rect" id="Node000014" href="$lowlevel__dma_8h.html" title=" " alt="" coords="375,334,569,396"/>
+<area shape="poly" id="edge13_Node000007_Node000014" title=" " alt="" coords="666,291,553,336,551,331,661,293"/>
+<area shape="rect" id="Node000009" href="$cuda__internal_8h.html" title=" " alt="" coords="812,444,1006,506"/>
+<area shape="poly" id="edge8_Node000008_Node000009" title=" " alt="" coords="911,410,911,445,907,442,907,413"/>
+<area shape="rect" id="Node000010" href="$hip__internal_8h.html" title=" " alt="" coords="1031,444,1225,506"/>
+<area shape="poly" id="edge9_Node000008_Node000010" title=" " alt="" coords="985,401,1069,444,1064,443,984,406"/>
+<area shape="rect" id="Node000011" href="$kokkos__interop_8h.html" title=" " alt="" coords="375,444,569,506"/>
+<area shape="poly" id="edge10_Node000008_Node000011" title=" " alt="" coords="799,392,582,447,570,450,569,444,581,441,794,393"/>
+<area shape="rect" id="Node000012" href="$openmp__internal_8h.html" title=" " alt="" coords="1250,444,1454,506"/>
+<area shape="poly" id="edge11_Node000008_Node000012" title=" " alt="" coords="1022,390,1238,441,1252,447,1247,447,1237,447,1021,395"/>
+<area shape="rect" id="Node000013" href="$python__internal_8h.html" title=" " alt="" coords="593,444,788,506"/>
+<area shape="poly" id="edge12_Node000008_Node000013" title=" " alt="" coords="837,403,753,446,751,441,831,404"/>
+<area shape="rect" id="Node000015" href="$hdf5__internal_8h.html" title=" " alt="" coords="156,444,350,506"/>
+<area shape="poly" id="edge14_Node000014_Node000015" title=" " alt="" coords="399,403,316,446,314,441,394,404"/>
+<area shape="poly" id="edge17_Node000016_Node000008" title=" " alt="" coords="1104,292,990,336,989,331,1099,293"/>
+<area shape="poly" id="edge16_Node000016_Node000012" title=" " alt="" coords="1228,297,1333,444,1328,443,1225,302"/>
 </map>

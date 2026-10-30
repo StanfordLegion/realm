@@ -1,3 +1,21 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$structRealm_1_1MachineAffinityInfo.html" title=" " alt="" coords="5,5,260,60"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1PartitioningMicroOp.html" title=" " alt="" coords="5,291,205,319"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1ByFieldMicroOp.html" title=" " alt="" coords="275,5,448,50"/>
+<area shape="poly" id="edge299_Node000000_Node000001" title=" " alt="" coords="114,275,132,228,162,171,201,111,225,84,251,60,276,47,273,51,254,64,228,88,205,115,166,173,137,231,119,277"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ComputeOverlapMicroOp.html" title=" " alt="" coords="253,75,470,119"/>
+<area shape="poly" id="edge300_Node000000_Node000002" title=" " alt="" coords="120,276,173,203,209,164,251,129,276,118,272,122,254,134,213,168,177,207,125,279"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1DifferenceMicroOp.html" title=" " alt="" coords="265,144,458,189"/>
+<area shape="poly" id="edge301_Node000000_Node000003" title=" " alt="" coords="133,279,186,238,251,199,282,187,278,191,254,203,189,243,137,283"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1ImageMicroOp.html" title=" " alt="" coords="278,213,444,258"/>
+<area shape="poly" id="edge302_Node000000_Node000004" title=" " alt="" coords="172,284,279,256,276,260,175,289"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1IntersectionMicroOp.html" title=" " alt="" coords="269,283,454,327"/>
+<area shape="poly" id="edge303_Node000000_Node000005" title=" " alt="" coords="219,303,271,304,266,306,221,307"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1PreimageMicroOp.html" title=" " alt="" coords="268,352,455,397"/>
+<area shape="poly" id="edge304_Node000000_Node000006" title=" " alt="" coords="173,321,278,350,274,353,174,326"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1StructuredImageMicroOp.html" title=" " alt="" coords="254,421,469,466"/>
+<area shape="poly" id="edge305_Node000000_Node000007" title=" " alt="" coords="134,326,189,367,254,407,282,420,277,421,251,411,186,372,135,332"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1StructuredPreimageMicroOp.html" title=" " alt="" coords="261,491,462,535"/>
+<area shape="poly" id="edge306_Node000000_Node000008" title=" " alt="" coords="123,330,177,403,213,442,254,476,277,490,271,490,251,481,209,446,173,407,122,335"/>
+<area shape="rect" id="Node000009" href="$classRealm_1_1UnionMicroOp.html" title=" " alt="" coords="280,560,443,605"/>
+<area shape="poly" id="edge307_Node000000_Node000009" title=" " alt="" coords="116,331,137,379,166,437,205,495,228,522,254,546,282,564,277,563,251,550,225,526,201,499,162,439,132,382,116,337"/>
 </map>

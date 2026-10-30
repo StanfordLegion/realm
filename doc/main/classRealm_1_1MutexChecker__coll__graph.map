@@ -1,7 +1,7 @@
 <map id="Realm::MutexChecker" name="Realm::MutexChecker">
-<area shape="rect" id="Node000001" title=" " alt="" coords="92,93,257,119"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1noncopyable.html" title=" " alt="" coords="5,5,160,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="107,38,164,91,160,95,103,42"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1atomic.html" title=" " alt="" coords="185,5,349,31"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="246,42,189,95,186,91,242,38"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="91,106,255,134"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1noncopyable.html" title=" " alt="" coords="5,5,160,33"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="106,42,164,105,158,106,103,47"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1atomic.html" title=" " alt="" coords="184,5,347,33"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="245,43,187,108,184,103,240,45"/>
 </map>

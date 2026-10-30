@@ -1,15 +1,15 @@
 <map id="/home/runner/work/realm/realm/realm&#45;src/src/realm/nvtx.h" name="/home/runner/work/realm/realm/realm&#45;src/src/realm/nvtx.h">
-<area shape="rect" id="Node000001" title=" " alt="" coords="230,5,425,60"/>
-<area shape="rect" id="Node000002" href="$realm__config_8h.html" title=" " alt="" coords="79,108,239,133"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="277,62,195,104,193,99,275,58"/>
-<area shape="rect" id="Node000005" title=" " alt="" coords="263,108,314,133"/>
-<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="318,61,302,96,297,94,313,59"/>
-<area shape="rect" id="Node000006" title=" " alt="" coords="338,108,397,133"/>
-<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="342,59,359,94,354,97,337,61"/>
-<area shape="rect" id="Node000007" title=" " alt="" coords="421,108,484,133"/>
-<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="367,58,426,98,423,102,364,62"/>
-<area shape="rect" id="Node000003" href="$realm__defines_8h.html" title=" " alt="" coords="5,181,132,207"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="146,135,96,175,93,170,143,131"/>
-<area shape="rect" id="Node000004" href="$compiler__support_8h.html" title=" " alt="" coords="157,181,346,207"/>
-<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="176,131,227,171,224,175,172,135"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="230,5,424,67"/>
+<area shape="rect" id="Node000002" href="$realm__config_8h.html" title=" " alt="" coords="79,115,238,143"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="268,69,198,110,195,105,273,66"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="263,115,313,143"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="316,66,302,102,298,99,312,69"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="338,115,396,143"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="341,65,357,101,352,100,339,70"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="420,115,482,143"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="369,65,423,106,418,105,367,70"/>
+<area shape="rect" id="Node000003" href="$realm__defines_8h.html" title=" " alt="" coords="5,191,131,218"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="145,142,98,183,94,178,140,144"/>
+<area shape="rect" id="Node000004" href="$compiler__support_8h.html" title=" " alt="" coords="155,191,344,218"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="176,141,224,181,219,181,174,146"/>
 </map>

@@ -1,8 +1,8 @@
 var searchData=
 [
-  ['c_5fenums_0',['c_enums',['../processor_8h.html#afaed0bf55f33b3f2a41cd7f8880c04ee',1,'C_ENUMS:&#160;processor.h'],['../memory_8h.html#afaed0bf55f33b3f2a41cd7f8880c04ee',1,'C_ENUMS:&#160;memory.h'],['../channel_8h.html#a348e5c703a9ff98e48e261210630e03e',1,'C_ENUMS:&#160;channel.h'],['../realm__c_8h.html#afaed0bf55f33b3f2a41cd7f8880c04ee',1,'C_ENUMS:&#160;realm_c.h'],['../realm__c_8h.html#afaed0bf55f33b3f2a41cd7f8880c04ee',1,'C_ENUMS:&#160;realm_c.h']]],
+  ['c_5fenums_0',['C_ENUMS',['../memory_8h.html#afaed0bf55f33b3f2a41cd7f8880c04ee',1,'C_ENUMS:&#160;memory.h'],['../processor_8h.html#afaed0bf55f33b3f2a41cd7f8880c04ee',1,'C_ENUMS:&#160;processor.h'],['../realm__c_8h.html#afaed0bf55f33b3f2a41cd7f8880c04ee',1,'C_ENUMS:&#160;realm_c.h'],['../realm__c_8h.html#a29a0b30a52c604c82ed4477c6307cb80',1,'C_ENUMS:&#160;realm_c.h'],['../channel_8h.html#a348e5c703a9ff98e48e261210630e03e',1,'C_ENUMS:&#160;channel.h']]],
   ['check_5fcu_1',['CHECK_CU',['../cuda__internal_8h.html#a9395261efe158a05beeb9194ae737b4b',1,'cuda_internal.h']]],
-  ['check_5fcudart_2',['check_cudart',['../cuda__internal_8h.html#a347bfed4b338a2f3a450278b6bffd903',1,'CHECK_CUDART:&#160;cuda_internal.h'],['../hip__internal_8h.html#a347bfed4b338a2f3a450278b6bffd903',1,'CHECK_CUDART:&#160;hip_internal.h']]],
+  ['check_5fcudart_2',['CHECK_CUDART',['../cuda__internal_8h.html#a347bfed4b338a2f3a450278b6bffd903',1,'CHECK_CUDART:&#160;cuda_internal.h'],['../hip__internal_8h.html#a347bfed4b338a2f3a450278b6bffd903',1,'CHECK_CUDART:&#160;hip_internal.h']]],
   ['check_5fcupti_3',['CHECK_CUPTI',['../cuda__internal_8h.html#a0eafdb0a44c9bc3de2750ec22974d26d',1,'cuda_internal.h']]],
   ['check_5fgex_4',['CHECK_GEX',['../gasnetex__wrapper__internal_8h.html#a04b10514a93fc92b62c8045ad4eb9c6d',1,'gasnetex_wrapper_internal.h']]],
   ['check_5fhdf5_5',['CHECK_HDF5',['../hdf5__internal_8h.html#a7dee7cb7f634ab757ef8ceab9ea4e37c',1,'hdf5_internal.h']]],

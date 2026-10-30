@@ -46,11 +46,11 @@ var hip__internal_8h =
     [ "CHECK_CUDART", "hip__internal_8h.html#a347bfed4b338a2f3a450278b6bffd903", null ],
     [ "CHECK_HIP", "hip__internal_8h.html#a5a045d1d3827a97fd6ef12509b83cfe3", null ],
     [ "REPORT_HIP_ERROR", "hip__internal_8h.html#a6e45146997a4be05508065bef1338d8c", null ],
-    [ "GPUMemcpyKind", "hip__internal_8h.html#a5a2cc7b74a71b72cbff0ee7358974282", [
-      [ "GPU_MEMCPY_HOST_TO_DEVICE", "hip__internal_8h.html#a5a2cc7b74a71b72cbff0ee7358974282a413e25f5457c48bf4242c3843c564329", null ],
-      [ "GPU_MEMCPY_DEVICE_TO_HOST", "hip__internal_8h.html#a5a2cc7b74a71b72cbff0ee7358974282ab3bdc14f30e769ed62560a40164f4946", null ],
-      [ "GPU_MEMCPY_DEVICE_TO_DEVICE", "hip__internal_8h.html#a5a2cc7b74a71b72cbff0ee7358974282abaed9f8409e994f06d7373c4a171457b", null ],
-      [ "GPU_MEMCPY_PEER_TO_PEER", "hip__internal_8h.html#a5a2cc7b74a71b72cbff0ee7358974282a89796653f94d60f878e3f4fe54beed20", null ]
+    [ "Realm::Hip::GPUMemcpyKind", "namespaceRealm_1_1Hip.html#a5a2cc7b74a71b72cbff0ee7358974282", [
+      [ "Realm::Hip::GPU_MEMCPY_HOST_TO_DEVICE", "namespaceRealm_1_1Hip.html#a5a2cc7b74a71b72cbff0ee7358974282a413e25f5457c48bf4242c3843c564329", null ],
+      [ "Realm::Hip::GPU_MEMCPY_DEVICE_TO_HOST", "namespaceRealm_1_1Hip.html#a5a2cc7b74a71b72cbff0ee7358974282ab3bdc14f30e769ed62560a40164f4946", null ],
+      [ "Realm::Hip::GPU_MEMCPY_DEVICE_TO_DEVICE", "namespaceRealm_1_1Hip.html#a5a2cc7b74a71b72cbff0ee7358974282abaed9f8409e994f06d7373c4a171457b", null ],
+      [ "Realm::Hip::GPU_MEMCPY_PEER_TO_PEER", "namespaceRealm_1_1Hip.html#a5a2cc7b74a71b72cbff0ee7358974282a89796653f94d60f878e3f4fe54beed20", null ]
     ] ],
-    [ "hip_module_singleton", "hip__internal_8h.html#a73b350a0c58a045a3635296c9bb70d60", null ]
+    [ "Realm::Hip::hip_module_singleton", "namespaceRealm_1_1Hip.html#a73b350a0c58a045a3635296c9bb70d60", null ]
 ];

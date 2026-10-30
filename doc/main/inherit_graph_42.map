@@ -1,3 +1,28 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,5,205,31"/>
+<area shape="rect" id="Node000000" href="$classPRealm_1_1ModuleConfig.html" title=" " alt="" coords="5,175,174,202"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1CoreModuleConfig.html" title=" " alt="" coords="250,368,440,396"/>
+<area shape="poly" id="edge55_Node000000_Node000001" title=" " alt="" coords="163,208,176,217,189,235,196,254,199,289,203,323,210,339,223,354,252,373,247,373,220,359,205,342,197,324,194,289,191,255,184,238,172,221,163,213"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Cuda_1_1CudaModuleConfig.html" title=" " alt="" coords="228,420,462,448"/>
+<area shape="poly" id="edge56_Node000000_Node000003" title=" " alt="" coords="164,208,176,217,192,242,199,267,199,315,197,338,199,361,207,383,224,405,241,420,236,419,220,409,202,386,194,362,192,338,193,315,194,268,187,244,172,221,165,213"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1HDF5_1_1HDF5ModuleConfig.html" title=" " alt="" coords="225,5,465,33"/>
+<area shape="poly" id="edge57_Node000000_Node000004" title=" " alt="" coords="106,160,152,100,184,69,220,44,251,32,248,35,223,48,188,73,156,104,110,163"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1Hip_1_1HipModuleConfig.html" title=" " alt="" coords="239,57,451,85"/>
+<area shape="poly" id="edge58_Node000000_Node000005" title=" " alt="" coords="116,163,164,128,221,95,260,84,256,87,223,100,166,132,120,166"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1Numa_1_1NumaModuleConfig.html" title=" " alt="" coords="222,109,468,137"/>
+<area shape="poly" id="edge59_Node000000_Node000006" title=" " alt="" coords="147,167,221,146,271,136,266,139,222,151,150,172"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1OpenMP_1_1OpenMPModuleConfig.html" title=" " alt="" coords="227,161,462,206"/>
+<area shape="poly" id="edge60_Node000000_Node000007" title=" " alt="" coords="188,184,229,184,224,187,191,189"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1ProcSet_1_1ProcSetModuleConfig.html" title=" " alt="" coords="232,230,458,275"/>
+<area shape="poly" id="edge61_Node000000_Node000008" title=" " alt="" coords="162,204,255,228,250,231,163,209"/>
+<area shape="rect" id="Node000009" href="$classRealm_1_1Python_1_1PythonModuleConfig.html" title=" " alt="" coords="236,300,454,344"/>
+<area shape="poly" id="edge62_Node000000_Node000009" title=" " alt="" coords="157,206,175,217,192,235,200,252,208,269,223,285,245,299,239,299,220,289,203,272,195,255,187,238,172,221,158,212"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ModuleConfig.html" title=" " alt="" coords="9,231,170,258"/>
+<area shape="poly" id="edge63_Node000002_Node000001" title=" " alt="" coords="114,267,162,313,191,335,223,354,253,367,247,368,221,359,188,340,158,317,113,273"/>
+<area shape="poly" id="edge64_Node000002_Node000003" title=" " alt="" coords="106,269,127,302,153,339,185,375,223,405,250,420,245,419,220,409,182,379,149,342,122,305,105,275"/>
+<area shape="poly" id="edge65_Node000002_Node000004" title=" " alt="" coords="162,221,172,212,186,191,193,171,194,128,195,86,203,65,220,44,241,31,237,36,223,48,208,67,200,87,199,128,198,171,191,194,176,216,166,224"/>
+<area shape="poly" id="edge66_Node000002_Node000005" title=" " alt="" coords="160,221,172,212,183,198,190,184,194,154,199,125,207,110,220,96,243,84,239,88,223,100,211,113,204,126,199,155,195,185,188,201,176,216,164,225"/>
+<area shape="poly" id="edge67_Node000002_Node000006" title=" " alt="" coords="156,222,172,212,187,196,195,179,203,162,220,146,245,136,241,139,223,151,208,165,199,182,191,199,175,216,159,226"/>
+<area shape="poly" id="edge68_Node000002_Node000007" title=" " alt="" coords="164,224,251,204,247,208,166,229"/>
+<area shape="poly" id="edge69_Node000002_Node000008" title=" " alt="" coords="184,245,234,248,229,250,186,250"/>
+<area shape="poly" id="edge70_Node000002_Node000009" title=" " alt="" coords="148,261,222,285,264,298,259,300,221,290,148,266"/>
 </map>

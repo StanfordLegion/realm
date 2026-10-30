@@ -1,3 +1,35 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,5,181,45"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1ActiveMessageHandlerRegBase.html" title=" " alt="" coords="5,743,227,788"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="308,5,552,67"/>
+<area shape="poly" id="edge91_Node000000_Node000001" title=" " alt="" coords="118,728,135,585,166,390,187,291,211,202,240,128,256,99,273,77,308,54,306,58,277,81,260,102,245,130,216,203,192,293,171,391,140,586,124,728"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="293,92,567,170"/>
+<area shape="poly" id="edge92_Node000000_Node000002" title=" " alt="" coords="113,727,117,622,124,552,137,476,156,397,184,319,223,246,246,212,273,181,294,165,291,170,277,185,250,216,227,249,189,322,161,399,142,477,129,553,122,622,119,728"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="283,195,576,256"/>
+<area shape="poly" id="edge93_Node000000_Node000003" title=" " alt="" coords="115,728,122,635,131,575,145,511,165,445,192,380,228,319,273,266,290,255,287,259,277,270,232,322,197,382,170,446,150,512,136,576,128,635,120,728"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="293,281,567,360"/>
+<area shape="poly" id="edge94_Node000000_Node000004" title=" " alt="" coords="119,727,133,652,160,556,180,506,205,456,236,410,273,369,293,355,291,359,276,373,240,413,210,459,185,508,165,558,138,653,124,728"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="293,384,567,462"/>
+<area shape="poly" id="edge95_Node000000_Node000005" title=" " alt="" coords="125,727,144,671,175,602,217,532,243,500,273,471,294,459,291,463,276,476,247,504,222,535,180,605,149,673,130,729"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="293,486,567,565"/>
+<area shape="poly" id="edge96_Node000000_Node000006" title=" " alt="" coords="136,729,192,651,230,610,273,574,294,563,291,567,276,578,233,613,196,654,140,731"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="295,589,565,668"/>
+<area shape="poly" id="edge97_Node000000_Node000007" title=" " alt="" coords="166,733,274,678,306,666,303,670,276,683,170,737"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="290,692,570,754"/>
+<area shape="poly" id="edge98_Node000000_Node000008" title=" " alt="" coords="240,746,292,740,288,744,244,751"/>
+<area shape="rect" id="Node000009" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="319,777,540,839"/>
+<area shape="poly" id="edge99_Node000000_Node000009" title=" " alt="" coords="241,780,321,792,317,795,243,785"/>
+<area shape="rect" id="Node000010" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="319,863,540,924"/>
+<area shape="poly" id="edge100_Node000000_Node000010" title=" " alt="" coords="166,794,219,822,276,848,321,865,316,867,274,853,217,827,168,799"/>
+<area shape="rect" id="Node000011" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="319,948,540,1010"/>
+<area shape="poly" id="edge101_Node000000_Node000011" title=" " alt="" coords="140,798,198,868,235,904,276,934,321,956,316,957,273,938,232,908,194,871,141,803"/>
+<area shape="rect" id="Node000012" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="292,1033,568,1095"/>
+<area shape="poly" id="edge102_Node000000_Node000012" title=" " alt="" coords="130,800,153,851,184,910,225,969,249,996,276,1019,295,1032,290,1033,273,1024,246,1000,221,973,179,913,148,854,130,805"/>
+<area shape="rect" id="Node000013" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="293,1119,567,1180"/>
+<area shape="poly" id="edge103_Node000000_Node000013" title=" " alt="" coords="124,800,143,868,171,950,191,992,215,1033,243,1072,276,1105,295,1119,289,1120,273,1109,239,1075,211,1036,186,995,166,952,137,870,124,806"/>
+<area shape="rect" id="Node000014" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="275,1204,585,1266"/>
+<area shape="poly" id="edge104_Node000000_Node000014" title=" " alt="" coords="120,801,134,884,160,988,179,1043,205,1097,237,1147,276,1190,292,1203,286,1204,273,1194,233,1150,200,1099,175,1045,154,990,129,885,120,806"/>
+<area shape="rect" id="Node000015" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="293,1289,567,1351"/>
+<area shape="poly" id="edge105_Node000000_Node000015" title=" " alt="" coords="118,801,126,899,135,960,148,1026,168,1093,195,1160,231,1221,277,1276,295,1291,290,1291,273,1279,227,1225,191,1162,163,1095,143,1027,130,961,121,899,117,806"/>
+<area shape="rect" id="Node000016" href="$classRealm_1_1ActiveMessageHandlerReg.html" title=" " alt="" coords="319,1375,540,1420"/>
+<area shape="poly" id="edge106_Node000000_Node000016" title=" " alt="" coords="122,800,144,929,176,1097,197,1181,221,1258,247,1320,262,1343,276,1361,297,1376,321,1389,316,1388,294,1380,273,1365,257,1346,243,1322,216,1259,192,1183,171,1098,138,930,122,806"/>
 </map>

@@ -1,7 +1,7 @@
 <map id="Realm::Barrier" name="Realm::Barrier">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,80,121,105"/>
-<area shape="poly" id="edge3_Node000001_Node000001" title=" " alt="" coords="136,85,148,93,140,100,122,102,121,97,138,95,143,93,134,90"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Event.html" title=" " alt="" coords="9,5,118,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="66,45,66,80,61,80,61,45"/>
-<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="133,10,145,18,136,25,118,28,118,22,134,20,139,18,130,15"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,82,121,110"/>
+<area shape="poly" id="edge3_Node000001_Node000001" title=" " alt="" coords="136,88,147,96,139,104,121,106,121,101,137,99,142,96,135,93"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Event.html" title=" " alt="" coords="9,5,117,33"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="65,47,66,83,60,81,61,50"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="133,11,144,19,136,27,119,29,117,24,134,22,139,19,133,16"/>
 </map>

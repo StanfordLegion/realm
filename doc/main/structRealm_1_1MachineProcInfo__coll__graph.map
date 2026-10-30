@@ -1,8 +1,8 @@
 <map id="Realm::MachineProcInfo" name="Realm::MachineProcInfo">
-<area shape="rect" id="Node000001" title=" " alt="" coords="359,85,539,111"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Processor.html" title=" " alt="" coords="70,44,205,69"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="219,65,359,83,358,89,218,70"/>
-<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="103,30,113,21,137,17,157,20,170,26,173,36,167,45,162,42,168,35,166,29,156,25,137,23,115,26,106,34"/>
-<area shape="rect" id="Node000003" href="$structRealm_1_1MachineAffinityInfo.html" title=" " alt="" coords="5,93,269,148"/>
-<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="283,111,334,107,358,105,358,111,335,113,283,116"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="361,96,540,123"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Processor.html" title=" " alt="" coords="70,54,204,82"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="219,76,363,97,358,99,219,82"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="104,37,116,30,137,28,157,30,169,36,173,45,168,56,164,52,168,45,165,40,155,35,137,33,117,35,107,41"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1MachineAffinityInfo.html" title=" " alt="" coords="5,107,269,168"/>
+<area shape="poly" id="edge3_Node000001_Node000003" title=" " alt="" coords="284,131,336,127,372,124,377,124,337,132,284,136"/>
 </map>

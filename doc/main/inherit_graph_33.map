@@ -1,3 +1,26 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1AddressList.html" title=" " alt="" coords="5,5,152,31"/>
+<area shape="rect" id="Node000000" href="$classPRealm_1_1ExternalInstanceResource.html" title=" " alt="" coords="31,131,220,175"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1ExternalCudaArrayResource.html" title=" " alt="" coords="317,5,510,50"/>
+<area shape="poly" id="edge11_Node000000_Node000001" title=" " alt="" coords="175,120,231,89,293,60,328,49,324,52,295,65,233,94,178,124"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1ExternalCudaMemoryResource.html" title=" " alt="" coords="307,75,520,119"/>
+<area shape="poly" id="edge12_Node000000_Node000003" title=" " alt="" coords="234,129,309,116,304,119,236,134"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1ExternalFileResource.html" title=" " alt="" coords="309,143,518,171"/>
+<area shape="poly" id="edge13_Node000000_Node000004" title=" " alt="" coords="235,152,311,154,306,157,236,157"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1ExternalHDF5Resource.html" title=" " alt="" coords="303,195,524,223"/>
+<area shape="poly" id="edge14_Node000000_Node000005" title=" " alt="" coords="235,172,341,193,336,196,235,177"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1ExternalHipMemoryResource.html" title=" " alt="" coords="313,247,514,291"/>
+<area shape="poly" id="edge15_Node000000_Node000006" title=" " alt="" coords="234,179,247,185,262,197,272,209,281,221,295,232,321,246,315,246,292,237,277,225,268,213,259,201,244,190,234,184"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1ExternalMemoryResource.html" title=" " alt="" coords="294,315,533,343"/>
+<area shape="poly" id="edge16_Node000000_Node000007" title=" " alt="" coords="233,176,247,186,260,200,267,216,272,246,276,275,283,288,295,302,313,315,308,314,292,306,279,291,271,277,267,247,262,217,256,203,244,190,233,181"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1ExternalCudaPinnedHostResource.html" title=" " alt="" coords="581,272,783,317"/>
+<area shape="poly" id="edge17_Node000007_Node000008" title=" " alt="" coords="540,310,583,307,578,308,541,315"/>
+<area shape="rect" id="Node000009" href="$classRealm_1_1ExternalHipPinnedHostResource.html" title=" " alt="" coords="586,341,778,386"/>
+<area shape="poly" id="edge18_Node000007_Node000009" title=" " alt="" coords="541,343,589,351,583,351,541,348"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ExternalInstanceResource.html" title=" " alt="" coords="5,199,246,227"/>
+<area shape="poly" id="edge19_Node000002_Node000001" title=" " alt="" coords="241,188,244,186,257,171,264,157,268,125,271,93,279,76,292,60,318,45,314,49,295,64,283,79,277,94,273,126,269,158,261,174,248,190,244,192"/>
+<area shape="poly" id="edge20_Node000002_Node000003" title=" " alt="" coords="235,191,244,185,259,173,268,159,276,144,292,129,318,118,313,122,295,134,281,147,272,161,263,176,247,190,238,195"/>
+<area shape="poly" id="edge21_Node000002_Node000004" title=" " alt="" coords="215,193,341,170,336,173,216,198"/>
+<area shape="poly" id="edge22_Node000002_Node000005" title=" " alt="" coords="260,209,305,210,300,211,262,214"/>
+<area shape="poly" id="edge23_Node000002_Node000006" title=" " alt="" coords="215,228,315,248,310,250,215,233"/>
+<area shape="poly" id="edge24_Node000002_Node000007" title=" " alt="" coords="162,233,223,268,295,301,332,314,327,315,293,306,221,273,161,238"/>
 </map>

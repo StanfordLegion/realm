@@ -1,17 +1,17 @@
 <map id="Realm::LocalManagedMemory" name="Realm::LocalManagedMemory">
-<area shape="rect" id="Node000001" title=" " alt="" coords="208,129,428,155"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1Cuda_1_1GPUFBMemory.html" title=" " alt="" coords="477,5,689,31"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="344,119,402,78,475,40,509,28,511,33,477,44,405,83,348,123"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1Cuda_1_1GPUZCMemory.html" title=" " alt="" coords="476,55,689,80"/>
-<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="368,122,475,89,520,78,522,83,477,94,370,127"/>
-<area shape="rect" id="Node000005" href="$classRealm_1_1DiskMemory.html" title=" " alt="" coords="505,104,660,129"/>
-<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="441,128,505,121,505,127,442,133"/>
-<area shape="rect" id="Node000006" href="$classRealm_1_1Hip_1_1GPUFBMemory.html" title=" " alt="" coords="482,153,683,179"/>
-<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="442,151,482,154,481,160,441,156"/>
-<area shape="rect" id="Node000007" href="$classRealm_1_1Hip_1_1GPUZCMemory.html" title=" " alt="" coords="481,203,684,228"/>
-<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="371,157,477,189,522,200,521,205,475,194,369,162"/>
-<area shape="rect" id="Node000008" href="$classRealm_1_1LocalCPUMemory.html" title=" " alt="" coords="489,252,676,277"/>
-<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="348,161,406,200,477,238,511,249,509,254,475,243,403,205,345,165"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1MemoryImpl.html" title=" " alt="" coords="5,129,160,155"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="174,139,208,139,208,145,174,145"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="208,136,427,164"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Cuda_1_1GPUFBMemory.html" title=" " alt="" coords="476,5,687,33"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="346,124,403,83,474,43,512,33,507,35,476,48,406,87,349,129"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Cuda_1_1GPUZCMemory.html" title=" " alt="" coords="475,57,687,85"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="373,128,474,95,522,85,517,87,476,100,375,133"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1DiskMemory.html" title=" " alt="" coords="504,109,658,137"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="442,135,506,130,501,132,443,140"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1Hip_1_1GPUFBMemory.html" title=" " alt="" coords="481,161,681,189"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="442,159,483,165,478,166,443,165"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1Hip_1_1GPUZCMemory.html" title=" " alt="" coords="480,213,682,241"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="375,166,476,198,523,213,518,213,474,203,374,172"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1LocalCPUMemory.html" title=" " alt="" coords="488,265,674,293"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="349,171,406,212,476,250,512,265,507,264,474,255,404,216,347,176"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1MemoryImpl.html" title=" " alt="" coords="5,136,160,164"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="174,147,210,149,205,151,176,152"/>
 </map>

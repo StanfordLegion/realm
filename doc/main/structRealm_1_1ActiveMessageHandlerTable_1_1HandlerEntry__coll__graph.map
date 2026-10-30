@@ -1,11 +1,11 @@
 <map id="Realm::ActiveMessageHandlerTable::HandlerEntry" name="Realm::ActiveMessageHandlerTable::HandlerEntry">
-<area shape="rect" id="Node000001" title=" " alt="" coords="83,269,305,309"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1TimeLimit.html" title=" " alt="" coords="23,159,162,185"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="113,193,156,244,178,267,174,271,152,247,109,197"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,5,180,31"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="95,44,95,159,90,159,90,44"/>
-<area shape="rect" id="Node000004" href="$structRealm_1_1ActiveMessageHandlerStats.html" title=" " alt="" coords="187,152,409,192"/>
-<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="281,205,249,247,223,271,219,267,245,244,277,202"/>
-<area shape="rect" id="Node000005" href="$classRealm_1_1atomic.html" title=" " alt="" coords="205,5,391,31"/>
-<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="301,44,301,152,295,152,295,44"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="83,335,304,380"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1TimeLimit.html" title=" " alt="" coords="24,204,161,232"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="107,242,151,310,173,335,167,335,146,313,105,247"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,5,180,33"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="94,46,95,203,90,203,91,50"/>
+<area shape="rect" id="Node000004" href="$structRealm_1_1ActiveMessageHandlerStats.html" title=" " alt="" coords="186,195,407,240"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="284,253,270,284,251,313,226,337,223,333,246,310,265,282,280,256"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1atomic.html" title=" " alt="" coords="204,5,389,33"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="298,47,299,196,294,194,295,51"/>
 </map>

@@ -1,3 +1,5 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1OutbufUsecountDec.html" title=" " alt="" coords="5,5,208,31"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1QueryPredicate.html" title=" " alt="" coords="5,5,236,50"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1ProcessorHasAffinityPredicate.html" title=" " alt="" coords="284,5,490,50"/>
+<area shape="poly" id="edge338_Node000000_Node000001" title=" " alt="" coords="251,25,286,28,280,28,251,30"/>
 </map>

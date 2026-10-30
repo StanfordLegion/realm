@@ -1,7 +1,7 @@
 <map id="Realm::DynamicTable&lt; ALLOCATOR &gt;" name="Realm::DynamicTable&lt; ALLOCATOR &gt;">
-<area shape="rect" id="Node000001" title=" " alt="" coords="135,108,299,148"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,13,200,38"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="128,45,198,106,194,110,124,49"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1atomic.html" title=" " alt="" coords="225,5,439,45"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="307,57,276,86,246,110,243,106,273,82,303,53"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="134,123,297,168"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,14,199,42"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="126,50,197,122,192,123,124,55"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1atomic.html" title=" " alt="" coords="223,5,437,50"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="310,62,280,101,251,125,248,120,276,97,306,64"/>
 </map>

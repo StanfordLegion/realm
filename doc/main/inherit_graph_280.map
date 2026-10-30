@@ -1,3 +1,11 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1HardwareTopology.html" title="Represents the topology of the host processor cores and memory." alt="" coords="5,5,199,31"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1Hip_1_1GPUCompletionNotification.html" title=" " alt="" coords="5,109,210,154"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1Hip_1_1GPUCompletionEvent.html" title=" " alt="" coords="284,5,488,50"/>
+<area shape="poly" id="edge232_Node000000_Node000001" title=" " alt="" coords="165,100,257,60,296,49,291,52,259,65,168,104"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Hip_1_1GPUIndirectTransferCompletion.html" title=" " alt="" coords="271,75,501,119"/>
+<area shape="poly" id="edge233_Node000000_Node000002" title=" " alt="" coords="224,114,273,110,268,112,226,120"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Hip_1_1GPUPreemptionWaiter.html" title=" " alt="" coords="284,144,488,189"/>
+<area shape="poly" id="edge234_Node000000_Node000003" title=" " alt="" coords="225,144,286,153,281,154,225,149"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Hip_1_1GPUTransferCompletion.html" title=" " alt="" coords="258,212,514,240"/>
+<area shape="poly" id="edge235_Node000000_Node000004" title=" " alt="" coords="164,159,210,180,258,198,300,212,295,212,257,204,208,185,164,164"/>
 </map>

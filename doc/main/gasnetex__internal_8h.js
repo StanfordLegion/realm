@@ -7,9 +7,9 @@ var gasnetex__internal_8h =
     [ "Realm::PendingCompletion", "classRealm_1_1PendingCompletion.html", "classRealm_1_1PendingCompletion" ],
     [ "Realm::PendingCompletionGroup", "structRealm_1_1PendingCompletionGroup.html", "structRealm_1_1PendingCompletionGroup" ],
     [ "Realm::PendingCompletionManager", "classRealm_1_1PendingCompletionManager.html", "classRealm_1_1PendingCompletionManager" ],
-    [ "Realm::ChunkedRecycler< T, CHUNK_SIZE >", "classRealm_1_1ChunkedRecycler.html", "classRealm_1_1ChunkedRecycler" ],
-    [ "Realm::ChunkedRecycler< T, CHUNK_SIZE >::WithPtr", "structRealm_1_1ChunkedRecycler_1_1WithPtr.html", "structRealm_1_1ChunkedRecycler_1_1WithPtr" ],
-    [ "Realm::ChunkedRecycler< T, CHUNK_SIZE >::Chunk", "structRealm_1_1ChunkedRecycler_1_1Chunk.html", "structRealm_1_1ChunkedRecycler_1_1Chunk" ],
+    [ "Realm::ChunkedRecycler&lt; T, CHUNK_SIZE &gt;", "classRealm_1_1ChunkedRecycler.html", "classRealm_1_1ChunkedRecycler" ],
+    [ "Realm::ChunkedRecycler&lt; T, CHUNK_SIZE &gt;::WithPtr", "structRealm_1_1ChunkedRecycler_1_1WithPtr.html", "structRealm_1_1ChunkedRecycler_1_1WithPtr" ],
+    [ "Realm::ChunkedRecycler&lt; T, CHUNK_SIZE &gt;::Chunk", "structRealm_1_1ChunkedRecycler_1_1Chunk.html", "structRealm_1_1ChunkedRecycler_1_1Chunk" ],
     [ "Realm::PreparedMessage", "structRealm_1_1PreparedMessage.html", "structRealm_1_1PreparedMessage" ],
     [ "Realm::XmitSrcDestPair", "classRealm_1_1XmitSrcDestPair.html", "classRealm_1_1XmitSrcDestPair" ],
     [ "Realm::XmitSrcDestPair::LongRgetData", "structRealm_1_1XmitSrcDestPair_1_1LongRgetData.html", "structRealm_1_1XmitSrcDestPair_1_1LongRgetData" ],
@@ -25,5 +25,5 @@ var gasnetex__internal_8h =
     [ "Realm::GASNetEXInternal", "classRealm_1_1GASNetEXInternal.html", "classRealm_1_1GASNetEXInternal" ],
     [ "Realm::GASNetEXInternal::SegmentInfo", "structRealm_1_1GASNetEXInternal_1_1SegmentInfo.html", "structRealm_1_1GASNetEXInternal_1_1SegmentInfo" ],
     [ "REALM_GEX_MODULE_VERSION", "gasnetex__internal_8h.html#a3ff8cc444156866a822e45603fe42864", null ],
-    [ "gex_wrapper_handle", "gasnetex__internal_8h.html#a779a1d2e80a0804ac2bb320786ce51cb", null ]
+    [ "Realm::gex_wrapper_handle", "namespaceRealm.html#a779a1d2e80a0804ac2bb320786ce51cb", null ]
 ];

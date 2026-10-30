@@ -1,3 +1,7 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1CommandLineParser.html" title=" " alt="" coords="5,5,212,31"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1CopyIndirection_1_1Base.html" title=" " alt="" coords="5,44,179,89"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1CopyIndirection_1_1Affine.html" title=" " alt="" coords="227,5,422,50"/>
+<area shape="poly" id="edge184_Node000000_Node000001" title=" " alt="" coords="193,47,229,43,224,45,195,52"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1CopyIndirection_1_1Unstructured.html" title=" " alt="" coords="238,74,411,136"/>
+<area shape="poly" id="edge185_Node000000_Node000002" title=" " alt="" coords="194,81,240,90,234,91,194,86"/>
 </map>

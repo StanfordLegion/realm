@@ -1,10 +1,10 @@
 var classRealm_1_1XferDes =
 [
+    [ "XferPort", "structRealm_1_1XferDes_1_1XferPort.html", "structRealm_1_1XferDes_1_1XferPort" ],
     [ "ControlPortState", "structRealm_1_1XferDes_1_1ControlPortState.html", "structRealm_1_1XferDes_1_1ControlPortState" ],
+    [ "UnalignedStorage", "structRealm_1_1XferDes_1_1UnalignedStorage.html", "structRealm_1_1XferDes_1_1UnalignedStorage" ],
     [ "DeferredXDEnqueue", "classRealm_1_1XferDes_1_1DeferredXDEnqueue.html", "classRealm_1_1XferDes_1_1DeferredXDEnqueue" ],
     [ "SequenceCache", "classRealm_1_1XferDes_1_1SequenceCache.html", "classRealm_1_1XferDes_1_1SequenceCache" ],
-    [ "UnalignedStorage", "structRealm_1_1XferDes_1_1UnalignedStorage.html", "structRealm_1_1XferDes_1_1UnalignedStorage" ],
-    [ "XferPort", "structRealm_1_1XferDes_1_1XferPort.html", "structRealm_1_1XferDes_1_1XferPort" ],
     [ "ReadSequenceCache", "classRealm_1_1XferDes.html#a505062df199da7ab6a5daab994eb4081", null ],
     [ "WriteSequenceCache", "classRealm_1_1XferDes.html#a2871bd59f368ef57d24e9df41cbb490b", null ],
     [ "XferDesList", "classRealm_1_1XferDes.html#ad04088e965a5d9b65dc2d7932c08f23b", null ],

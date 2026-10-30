@@ -1,3 +1,9 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="5,5,184,31"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1ThreadScheduler.html" title=" " alt="" coords="5,5,186,33"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1ThreadedTaskScheduler.html" title=" " alt="" coords="234,5,459,33"/>
+<area shape="poly" id="edge389_Node000000_Node000001" title=" " alt="" coords="201,17,236,19,231,19,201,22"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1KernelThreadTaskScheduler.html" title=" " alt="" coords="507,5,757,33"/>
+<area shape="poly" id="edge390_Node000001_Node000002" title=" " alt="" coords="475,17,509,19,504,19,475,22"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1PythonThreadTaskScheduler.html" title=" " alt="" coords="805,5,1060,33"/>
+<area shape="poly" id="edge391_Node000002_Node000003" title=" " alt="" coords="773,17,808,19,802,19,773,22"/>
 </map>

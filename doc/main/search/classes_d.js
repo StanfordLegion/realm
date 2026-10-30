@@ -2,8 +2,8 @@ var searchData=
 [
   ['objectheader_0',['ObjectHeader',['../structRealm_1_1ReplicatedHeap_1_1ObjectHeader.html',1,'Realm::ReplicatedHeap']]],
   ['oobgroupcomm_1',['OOBGroupComm',['../classRealm_1_1ucc_1_1OOBGroupComm.html',1,'Realm::ucc']]],
-  ['opaquefields_2',['OpaqueFields',['../structRealm_1_1Type_1_1OpaqueFields.html',1,'Realm::Type']]],
-  ['opaquetype_3',['OpaqueType',['../classRealm_1_1OpaqueType.html',1,'Realm']]],
+  ['opaquefields_2',['OpaqueFields',['../structPRealm_1_1Type_1_1OpaqueFields.html',1,'PRealm::Type::OpaqueFields'],['../structRealm_1_1Type_1_1OpaqueFields.html',1,'Realm::Type::OpaqueFields']]],
+  ['opaquetype_3',['OpaqueType',['../classPRealm_1_1OpaqueType.html',1,'PRealm::OpaqueType'],['../classRealm_1_1OpaqueType.html',1,'Realm::OpaqueType']]],
   ['openfileinfo_4',['OpenFileInfo',['../classRealm_1_1FileMemory_1_1OpenFileInfo.html',1,'Realm::FileMemory']]],
   ['openmpcontextmanager_5',['OpenMPContextManager',['../classRealm_1_1LocalOpenMPProcessor_1_1OpenMPContextManager.html',1,'Realm::LocalOpenMPProcessor']]],
   ['openmpmodule_6',['OpenMPModule',['../classRealm_1_1OpenMP_1_1OpenMPModule.html',1,'Realm::OpenMP']]],

@@ -1,5 +1,5 @@
 <map id="Realm::PieceLookup::CompiledProgram::PerField" name="Realm::PieceLookup::CompiledProgram::PerField">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,108,212,148"/>
-<area shape="rect" id="Node000002" href="$structRealm_1_1PieceLookup_1_1Instruction.html" title=" " alt="" coords="32,5,185,45"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="111,59,111,108,106,108,106,59"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,123,212,168"/>
+<area shape="rect" id="Node000002" href="$structRealm_1_1PieceLookup_1_1Instruction.html" title=" " alt="" coords="32,5,185,50"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="110,64,111,123,106,122,107,68"/>
 </map>

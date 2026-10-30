@@ -1,16 +1,16 @@
 <map id="/home/runner/work/realm/realm/realm&#45;src/src/realm/ucx/bootstrap/logger.h" name="/home/runner/work/realm/realm/realm&#45;src/src/realm/ucx/bootstrap/logger.h">
-<area shape="rect" id="Node000001" title=" " alt="" coords="207,5,401,60"/>
-<area shape="rect" id="Node000002" href="$client_8h.html" title=" " alt="" coords="5,108,200,163"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="241,68,156,110,154,106,238,64"/>
-<area shape="rect" id="Node000003" href="$p2p__comm_8h.html" title=" " alt="" coords="203,313,405,368"/>
-<area shape="poly" id="edge5_Node000001_Node000003" title=" " alt="" coords="415,55,453,76,470,90,484,107,496,137,495,167,483,197,463,226,437,252,409,276,352,315,349,311,405,272,434,248,459,222,478,195,490,166,491,138,479,109,466,93,450,80,413,60"/>
-<area shape="rect" id="Node000004" href="$worker_8h.html" title=" " alt="" coords="140,211,335,265"/>
-<area shape="poly" id="edge9_Node000001_Node000004" title=" " alt="" coords="282,73,265,109,250,163,243,211,237,210,245,162,260,107,278,71"/>
-<area shape="rect" id="Node000005" href="$server_8h.html" title=" " alt="" coords="275,108,469,163"/>
-<area shape="poly" id="edge6_Node000001_Node000005" title=" " alt="" coords="332,70,356,106,352,109,327,73"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="104,176,110,221,118,244,130,264,164,293,204,314,201,318,161,297,126,267,113,246,105,223,99,177"/>
-<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="150,169,204,208,200,213,147,173"/>
-<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="265,275,289,312,284,315,260,278"/>
-<area shape="poly" id="edge7_Node000005_Node000003" title=" " alt="" coords="370,177,362,220,349,266,324,315,319,312,344,264,357,219,365,176"/>
-<area shape="poly" id="edge8_Node000005_Node000004" title=" " alt="" coords="327,173,274,213,271,208,324,169"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="207,5,401,67"/>
+<area shape="rect" id="Node000002" href="$client_8h.html" title=" " alt="" coords="5,115,200,177"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="232,77,161,117,157,112,236,73"/>
+<area shape="rect" id="Node000003" href="$p2p__comm_8h.html" title=" " alt="" coords="203,334,405,396"/>
+<area shape="poly" id="edge5_Node000001_Node000003" title=" " alt="" coords="416,61,454,83,483,114,496,145,496,177,484,209,465,239,440,267,411,293,354,336,352,331,408,289,436,264,461,236,480,206,491,176,491,146,479,116,451,87,416,66"/>
+<area shape="rect" id="Node000004" href="$worker_8h.html" title=" " alt="" coords="140,225,334,286"/>
+<area shape="poly" id="edge9_Node000001_Node000004" title=" " alt="" coords="279,78,265,116,250,173,242,225,238,223,245,172,260,114,276,83"/>
+<area shape="rect" id="Node000005" href="$server_8h.html" title=" " alt="" coords="275,115,469,177"/>
+<area shape="poly" id="edge6_Node000001_Node000005" title=" " alt="" coords="331,77,355,115,350,114,330,83"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="101,190,109,240,117,263,130,285,163,315,205,338,200,339,160,319,126,288,112,266,104,241,99,195"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="152,184,202,224,197,225,152,189"/>
+<area shape="poly" id="edge4_Node000004_Node000003" title=" " alt="" coords="265,297,288,334,283,333,263,302"/>
+<area shape="poly" id="edge7_Node000005_Node000003" title=" " alt="" coords="369,190,362,239,349,287,325,336,321,332,344,285,357,238,366,194"/>
+<area shape="poly" id="edge8_Node000005_Node000004" title=" " alt="" coords="324,185,276,226,273,222,320,188"/>
 </map>

@@ -1,8 +1,8 @@
 var classRealm_1_1HardwareTopology =
 [
-    [ "MemoryInfo", "structRealm_1_1HardwareTopology_1_1MemoryInfo.html", "structRealm_1_1HardwareTopology_1_1MemoryInfo" ],
     [ "Proc", "structRealm_1_1HardwareTopology_1_1Proc.html", "structRealm_1_1HardwareTopology_1_1Proc" ],
-    [ "ProcID", "classRealm_1_1HardwareTopology.html#a2d3d6082d994360a0457deb8eb81a91f", null ],
+    [ "MemoryInfo", "structRealm_1_1HardwareTopology_1_1MemoryInfo.html", "structRealm_1_1HardwareTopology_1_1MemoryInfo" ],
+    [ "ProcID", "classRealm_1_1HardwareTopology.html#a7b819147e508f09bdd7c5bbca75fc4d0", null ],
     [ "HardwareTopology", "classRealm_1_1HardwareTopology.html#a5dc9365db720721ce9538f71696ec2da", null ],
     [ "HardwareTopology", "classRealm_1_1HardwareTopology.html#a6c182347ff6b58cd55a02ffde35f3ddf", null ],
     [ "~HardwareTopology", "classRealm_1_1HardwareTopology.html#ab609e4a6d2e2d3cbace88e331ebb6dcb", null ],

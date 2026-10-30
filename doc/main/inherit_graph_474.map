@@ -1,3 +1,15 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$structRealm_1_1PendingPutHeader.html" title=" " alt="" coords="5,5,197,31"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1RemoteChannelInfo.html" title=" " alt="" coords="5,134,206,162"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1SimpleRemoteChannelInfo.html" title=" " alt="" coords="254,134,499,162"/>
+<area shape="poly" id="edge341_Node000000_Node000001" title=" " alt="" coords="221,145,256,147,251,149,222,150"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Cuda_1_1GPUIndirectRemoteChannelInfo.html" title=" " alt="" coords="587,5,776,50"/>
+<area shape="poly" id="edge342_Node000001_Node000002" title=" " alt="" coords="414,123,475,91,546,60,589,48,584,50,548,65,477,96,417,128"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Cuda_1_1GPURemoteChannelInfo.html" title=" " alt="" coords="547,74,816,102"/>
+<area shape="poly" id="edge343_Node000001_Node000003" title=" " alt="" coords="461,128,546,110,606,101,601,103,548,116,463,133"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Cuda_1_1GPUreduceRemoteChannelInfo.html" title=" " alt="" coords="564,125,799,170"/>
+<area shape="poly" id="edge344_Node000001_Node000004" title=" " alt="" coords="514,145,566,147,561,148,515,150"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1Hip_1_1GPUIndirectRemoteChannelInfo.html" title=" " alt="" coords="567,195,796,239"/>
+<area shape="poly" id="edge345_Node000001_Node000005" title=" " alt="" coords="456,163,583,194,578,194,455,168"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1Hip_1_1GPUreduceRemoteChannelInfo.html" title=" " alt="" coords="570,264,794,309"/>
+<area shape="poly" id="edge346_Node000001_Node000006" title=" " alt="" coords="409,168,472,209,548,249,582,264,577,263,546,254,470,214,408,173"/>
 </map>

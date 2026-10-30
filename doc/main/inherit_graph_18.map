@@ -1,3 +1,9 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classp2p_1_1P2PComm.html" title=" " alt="" coords="5,5,127,31"/>
+<area shape="rect" id="Node000000" href="$classPayloadSource.html" title=" " alt="" coords="5,57,122,85"/>
+<area shape="rect" id="Node000001" href="$classContiguousPayload.html" title=" " alt="" coords="170,5,315,33"/>
+<area shape="poly" id="edge1_Node000000_Node000001" title=" " alt="" coords="127,50,194,32,190,35,129,55"/>
+<area shape="rect" id="Node000002" href="$classSpanPayload.html" title=" " alt="" coords="190,57,294,85"/>
+<area shape="poly" id="edge2_Node000000_Node000002" title=" " alt="" coords="137,69,193,70,188,72,138,74"/>
+<area shape="rect" id="Node000003" href="$classTwoDPayload.html" title=" " alt="" coords="189,109,296,137"/>
+<area shape="poly" id="edge3_Node000000_Node000003" title=" " alt="" coords="128,87,195,108,190,109,128,92"/>
 </map>

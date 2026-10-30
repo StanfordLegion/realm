@@ -1,3 +1,17 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$structRealm_1_1MetadataResponseMessage.html" title=" " alt="" coords="5,5,260,31"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1ProfilingGauges_1_1Gauge.html" title=" " alt="" coords="5,229,179,274"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1ProfilingGauges_1_1AbsoluteGauge.html" title=" " alt="" coords="237,5,433,50"/>
+<area shape="poly" id="edge327_Node000000_Node000001" title=" " alt="" coords="107,214,127,178,153,137,186,96,225,60,248,48,245,52,228,64,190,99,158,140,132,181,112,217"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ProfilingGauges_1_1AbsoluteGauge.html" title=" " alt="" coords="248,74,422,136"/>
+<area shape="poly" id="edge328_Node000000_Node000002" title=" " alt="" coords="127,217,173,181,225,145,250,135,247,138,228,150,176,185,131,221"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge.html" title=" " alt="" coords="227,160,443,205"/>
+<area shape="poly" id="edge329_Node000000_Node000003" title=" " alt="" coords="186,222,256,204,252,207,189,227"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1ProfilingGauges_1_1EventCounter.html" title=" " alt="" coords="231,229,438,274"/>
+<area shape="poly" id="edge330_Node000000_Node000004" title=" " alt="" coords="193,249,233,250,228,253,195,254"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1ProfilingGauges_1_1AbsoluteGauge.html" title=" " alt="" coords="248,299,422,343"/>
+<area shape="poly" id="edge331_Node000000_Node000005" title=" " alt="" coords="187,276,257,297,252,299,188,281"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge.html" title=" " alt="" coords="231,368,438,413"/>
+<area shape="poly" id="edge332_Node000000_Node000006" title=" " alt="" coords="129,282,175,319,228,353,255,367,250,368,225,358,172,324,128,287"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1ProfilingGauges_1_1EventCounter.html" title=" " alt="" coords="248,437,422,482"/>
+<area shape="poly" id="edge333_Node000000_Node000007" title=" " alt="" coords="113,285,161,356,192,392,228,423,250,437,245,437,225,427,188,396,156,359,111,290"/>
 </map>

@@ -1,3 +1,7 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$structRealm_1_1IncomingMessageManager_1_1Message.html" title=" " alt="" coords="5,5,252,45"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1LinearizedIndexSpaceIntfc.html" title=" " alt="" coords="5,5,219,50"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1LinearizedIndexSpace.html" title=" " alt="" coords="267,5,480,50"/>
+<area shape="poly" id="edge244_Node000000_Node000001" title=" " alt="" coords="234,25,269,28,264,28,234,30"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1AffineLinearizedIndexSpace.html" title=" " alt="" coords="528,5,740,50"/>
+<area shape="poly" id="edge245_Node000001_Node000002" title=" " alt="" coords="495,25,530,28,525,28,496,30"/>
 </map>

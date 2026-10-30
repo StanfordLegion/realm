@@ -1,3 +1,13 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1AffineAccessor.html" title=" " alt="" coords="5,5,173,45"/>
+<area shape="rect" id="Node000000" href="$classPRealm_1_1InstanceLayoutGeneric.html" title=" " alt="" coords="5,58,234,86"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1InstanceLayout.html" title=" " alt="" coords="307,5,477,50"/>
+<area shape="poly" id="edge25_Node000000_Node000001" title=" " alt="" coords="224,52,309,40,304,42,225,57"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1InstanceLayout.html" title=" " alt="" coords="307,75,477,119"/>
+<area shape="poly" id="edge26_Node000000_Node000003" title=" " alt="" coords="249,81,309,89,304,90,249,86"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1InstanceLayoutOpaque.html" title=" " alt="" coords="282,143,502,171"/>
+<area shape="poly" id="edge27_Node000000_Node000004" title=" " alt="" coords="214,88,235,96,259,113,283,129,315,143,309,142,280,134,256,117,232,101,213,93"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1InstanceLayoutGeneric.html" title=" " alt="" coords="9,110,230,138"/>
+<area shape="poly" id="edge28_Node000002_Node000001" title=" " alt="" coords="214,102,232,95,256,78,280,60,306,52,311,50,283,65,259,82,235,99,215,107"/>
+<area shape="poly" id="edge29_Node000002_Node000003" title=" " alt="" coords="245,109,309,105,304,106,246,114"/>
+<area shape="poly" id="edge30_Node000002_Node000004" title=" " alt="" coords="245,136,284,143,278,144,245,142"/>
 </map>

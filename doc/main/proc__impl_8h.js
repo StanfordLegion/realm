@@ -18,6 +18,6 @@ var proc__impl_8h =
     [ "Realm::ProcGroupCreateMessage", "structRealm_1_1ProcGroupCreateMessage.html", "structRealm_1_1ProcGroupCreateMessage" ],
     [ "Realm::ProcGroupDestroyMessage", "structRealm_1_1ProcGroupDestroyMessage.html", "structRealm_1_1ProcGroupDestroyMessage" ],
     [ "Realm::ProcGroupDestroyAckMessage", "structRealm_1_1ProcGroupDestroyAckMessage.html", "structRealm_1_1ProcGroupDestroyAckMessage" ],
-    [ "current_processor", "proc__impl_8h.html#a881590fd096f3eccfeefa5c1960b5cf1", null ],
-    [ "scheduler_lock", "proc__impl_8h.html#a8254104a39d4cc1cebdc8d93984d59f2", null ]
+    [ "Realm::ThreadLocal::current_processor", "namespaceRealm_1_1ThreadLocal.html#a1e6ac1e8720a9215d1c15f7e94019eb9", null ],
+    [ "Realm::ThreadLocal::scheduler_lock", "namespaceRealm_1_1ThreadLocal.html#a4e3dd5248290a7213d234db6783de885", null ]
 ];

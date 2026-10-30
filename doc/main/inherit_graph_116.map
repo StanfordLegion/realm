@@ -1,3 +1,15 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1CircularQueue.html" title=" " alt="" coords="5,5,169,45"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1CommandLineOption.html" title=" " alt="" coords="5,187,214,215"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1BooleanCommandLineOption.html" title=" " alt="" coords="262,5,480,50"/>
+<area shape="poly" id="edge176_Node000000_Node000001" title=" " alt="" coords="130,173,186,117,222,86,260,60,288,49,283,52,263,65,225,91,189,121,135,177"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1IntegerCommandLineOption.html" title=" " alt="" coords="265,75,476,119"/>
+<area shape="poly" id="edge177_Node000000_Node000002" title=" " alt="" coords="152,178,261,129,296,118,292,121,263,134,154,182"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1IntegerUnitsCommandLineOption.html" title=" " alt="" coords="262,144,480,189"/>
+<area shape="poly" id="edge178_Node000000_Node000003" title=" " alt="" coords="228,183,264,180,259,182,230,188"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1MethodCommandLineOption.html" title=" " alt="" coords="264,213,478,258"/>
+<area shape="poly" id="edge179_Node000000_Node000004" title=" " alt="" coords="229,214,266,221,261,222,230,219"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1StringCommandLineOption.html" title=" " alt="" coords="269,283,472,327"/>
+<area shape="poly" id="edge180_Node000000_Node000005" title=" " alt="" coords="153,219,263,268,297,282,292,282,261,273,153,225"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1StringListCommandLineOption.html" title=" " alt="" coords="271,352,470,397"/>
+<area shape="poly" id="edge181_Node000000_Node000006" title=" " alt="" coords="133,224,189,281,225,311,263,337,288,352,283,351,260,342,222,316,186,285,132,229"/>
 </map>

@@ -9,6 +9,6 @@ var threads_8h =
     [ "Realm::CoreReservation::NotificationListener", "classRealm_1_1CoreReservation_1_1NotificationListener.html", "classRealm_1_1CoreReservation_1_1NotificationListener" ],
     [ "Realm::CoreReservationSet", "classRealm_1_1CoreReservationSet.html", "classRealm_1_1CoreReservationSet" ],
     [ "Realm::DummyLock", "classRealm_1_1DummyLock.html", "classRealm_1_1DummyLock" ],
-    [ "cleanup", "threads_8h.html#a9d9e9ad7f2ab22efbad4809486478401", null ],
-    [ "initialize", "threads_8h.html#a63393c0b8bb5e5c791eca71856619955", null ]
+    [ "Realm::Threading::cleanup", "namespaceRealm_1_1Threading.html#a9d9e9ad7f2ab22efbad4809486478401", null ],
+    [ "Realm::Threading::initialize", "namespaceRealm_1_1Threading.html#a63393c0b8bb5e5c791eca71856619955", null ]
 ];

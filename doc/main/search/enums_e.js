@@ -13,6 +13,6 @@ var searchData=
   ['realm_5fstatus_5fenum_10',['realm_status_enum',['../realm__c_8h.html#ab0dce9b9caa92d896ace3c1cf0b10941',1,'realm_c.h']]],
   ['reduction_5fop_11',['reduction_op',['../bootstrap_8h.html#aadd00a0956c5c9f7f9c959869ab090a0',1,'bootstrap.h']]],
   ['requesttype_12',['RequestType',['../structRealm_1_1ProfilingMeasurements_1_1OperationCopyInfo.html#a4f9faadc6ae97dc62979a2901a3d9863',1,'Realm::ProfilingMeasurements::OperationCopyInfo']]],
-  ['result_13',['result',['../structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html#a3180cee8f6ba9bd47b1b43301b8b0e13',1,'Realm::ProfilingMeasurements::OperationStatus::Result'],['../structRealm_1_1ProfilingMeasurements_1_1InstanceStatus.html#a2312ad7dff3840ef16d11833c68c67ec',1,'Realm::ProfilingMeasurements::InstanceStatus::Result']]],
+  ['result_13',['Result',['../structRealm_1_1ProfilingMeasurements_1_1OperationStatus.html#a3180cee8f6ba9bd47b1b43301b8b0e13',1,'Realm::ProfilingMeasurements::OperationStatus::Result'],['../structRealm_1_1ProfilingMeasurements_1_1InstanceStatus.html#a2312ad7dff3840ef16d11833c68c67ec',1,'Realm::ProfilingMeasurements::InstanceStatus::Result']]],
   ['runstyle_14',['RunStyle',['../classRealm_1_1Runtime.html#a04186dbcbe4fa060b2b2eb58d41fadf9',1,'Realm::Runtime']]]
 ];

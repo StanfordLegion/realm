@@ -1,5 +1,5 @@
 <map id="Realm::CoreReservation" name="Realm::CoreReservation">
-<area shape="rect" id="Node000001" title=" " alt="" coords="43,93,223,119"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1CoreReservationParameters.html" title=" " alt="" coords="5,5,260,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="135,45,135,93,130,93,130,45"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="42,106,222,134"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1CoreReservationParameters.html" title=" " alt="" coords="5,5,259,33"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="134,47,134,106,130,104,130,50"/>
 </map>

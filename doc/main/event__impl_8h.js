@@ -10,5 +10,5 @@ var event__impl_8h =
     [ "Realm::GenEventImpl::GenEventImplAllocator", "structRealm_1_1GenEventImpl_1_1GenEventImplAllocator.html", "structRealm_1_1GenEventImpl_1_1GenEventImplAllocator" ],
     [ "Realm::GenEventImpl::ExternalWaiterSync", "structRealm_1_1GenEventImpl_1_1ExternalWaiterSync.html", "structRealm_1_1GenEventImpl_1_1ExternalWaiterSync" ],
     [ "Realm::GenEventImpl::LaggingViewState", "structRealm_1_1GenEventImpl_1_1LaggingViewState.html", "structRealm_1_1GenEventImpl_1_1LaggingViewState" ],
-    [ "log_poison", "event__impl_8h.html#a0bc1e32fd83e0c414739bacdc5b3857f", null ]
+    [ "Realm::log_poison", "namespaceRealm.html#a0bc1e32fd83e0c414739bacdc5b3857f", null ]
 ];

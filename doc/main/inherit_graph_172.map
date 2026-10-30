@@ -1,3 +1,5 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1Cuda_1_1GPUStream.html" title=" " alt="" coords="5,5,193,31"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1DelayedGaugeAddition.html" title=" " alt="" coords="5,14,227,42"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1DelayedGaugeAdditionImpl.html" title=" " alt="" coords="275,5,496,50"/>
+<area shape="poly" id="edge201_Node000000_Node000001" title=" " alt="" coords="242,25,277,28,272,28,242,30"/>
 </map>

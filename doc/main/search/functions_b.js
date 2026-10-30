@@ -12,7 +12,7 @@ var searchData=
   ['key_5fvalue_5fstore_5flocal_5frank_9',['key_value_store_local_rank',['../classRealm_1_1RuntimeImpl.html#af3f6b9e59b36bf955f3602e5222bebef',1,'Realm::RuntimeImpl']]],
   ['key_5fvalue_5fstore_5flocal_5franks_10',['key_value_store_local_ranks',['../classRealm_1_1RuntimeImpl.html#a0cc61a72e54cd64e7fb6053fdd97f949',1,'Realm::RuntimeImpl']]],
   ['key_5fvalue_5fstore_5fput_11',['key_value_store_put',['../classRealm_1_1RuntimeImpl.html#a64bd8f27e7dcd2b38b8177a5803863b6',1,'Realm::RuntimeImpl']]],
-  ['kind_12',['kind',['../classRealm_1_1Memory.html#a05fb82636aeeb5d8042bfa007677031f',1,'Realm::Memory::kind()'],['../classRealm_1_1Processor.html#af2cc04300fdbbe8199e93e3d9cfa4306',1,'Realm::Processor::kind()']]],
+  ['kind_12',['kind',['../classRealm_1_1Memory.html#a05fb82636aeeb5d8042bfa007677031f',1,'Realm::Memory::kind()'],['../classRealm_1_1Processor.html#af2cc04300fdbbe8199e93e3d9cfa4306',1,'Realm::Processor::kind()'],['../classPRealm_1_1Memory.html#a05fb82636aeeb5d8042bfa007677031f',1,'PRealm::Memory::kind()']]],
   ['kokkos_5ffinalize_13',['kokkos_finalize',['../namespaceRealm_1_1KokkosInterop.html#a1b14b6b414b7b6e2f9f84e2dde710e3d',1,'Realm::KokkosInterop']]],
   ['kokkos_5finitialize_14',['kokkos_initialize',['../namespaceRealm_1_1KokkosInterop.html#ada378b67cc74faee660c8759fb4d8149',1,'Realm::KokkosInterop']]]
 ];

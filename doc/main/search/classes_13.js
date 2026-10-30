@@ -21,5 +21,5 @@ var searchData=
   ['updatebytesreadmessage_18',['UpdateBytesReadMessage',['../structRealm_1_1UpdateBytesReadMessage.html',1,'Realm']]],
   ['updatebytestotalmessage_19',['UpdateBytesTotalMessage',['../structRealm_1_1UpdateBytesTotalMessage.html',1,'Realm']]],
   ['updatebyteswritemessage_20',['UpdateBytesWriteMessage',['../structRealm_1_1UpdateBytesWriteMessage.html',1,'Realm']]],
-  ['userevent_21',['userevent',['../classPRealm_1_1UserEvent.html',1,'PRealm::UserEvent'],['../classRealm_1_1UserEvent.html',1,'Realm::UserEvent']]]
+  ['userevent_21',['UserEvent',['../classPRealm_1_1UserEvent.html',1,'PRealm::UserEvent'],['../classRealm_1_1UserEvent.html',1,'Realm::UserEvent']]]
 ];

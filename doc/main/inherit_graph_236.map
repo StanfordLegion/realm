@@ -1,3 +1,29 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$structRealm_1_1DynamicTemplates_1_1TypeListElem_1_1TypePresent.html" title=" " alt="" coords="5,5,203,75"/>
+<area shape="rect" id="Node000000" href="$classRealm_1_1EventWaiter.html" title=" " alt="" coords="5,430,156,458"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1CompQueueImpl_1_1CompQueueWaiter.html" title=" " alt="" coords="218,5,398,50"/>
+<area shape="poly" id="edge215_Node000000_Node000001" title=" " alt="" coords="80,414,86,343,105,249,120,198,141,149,168,102,202,60,220,48,217,53,206,64,172,105,146,151,125,200,110,250,92,344,85,414"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1CompQueueImpl_1_1DeferredDestroy.html" title=" " alt="" coords="218,75,398,119"/>
+<area shape="poly" id="edge216_Node000000_Node000002" title=" " alt="" coords="82,414,93,355,114,279,129,239,149,199,173,162,202,130,221,118,218,122,205,134,177,166,154,202,134,241,119,280,98,356,88,415"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1EventMerger_1_1MergeEventPrecondition.html" title=" " alt="" coords="214,144,402,189"/>
+<area shape="poly" id="edge217_Node000000_Node000003" title=" " alt="" coords="86,414,100,368,123,310,157,251,178,223,202,199,222,187,219,191,205,203,182,227,161,253,128,312,105,369,91,416"/>
+<area shape="rect" id="Node000004" href="$structRealm_1_1OperationTable_1_1TableEntry.html" title=" " alt="" coords="224,213,393,258"/>
+<area shape="poly" id="edge218_Node000000_Node000004" title=" " alt="" coords="92,415,134,342,165,302,202,268,225,256,222,260,205,272,169,306,139,345,97,417"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1PartitioningOperation_1_1DeferredLaunch.html" title=" " alt="" coords="204,283,413,327"/>
+<area shape="poly" id="edge219_Node000000_Node000005" title=" " alt="" coords="103,417,147,377,202,337,230,326,227,330,205,342,151,381,107,420"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1ProcessorGroupImpl_1_1DeferredDestroy.html" title=" " alt="" coords="207,352,410,397"/>
+<area shape="poly" id="edge220_Node000000_Node000006" title=" " alt="" coords="141,423,234,395,231,399,144,427"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1RegionInstanceImpl_1_1DeferredCreate.html" title=" " alt="" coords="208,421,408,466"/>
+<area shape="poly" id="edge221_Node000000_Node000007" title=" " alt="" coords="170,441,210,442,206,445,173,446"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1RegionInstanceImpl_1_1DeferredDestroy.html" title=" " alt="" coords="208,491,408,535"/>
+<area shape="poly" id="edge222_Node000000_Node000008" title=" " alt="" coords="142,460,235,489,230,492,144,465"/>
+<area shape="rect" id="Node000009" href="$classRealm_1_1RuntimeImpl_1_1DeferredShutdown.html" title=" " alt="" coords="231,560,386,605"/>
+<area shape="poly" id="edge223_Node000000_Node000009" title=" " alt="" coords="105,466,151,507,205,545,233,560,228,561,202,550,147,511,106,471"/>
+<area shape="rect" id="Node000010" href="$classRealm_1_1SubgraphImpl_1_1DeferredDestroy.html" title=" " alt="" coords="228,629,389,674"/>
+<area shape="poly" id="edge224_Node000000_Node000010" title=" " alt="" coords="95,469,139,542,169,581,205,615,230,630,224,631,202,619,165,585,134,545,94,474"/>
+<area shape="rect" id="Node000011" href="$classRealm_1_1Task_1_1DeferredSpawn.html" title=" " alt="" coords="204,698,412,726"/>
+<area shape="poly" id="edge225_Node000000_Node000011" title=" " alt="" coords="88,470,104,519,127,577,160,635,181,661,205,684,224,697,219,698,202,688,177,665,156,638,122,579,99,521,88,475"/>
+<area shape="rect" id="Node000012" href="$classRealm_1_1TransferOperation_1_1DeferredStart.html" title=" " alt="" coords="215,749,402,794"/>
+<area shape="poly" id="edge226_Node000000_Node000012" title=" " alt="" coords="86,470,100,528,121,598,156,672,178,705,205,735,222,749,217,749,202,739,174,709,151,674,116,600,95,529,86,475"/>
+<area shape="rect" id="Node000013" href="$classRealm_1_1XferDes_1_1DeferredXDEnqueue.html" title=" " alt="" coords="214,819,402,863"/>
+<area shape="poly" id="edge227_Node000000_Node000013" title=" " alt="" coords="83,471,93,540,112,629,128,676,148,723,174,766,206,804,222,819,216,818,202,808,169,769,143,725,123,678,107,631,88,541,83,476"/>
 </map>

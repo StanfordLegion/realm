@@ -20,9 +20,9 @@ var codedesc_8h =
     [ "FIELDS_ENTRY", "codedesc_8h.html#a66421dd18c72c05b682c2dc80071e57a", null ],
     [ "KINDS_ENUM", "codedesc_8h.html#aceac432ead5bb661b200be56bc10dd17", null ],
     [ "REALM_TYPE_KINDS", "codedesc_8h.html#af93baf03f4941d988dc61f65c3411059", null ],
-    [ "deserialize", "codedesc_8h.html#aa337a6fe7c7bd6d68ae588c997c7e233", null ],
-    [ "from_cpp_type", "codedesc_8h.html#a166a4a13c18def2f7188e63971a7a65b", null ],
-    [ "from_cpp_value", "codedesc_8h.html#ad1988ee2255ee1f593ee28804c82d597", null ],
-    [ "serialize", "codedesc_8h.html#a7b084bf902420f4367927b749f3a87db", null ],
-    [ "serialize", "codedesc_8h.html#ace91dd794dea4ac71c1dc9519a5a8388", null ]
+    [ "Realm::deserialize", "namespaceRealm.html#aa337a6fe7c7bd6d68ae588c997c7e233", null ],
+    [ "Realm::TypeConv::from_cpp_type", "namespaceRealm_1_1TypeConv.html#a166a4a13c18def2f7188e63971a7a65b", null ],
+    [ "Realm::TypeConv::from_cpp_value", "namespaceRealm_1_1TypeConv.html#ad1988ee2255ee1f593ee28804c82d597", null ],
+    [ "Realm::serialize", "namespaceRealm.html#a7b084bf902420f4367927b749f3a87db", null ],
+    [ "Realm::serialize", "namespaceRealm.html#ace91dd794dea4ac71c1dc9519a5a8388", null ]
 ];

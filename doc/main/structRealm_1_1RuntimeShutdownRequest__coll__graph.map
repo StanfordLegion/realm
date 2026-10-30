@@ -1,6 +1,6 @@
 <map id="Realm::RuntimeShutdownRequest" name="Realm::RuntimeShutdownRequest">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,93,249,119"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Event.html" title=" " alt="" coords="73,5,182,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="130,45,130,93,125,93,125,45"/>
-<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="197,9,209,18,200,26,182,29,182,23,198,21,203,18,194,14"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,106,249,134"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Event.html" title=" " alt="" coords="73,5,181,33"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="129,47,130,106,124,104,125,50"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="197,10,208,19,200,28,183,31,181,26,197,23,203,19,197,15"/>
 </map>

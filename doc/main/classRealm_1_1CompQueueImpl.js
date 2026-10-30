@@ -1,9 +1,9 @@
 var classRealm_1_1CompQueueImpl =
 [
-    [ "CompQueueWaiter", "classRealm_1_1CompQueueImpl_1_1CompQueueWaiter.html", "classRealm_1_1CompQueueImpl_1_1CompQueueWaiter" ],
-    [ "CompQueueWaiterBatch", "classRealm_1_1CompQueueImpl_1_1CompQueueWaiterBatch.html", "classRealm_1_1CompQueueImpl_1_1CompQueueWaiterBatch" ],
     [ "DeferredDestroy", "classRealm_1_1CompQueueImpl_1_1DeferredDestroy.html", "classRealm_1_1CompQueueImpl_1_1DeferredDestroy" ],
     [ "RemotePopRequest", "classRealm_1_1CompQueueImpl_1_1RemotePopRequest.html", "classRealm_1_1CompQueueImpl_1_1RemotePopRequest" ],
+    [ "CompQueueWaiter", "classRealm_1_1CompQueueImpl_1_1CompQueueWaiter.html", "classRealm_1_1CompQueueImpl_1_1CompQueueWaiter" ],
+    [ "CompQueueWaiterBatch", "classRealm_1_1CompQueueImpl_1_1CompQueueWaiterBatch.html", "classRealm_1_1CompQueueImpl_1_1CompQueueWaiterBatch" ],
     [ "CompQueueImpl", "classRealm_1_1CompQueueImpl.html#aee3aad629ae40b45bf57d7a1cf004d40", null ],
     [ "~CompQueueImpl", "classRealm_1_1CompQueueImpl.html#a575d307802f42cb9d93b6403253bbb1c", null ],
     [ "add_completed_event", "classRealm_1_1CompQueueImpl.html#ab13e04b8fcae6fd28cd2cb3fa6f5d843", null ],

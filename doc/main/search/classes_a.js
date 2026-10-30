@@ -30,10 +30,10 @@ var searchData=
   ['lockgrantmessage_27',['LockGrantMessage',['../structRealm_1_1LockGrantMessage.html',1,'Realm']]],
   ['lockreleasemessage_28',['LockReleaseMessage',['../structRealm_1_1LockReleaseMessage.html',1,'Realm']]],
   ['lockrequestmessage_29',['LockRequestMessage',['../structRealm_1_1LockRequestMessage.html',1,'Realm']]],
-  ['logger_30',['logger',['../classp2p_1_1Logger.html',1,'p2p::Logger'],['../classRealm_1_1Logger.html',1,'Realm::Logger']]],
+  ['logger_30',['Logger',['../classp2p_1_1Logger.html',1,'p2p::Logger'],['../classPRealm_1_1Logger.html',1,'PRealm::Logger'],['../classRealm_1_1Logger.html',1,'Realm::Logger']]],
   ['loggermessage_31',['LoggerMessage',['../classRealm_1_1LoggerMessage.html',1,'Realm']]],
   ['loggeroutputstream_32',['LoggerOutputStream',['../classRealm_1_1LoggerOutputStream.html',1,'Realm']]],
-  ['logstream_33',['LogStream',['../structRealm_1_1Logger_1_1LogStream.html',1,'Realm::Logger']]],
+  ['logstream_33',['LogStream',['../structPRealm_1_1Logger_1_1LogStream.html',1,'PRealm::Logger::LogStream'],['../structRealm_1_1Logger_1_1LogStream.html',1,'Realm::Logger::LogStream']]],
   ['longrgetdata_34',['LongRgetData',['../structRealm_1_1XmitSrcDestPair_1_1LongRgetData.html',1,'Realm::XmitSrcDestPair']]],
   ['loopschedule_35',['LoopSchedule',['../classRealm_1_1LoopSchedule.html',1,'Realm']]],
   ['lrukey_36',['LRUKey',['../classRealm_1_1PathLRU_1_1LRUKey.html',1,'Realm::PathLRU']]]

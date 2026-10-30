@@ -11,9 +11,9 @@ var mutex_8h =
     [ "Realm::UnfairCondVar", "classRealm_1_1UnfairCondVar.html", "classRealm_1_1UnfairCondVar" ],
     [ "Realm::FIFOCondVar", "classRealm_1_1FIFOCondVar.html", "classRealm_1_1FIFOCondVar" ],
     [ "Realm::KernelCondVar", "classRealm_1_1KernelCondVar.html", "classRealm_1_1KernelCondVar" ],
-    [ "Realm::AutoLock< LT >", "classRealm_1_1AutoLock.html", "classRealm_1_1AutoLock" ],
+    [ "Realm::AutoLock&lt; LT &gt;", "classRealm_1_1AutoLock.html", "classRealm_1_1AutoLock" ],
     [ "Realm::RWLock", "classRealm_1_1RWLock.html", "classRealm_1_1RWLock" ],
     [ "Realm::RWLock::Writer", "structRealm_1_1RWLock_1_1Writer.html", "structRealm_1_1RWLock_1_1Writer" ],
     [ "Realm::RWLock::Reader", "structRealm_1_1RWLock_1_1Reader.html", "structRealm_1_1RWLock_1_1Reader" ],
-    [ "Mutex", "mutex_8h.html#a4713e57139284efc3da66bd4bbc20ebe", null ]
+    [ "Realm::Mutex", "namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe", null ]
 ];

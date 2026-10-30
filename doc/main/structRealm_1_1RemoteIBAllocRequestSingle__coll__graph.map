@@ -1,6 +1,6 @@
 <map id="Realm::RemoteIBAllocRequestSingle" name="Realm::RemoteIBAllocRequestSingle">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,93,227,133"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Memory.html" title=" " alt="" coords="53,5,179,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="119,44,119,93,113,93,113,44"/>
-<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="195,10,206,18,198,26,180,28,179,23,196,21,201,18,192,14"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,106,226,151"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Memory.html" title=" " alt="" coords="53,5,178,33"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="117,47,118,106,113,105,114,51"/>
+<area shape="poly" id="edge2_Node000002_Node000002" title=" " alt="" coords="194,10,205,19,197,28,180,31,178,26,194,23,200,19,193,15"/>
 </map>

@@ -1,9 +1,9 @@
 <map id="Realm::LocalChannel" name="Realm::LocalChannel">
-<area shape="rect" id="Node000001" title=" " alt="" coords="47,168,206,193"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Channel.html" title=" " alt="" coords="5,80,131,105"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="86,115,121,166,116,169,81,118"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1SimpleXferDesFactory.html" title=" " alt="" coords="155,80,371,105"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="234,115,147,170,144,165,232,110"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1XferDesFactory.html" title=" " alt="" coords="177,5,348,31"/>
-<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="265,45,265,80,260,80,260,45"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="47,183,205,211"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Channel.html" title=" " alt="" coords="5,82,130,110"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="85,121,121,182,116,183,81,126"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1SimpleXferDesFactory.html" title=" " alt="" coords="153,82,368,110"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="234,119,146,185,143,180,228,119"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1XferDesFactory.html" title=" " alt="" coords="176,5,346,33"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="262,46,263,83,258,81,259,51"/>
 </map>

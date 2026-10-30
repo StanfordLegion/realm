@@ -1,136 +1,138 @@
 <map id="Realm::LocalUtilityProcessor" name="Realm::LocalUtilityProcessor">
-<area shape="rect" id="Node000001" title=" " alt="" coords="1688,1021,1897,1047"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1LocalTaskProcessor.html" title=" " alt="" coords="1537,933,1736,959"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="1671,963,1773,1019,1770,1023,1668,968"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1ProcessorImpl.html" title=" " alt="" coords="416,321,580,346"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="477,357,386,438,317,486,242,528,166,566,98,603,45,640,26,660,14,680,9,702,11,726,23,752,44,781,73,800,122,819,189,836,271,851,471,877,702,898,944,915,1177,927,1537,940,1537,945,1176,932,943,920,701,904,470,883,270,856,188,841,120,824,70,805,40,785,18,755,6,728,3,702,9,678,22,657,41,636,95,598,164,561,239,523,315,482,383,434,474,353"/>
-<area shape="rect" id="Node000081" href="$classRealm_1_1Task_1_1DeferredSpawn.html" title=" " alt="" coords="481,469,691,495"/>
-<area shape="poly" id="edge69_Node000081_Node000003" title=" " alt="" coords="514,356,581,468,577,471,509,359"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1DynamicTableFreeList.html" title=" " alt="" coords="533,181,748,221"/>
-<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="611,233,512,323,509,319,607,229"/>
-<area shape="rect" id="Node000005" href="$classRealm_1_1atomic.html" title=" " alt="" coords="553,93,728,119"/>
-<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="643,132,643,181,638,181,638,132"/>
-<area shape="rect" id="Node000006" href="$classRealm_1_1Processor.html" title=" " alt="" coords="283,189,417,214"/>
-<area shape="poly" id="edge5_Node000003_Node000006" title=" " alt="" coords="375,221,486,318,483,322,372,225"/>
-<area shape="poly" id="edge6_Node000006_Node000006" title=" " alt="" coords="433,192,444,201,436,210,418,213,417,208,433,205,439,202,430,196"/>
-<area shape="rect" id="Node000078" href="$classRealm_1_1Task.html" title=" " alt="" coords="615,574,717,599"/>
-<area shape="poly" id="edge63_Node000078_Node000006" title=" " alt="" coords="345,228,336,270,331,324,334,381,342,409,353,435,376,463,402,477,433,487,470,502,559,542,635,571,634,576,557,546,467,506,431,492,400,482,373,467,349,437,337,411,329,382,325,324,331,269,340,227"/>
-<area shape="rect" id="Node000007" href="$classRealm_1_1ThreadedTaskScheduler.html" title=" " alt="" coords="1599,845,1826,871"/>
-<area shape="poly" id="edge7_Node000002_Node000007" title=" " alt="" coords="1695,883,1649,935,1645,931,1691,879"/>
-<area shape="rect" id="Node000008" href="$classRealm_1_1ThreadScheduler.html" title=" " alt="" coords="1343,728,1525,753"/>
-<area shape="poly" id="edge8_Node000007_Node000008" title=" " alt="" coords="1456,762,1491,792,1534,819,1571,833,1610,843,1609,848,1569,838,1531,824,1487,796,1453,766"/>
-<area shape="rect" id="Node000009" href="$classRealm_1_1FIFOMutex.html" title=" " alt="" coords="1284,189,1427,214"/>
-<area shape="poly" id="edge9_Node000007_Node000009" title=" " alt="" coords="1270,210,1107,224,1039,235,1017,241,1005,247,991,266,980,290,967,353,964,430,970,513,985,596,1005,673,1031,737,1060,781,1079,798,1097,807,1144,819,1230,832,1349,842,1599,852,1598,857,1349,847,1229,837,1143,824,1095,812,1076,802,1056,784,1026,739,1000,675,979,598,965,514,959,430,962,353,975,289,987,263,1001,243,1015,236,1038,230,1106,219,1270,205"/>
-<area shape="rect" id="Node000074" href="$classRealm_1_1TaskQueue.html" title=" " alt="" coords="865,845,1008,871"/>
-<area shape="poly" id="edge57_Node000074_Node000009" title=" " alt="" coords="1270,207,1213,214,1152,231,1095,258,1071,277,1049,300,1020,347,1006,391,1003,433,1007,474,1022,565,1024,617,1018,675,1003,752,992,784,972,823,952,846,948,843,968,820,987,782,998,750,1013,674,1019,617,1017,565,1002,475,998,433,1001,390,1015,345,1045,297,1067,273,1092,254,1150,226,1212,209,1270,201"/>
-<area shape="rect" id="Node000010" href="$classRealm_1_1noncopyable.html" title=" " alt="" coords="1278,93,1433,119"/>
-<area shape="poly" id="edge10_Node000009_Node000010" title=" " alt="" coords="1358,132,1358,189,1353,189,1353,132"/>
-<area shape="rect" id="Node000015" href="$classRealm_1_1UnfairMutex.html" title=" " alt="" coords="1459,189,1612,214"/>
-<area shape="poly" id="edge16_Node000015_Node000010" title=" " alt="" coords="1386,124,1440,155,1508,186,1506,191,1438,160,1383,128"/>
-<area shape="rect" id="Node000011" href="$classRealm_1_1atomic.html" title=" " alt="" coords="1457,93,1657,119"/>
-<area shape="poly" id="edge11_Node000009_Node000011" title=" " alt="" coords="1521,127,1381,191,1379,186,1518,122"/>
-<area shape="poly" id="edge17_Node000015_Node000011" title=" " alt="" coords="1553,132,1540,189,1535,188,1548,131"/>
-<area shape="rect" id="Node000045" href="$classRealm_1_1BackgroundWorkManager.html" title=" " alt="" coords="1964,469,2203,495"/>
-<area shape="poly" id="edge51_Node000045_Node000011" title=" " alt="" coords="1656,118,1927,155,2262,206,2554,257,2649,279,2678,288,2693,297,2707,321,2708,344,2698,365,2680,384,2656,401,2627,416,2567,439,2515,451,2470,458,2392,460,2314,458,2215,463,2149,472,2148,467,2215,457,2314,452,2392,455,2469,453,2514,446,2565,433,2625,411,2653,397,2677,380,2694,362,2703,343,2702,322,2689,301,2676,293,2647,284,2553,262,2261,211,1926,161,1655,123"/>
-<area shape="rect" id="Node000012" href="$classRealm_1_1DoorbellList.html" title=" " alt="" coords="2624,93,2775,119"/>
-<area shape="poly" id="edge12_Node000009_Node000012" title=" " alt="" coords="2610,111,2402,115,2113,127,1782,149,1612,165,1446,184,1404,191,1403,186,1445,179,1612,159,1782,144,2113,122,2402,110,2610,106"/>
-<area shape="poly" id="edge18_Node000015_Node000012" title=" " alt="" coords="2693,133,2684,147,2671,160,2622,169,2521,178,2217,190,1612,202,1612,196,2217,185,2520,172,2621,164,2669,155,2680,144,2689,130"/>
-<area shape="rect" id="Node000069" href="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounter.html" title=" " alt="" coords="2722,567,2949,607"/>
-<area shape="poly" id="edge35_Node000069_Node000012" title=" " alt="" coords="2761,121,2788,133,2813,150,2831,172,2838,200,2838,483,2838,567,2833,567,2833,483,2833,200,2826,175,2809,154,2785,138,2758,126"/>
-<area shape="poly" id="edge53_Node000045_Node000012" title=" " alt="" coords="2729,127,2739,141,2749,162,2760,206,2761,237,2756,275,2742,319,2719,369,2702,396,2684,413,2663,426,2633,439,2594,449,2544,455,2426,460,2307,459,2215,463,2148,472,2147,467,2215,457,2307,454,2426,454,2544,450,2593,444,2632,433,2660,422,2681,409,2698,392,2714,367,2737,317,2750,274,2756,237,2755,207,2744,164,2734,144,2724,130"/>
-<area shape="rect" id="Node000013" href="$classRealm_1_1atomic.html" title=" " alt="" coords="154,5,357,31"/>
-<area shape="poly" id="edge13_Node000012_Node000013" title=" " alt="" coords="370,21,2624,99,2623,105,370,26"/>
-<area shape="poly" id="edge75_Node000078_Node000013" title=" " alt="" coords="248,44,240,73,236,105,236,483,240,497,248,509,263,518,282,527,331,539,391,546,515,553,569,557,609,564,633,571,632,576,608,569,568,563,515,559,390,551,330,544,280,532,260,523,245,512,235,499,231,484,231,105,235,72,243,43"/>
-<area shape="rect" id="Node000014" href="$classRealm_1_1IntrusiveList.html" title=" " alt="" coords="1059,299,1246,368"/>
-<area shape="poly" id="edge14_Node000007_Node000014" title=" " alt="" coords="1171,380,1254,611,1300,723,1319,761,1333,781,1351,792,1377,803,1444,821,1522,835,1599,844,1599,850,1521,840,1443,826,1375,808,1349,797,1329,785,1314,763,1295,725,1249,613,1166,382"/>
-<area shape="poly" id="edge15_Node000014_Node000015" title=" " alt="" coords="1466,219,1438,224,1382,228,1338,227,1295,230,1244,248,1209,271,1180,300,1176,297,1206,267,1242,243,1294,225,1338,222,1382,223,1438,219,1465,214"/>
-<area shape="rect" id="Node000023" href="$classRealm_1_1GaugeSampler.html" title=" " alt="" coords="1451,321,1619,346"/>
-<area shape="poly" id="edge26_Node000023_Node000015" title=" " alt="" coords="1538,228,1538,320,1533,320,1533,228"/>
-<area shape="poly" id="edge45_Node000045_Node000015" title=" " alt="" coords="1626,209,1685,220,1751,237,1817,262,1878,297,1896,313,1905,330,1913,348,1928,366,1963,398,2001,426,2065,467,2062,472,1998,430,1960,402,1924,370,1909,350,1900,333,1891,317,1875,301,1815,267,1749,242,1684,225,1625,214"/>
-<area shape="poly" id="edge72_Node000081_Node000015" title=" " alt="" coords="1475,220,1391,251,1348,273,1308,301,1293,318,1285,336,1277,354,1259,370,1179,390,1016,418,664,472,663,467,1015,412,1178,384,1257,366,1272,350,1280,334,1288,315,1304,297,1345,269,1389,246,1473,215"/>
-<area shape="rect" id="Node000016" href="$structRealm_1_1IntrusiveListLink.html" title=" " alt="" coords="813,181,991,221"/>
-<area shape="poly" id="edge19_Node000014_Node000016" title=" " alt="" coords="952,225,1089,296,1087,301,949,230"/>
-<area shape="rect" id="Node000017" href="$classRealm_1_1InternalTask.html" title=" " alt="" coords="827,93,977,119"/>
-<area shape="poly" id="edge20_Node000016_Node000017" title=" " alt="" coords="905,132,905,181,899,181,899,132"/>
-<area shape="rect" id="Node000019" href="$classRealm_1_1PriorityQueue.html" title=" " alt="" coords="1071,721,1269,761"/>
-<area shape="poly" id="edge21_Node000007_Node000019" title=" " alt="" coords="1155,774,1150,799,1151,810,1157,819,1177,829,1216,838,1331,849,1469,854,1599,855,1599,860,1469,859,1330,854,1215,843,1176,834,1153,823,1146,812,1144,798,1150,773"/>
-<area shape="rect" id="Node000020" href="$classRealm_1_1DummyLock.html" title=" " alt="" coords="791,574,946,599"/>
-<area shape="poly" id="edge22_Node000019_Node000020" title=" " alt="" coords="904,603,1133,718,1131,723,902,608"/>
-<area shape="rect" id="Node000077" href="$classRealm_1_1IntrusivePriorityList.html" title=" " alt="" coords="701,699,946,783"/>
-<area shape="poly" id="edge59_Node000077_Node000020" title=" " alt="" coords="864,613,838,699,833,698,859,612"/>
-<area shape="rect" id="Node000021" href="$classRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge.html" title=" " alt="" coords="1453,567,1671,607"/>
-<area shape="poly" id="edge77_Node000002_Node000021" title=" " alt="" coords="1562,621,1561,670,1564,733,1572,802,1590,870,1608,904,1628,932,1624,935,1603,907,1585,872,1567,803,1558,734,1556,670,1557,620"/>
-<area shape="poly" id="edge23_Node000019_Node000021" title=" " alt="" coords="1486,613,1428,633,1310,680,1212,723,1210,718,1308,675,1426,628,1485,608"/>
-<area shape="poly" id="edge76_Node000074_Node000021" title=" " alt="" coords="1588,616,1626,667,1664,727,1680,756,1689,783,1692,806,1685,823,1656,832,1594,839,1406,850,1008,859,1008,853,1405,844,1593,834,1654,827,1681,819,1687,805,1684,784,1675,758,1660,730,1621,670,1584,619"/>
-<area shape="rect" id="Node000022" href="$classRealm_1_1ProfilingGauges_1_1Gauge.html" title=" " alt="" coords="1323,462,1497,502"/>
-<area shape="poly" id="edge24_Node000021_Node000022" title=" " alt="" coords="1450,507,1535,564,1532,569,1447,512"/>
-<area shape="poly" id="edge25_Node000022_Node000023" title=" " alt="" coords="1519,358,1428,463,1424,460,1515,355"/>
-<area shape="poly" id="edge27_Node000023_Node000023" title=" " alt="" coords="1599,317,1631,320,1641,325,1646,333,1640,343,1626,348,1586,349,1586,343,1625,342,1637,338,1641,333,1638,329,1629,325,1599,323"/>
-<area shape="rect" id="Node000025" href="$classRealm_1_1atomic.html" title=" " alt="" coords="1701,321,1865,346"/>
-<area shape="poly" id="edge28_Node000021_Node000025" title=" " alt="" coords="1774,359,1733,428,1704,469,1672,506,1632,541,1593,569,1590,564,1628,537,1668,502,1700,465,1728,426,1769,357"/>
-<area shape="poly" id="edge48_Node000045_Node000025" title=" " alt="" coords="1778,360,1774,398,1777,418,1786,434,1813,451,1856,463,1909,471,1964,475,1963,481,1908,476,1855,468,1811,456,1783,438,1772,419,1768,399,1773,359"/>
-<area shape="rect" id="Node000031" href="$classRealm_1_1Operation.html" title=" " alt="" coords="1522,469,1658,495"/>
-<area shape="poly" id="edge62_Node000031_Node000025" title=" " alt="" coords="1742,353,1689,371,1657,375,1631,374,1608,377,1597,383,1587,394,1579,411,1578,432,1587,468,1582,469,1573,432,1573,410,1582,390,1594,379,1606,372,1630,368,1657,369,1688,365,1740,348"/>
-<area shape="rect" id="Node000068" href="$classRealm_1_1atomic.html" title=" " alt="" coords="2227,469,2401,495"/>
-<area shape="poly" id="edge29_Node000007_Node000068" title=" " alt="" coords="2306,509,2284,544,2201,629,2127,686,2046,732,1939,785,1846,823,1761,848,1759,843,1844,818,1937,780,2043,727,2124,681,2197,625,2280,541,2302,506"/>
-<area shape="poly" id="edge32_Node000069_Node000068" title=" " alt="" coords="2386,495,2740,564,2739,569,2385,500"/>
-<area shape="poly" id="edge74_Node000078_Node000068" title=" " alt="" coords="2265,501,2186,530,2171,539,2155,545,2059,556,1898,562,1468,565,1037,565,876,566,779,569,717,578,717,573,779,564,876,560,1037,559,1468,560,1898,557,2058,551,2153,540,2168,534,2183,526,2263,496"/>
-<area shape="poly" id="edge30_Node000007_Node000069" title=" " alt="" coords="2787,615,2728,652,2699,675,2672,700,2657,722,2650,743,2642,764,2624,785,2593,805,2565,815,2498,824,2434,832,2354,837,2169,842,1982,844,1838,848,1826,849,1826,843,1838,843,1982,838,2168,836,2354,832,2434,826,2497,819,2564,809,2590,800,2620,781,2637,761,2645,741,2652,720,2668,697,2695,671,2725,648,2784,611"/>
-<area shape="rect" id="Node000070" href="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html" title=" " alt="" coords="2775,713,3002,768"/>
-<area shape="poly" id="edge38_Node000070_Node000069" title=" " alt="" coords="2849,619,2882,712,2877,714,2844,621"/>
-<area shape="rect" id="Node000072" href="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html" title=" " alt="" coords="2339,713,2609,768"/>
-<area shape="poly" id="edge41_Node000072_Node000069" title=" " alt="" coords="2709,599,2613,612,2574,622,2547,633,2527,650,2510,671,2486,714,2481,712,2505,668,2523,646,2544,628,2573,616,2613,607,2708,594"/>
-<area shape="rect" id="Node000050" href="$classRealm_1_1atomic.html" title=" " alt="" coords="2982,189,3182,214"/>
-<area shape="poly" id="edge31_Node000069_Node000050" title=" " alt="" coords="3093,226,3098,245,3106,298,3108,363,3099,414,3089,437,3075,460,3032,506,3004,527,2974,544,2913,569,2911,564,2972,539,3001,523,3028,502,3070,456,3084,435,3094,412,3102,362,3101,299,3093,246,3088,228"/>
-<area shape="rect" id="Node000049" href="$classRealm_1_1DelegatingMutex.html" title=" " alt="" coords="2907,321,3091,346"/>
-<area shape="poly" id="edge34_Node000049_Node000050" title=" " alt="" coords="3070,227,3009,322,3004,319,3065,224"/>
-<area shape="poly" id="edge33_Node000069_Node000049" title=" " alt="" coords="2999,361,2990,398,2975,437,2949,477,2918,514,2860,569,2856,565,2914,510,2944,474,2970,435,2985,396,2993,360"/>
-<area shape="poly" id="edge52_Node000045_Node000049" title=" " alt="" coords="2971,356,2890,400,2839,422,2786,439,2731,448,2663,454,2502,457,2340,458,2215,463,2146,472,2146,467,2215,457,2340,453,2502,452,2662,448,2731,443,2785,433,2837,417,2888,395,2968,351"/>
-<area shape="poly" id="edge36_Node000007_Node000070" title=" " alt="" coords="2823,776,2754,803,2677,824,2596,835,2495,841,2258,845,2022,845,1838,848,1826,849,1826,843,1838,843,2022,839,2258,840,2494,836,2595,830,2676,819,2752,798,2821,771"/>
-<area shape="rect" id="Node000071" title=" " alt="" coords="2394,574,2573,599"/>
-<area shape="poly" id="edge37_Node000070_Node000071" title=" " alt="" coords="2489,613,2500,645,2509,660,2521,672,2540,682,2567,688,2634,692,2704,692,2757,696,2814,711,2812,716,2756,701,2703,698,2634,697,2567,693,2539,687,2518,677,2504,663,2495,647,2484,614"/>
-<area shape="poly" id="edge40_Node000072_Node000071" title=" " alt="" coords="2484,613,2478,713,2473,713,2479,613"/>
-<area shape="poly" id="edge39_Node000007_Node000072" title=" " alt="" coords="2424,777,2375,803,2320,824,2274,833,2216,838,2080,844,1944,845,1838,848,1826,849,1826,844,1838,843,1944,840,2080,838,2215,833,2273,827,2318,819,2373,799,2422,773"/>
-<area shape="rect" id="Node000073" href="$classRealm_1_1BackgroundWorkManager_1_1Worker.html" title=" " alt="" coords="1756,633,1995,673"/>
-<area shape="poly" id="edge42_Node000007_Node000073" title=" " alt="" coords="1873,687,1859,735,1847,761,1832,784,1811,805,1788,823,1742,848,1740,843,1785,818,1808,801,1828,781,1842,758,1854,733,1867,686"/>
-<area shape="poly" id="edge43_Node000073_Node000045" title=" " alt="" coords="1977,501,1950,513,1926,530,1907,554,1894,581,1880,633,1875,632,1889,580,1902,551,1923,526,1948,509,1975,496"/>
-<area shape="rect" id="Node000044" href="$classRealm_1_1BackgroundWorkItem.html" title=" " alt="" coords="1944,574,2156,599"/>
-<area shape="poly" id="edge50_Node000044_Node000045" title=" " alt="" coords="2030,503,2012,514,1999,529,1997,541,2002,552,2028,572,2024,576,1998,555,1991,542,1994,527,2009,510,2027,498"/>
-<area shape="rect" id="Node000046" href="$structRealm_1_1BackgroundWorkManager_1_1Config.html" title=" " alt="" coords="2209,313,2448,353"/>
-<area shape="poly" id="edge44_Node000045_Node000046" title=" " alt="" coords="2315,367,2290,404,2273,423,2254,438,2214,459,2171,472,2170,467,2212,454,2251,434,2269,419,2286,401,2311,364"/>
-<area shape="rect" id="Node000047" href="$classRealm_1_1atomic.html" title=" " alt="" coords="2472,321,2679,346"/>
-<area shape="poly" id="edge46_Node000045_Node000047" title=" " alt="" coords="2540,354,2445,396,2327,439,2251,455,2155,472,2154,467,2250,450,2325,433,2443,391,2538,350"/>
-<area shape="rect" id="Node000048" href="$classRealm_1_1atomic.html" title=" " alt="" coords="1985,321,2185,346"/>
-<area shape="poly" id="edge47_Node000045_Node000048" title=" " alt="" coords="2087,360,2086,469,2081,469,2082,360"/>
-<area shape="poly" id="edge49_Node000045_Node000044" title=" " alt="" coords="2055,560,2077,494,2082,496,2060,562"/>
-<area shape="poly" id="edge54_Node000002_Node000074" title=" " alt="" coords="1022,867,1544,931,1543,936,1021,872"/>
-<area shape="rect" id="Node000075" href="$classRealm_1_1atomic.html" title=" " alt="" coords="264,728,471,753"/>
-<area shape="poly" id="edge55_Node000074_Node000075" title=" " alt="" coords="409,756,484,780,587,803,691,822,865,846,865,852,690,827,586,808,482,785,407,761"/>
-<area shape="rect" id="Node000076" href="$classRealm_1_1atomic.html" title=" " alt="" coords="55,728,240,753"/>
-<area shape="poly" id="edge56_Node000074_Node000076" title=" " alt="" coords="185,756,252,780,336,800,422,816,593,838,747,849,865,853,865,859,747,854,593,843,421,821,335,805,250,785,184,761"/>
-<area shape="poly" id="edge58_Node000074_Node000077" title=" " alt="" coords="844,793,862,819,880,833,900,843,898,848,877,837,859,823,840,797"/>
-<area shape="poly" id="edge73_Node000081_Node000077" title=" " alt="" coords="687,701,648,698,617,697,588,693,556,677,530,654,514,629,510,600,517,566,527,544,541,524,570,493,574,497,545,527,532,546,522,568,515,600,519,627,534,650,559,672,589,688,617,692,648,692,687,696"/>
-<area shape="poly" id="edge60_Node000077_Node000078" title=" " alt="" coords="729,602,752,613,773,629,791,657,810,697,805,699,787,660,769,632,749,618,726,607"/>
-<area shape="rect" id="Node000080" href="$structRealm_1_1IntrusivePriorityListLink.html" title=" " alt="" coords="495,721,677,761"/>
-<area shape="poly" id="edge67_Node000080_Node000078" title=" " alt="" coords="656,613,598,722,593,719,651,610"/>
-<area shape="poly" id="edge70_Node000081_Node000078" title=" " alt="" coords="609,570,593,559,580,544,575,531,574,518,579,494,584,495,579,518,580,530,584,541,596,555,612,566"/>
-<area shape="poly" id="edge61_Node000078_Node000031" title=" " alt="" coords="1537,501,1509,507,1399,524,1305,534,1145,544,984,551,779,569,717,579,717,573,779,564,984,545,1145,539,1304,529,1398,518,1508,501,1536,495"/>
-<area shape="rect" id="Node000079" href="$classRealm_1_1Event.html" title=" " alt="" coords="621,321,730,346"/>
-<area shape="poly" id="edge64_Node000078_Node000079" title=" " alt="" coords="696,355,721,393,744,440,752,467,755,493,753,519,743,544,725,563,703,576,700,572,722,559,738,541,747,518,750,493,747,468,739,442,716,395,691,358"/>
-<area shape="poly" id="edge65_Node000079_Node000079" title=" " alt="" coords="726,317,747,321,754,326,756,333,752,342,742,347,712,349,712,343,740,342,748,339,751,333,750,329,745,326,725,322"/>
-<area shape="poly" id="edge71_Node000081_Node000079" title=" " alt="" coords="663,359,595,471,591,468,659,356"/>
-<area shape="poly" id="edge66_Node000078_Node000080" title=" " alt="" coords="569,708,560,669,561,649,569,629,589,609,614,597,616,601,592,614,573,632,566,650,565,669,574,707"/>
-<area shape="poly" id="edge68_Node000078_Node000081" title=" " alt="" coords="605,504,633,541,658,572,654,575,629,544,601,507"/>
-<area shape="rect" id="Node000082" href="$classRealm_1_1RWLock.html" title=" " alt="" coords="2180,845,2304,871"/>
-<area shape="poly" id="edge78_Node000002_Node000082" title=" " alt="" coords="2167,872,2029,897,1982,912,1874,926,1736,939,1736,934,1873,921,1981,907,2028,892,2166,867"/>
-<area shape="rect" id="Node000083" href="$structRealm_1_1RWLock_1_1Writer.html" title=" " alt="" coords="2085,933,2257,959"/>
-<area shape="poly" id="edge80_Node000083_Node000082" title=" " alt="" coords="2180,879,2161,896,2158,904,2159,914,2166,932,2161,934,2154,915,2153,904,2157,893,2176,875"/>
-<area shape="rect" id="Node000084" href="$structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="2297,933,2475,959"/>
-<area shape="poly" id="edge82_Node000084_Node000082" title=" " alt="" coords="2268,877,2313,907,2360,931,2357,936,2310,912,2265,881"/>
-<area shape="poly" id="edge79_Node000082_Node000083" title=" " alt="" coords="2196,923,2210,908,2234,869,2239,872,2215,911,2199,926"/>
-<area shape="poly" id="edge81_Node000082_Node000084" title=" " alt="" coords="2378,921,2372,908,2363,897,2335,879,2303,869,2305,864,2337,874,2366,893,2376,905,2382,919"/>
-<area shape="rect" id="Node000027" href="$classRealm_1_1CoreReservation.html" title=" " alt="" coords="1809,933,1989,959"/>
-<area shape="poly" id="edge83_Node000001_Node000027" title=" " alt="" coords="1876,969,1809,1023,1805,1019,1872,965"/>
-<area shape="rect" id="Node000028" href="$classRealm_1_1CoreReservationParameters.html" title=" " alt="" coords="1851,845,2105,871"/>
-<area shape="poly" id="edge84_Node000027_Node000028" title=" " alt="" coords="1948,881,1930,896,1917,916,1907,934,1902,932,1912,913,1927,893,1945,877"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="4364,1316,4572,1344"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1LocalTaskProcessor.html" title=" " alt="" coords="4117,846,4314,873"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="4233,885,4461,1317,4456,1315,4230,889"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1ProcessorImpl.html" title=" " alt="" coords="3781,707,3944,735"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="3960,719,4027,729,4062,738,4094,750,4129,771,4160,796,4206,846,4200,844,4157,800,4126,775,4092,755,4060,743,4026,734,3960,725"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Processor.html" title=" " alt="" coords="3417,707,3552,735"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="3567,718,3783,721,3777,721,3567,724"/>
+<area shape="poly" id="edge4_Node000004_Node000004" title=" " alt="" coords="3452,689,3463,683,3484,680,3504,683,3517,689,3521,698,3515,709,3512,704,3516,698,3513,692,3503,688,3485,686,3465,688,3454,694"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1ThreadedTaskScheduler.html" title=" " alt="" coords="1985,494,2210,521"/>
+<area shape="poly" id="edge5_Node000002_Node000005" title=" " alt="" coords="2119,531,2174,598,2212,637,2256,676,2306,712,2360,741,2418,762,2478,769,3864,769,3955,777,4045,796,4123,821,4183,845,4178,845,4121,826,4043,802,3955,782,3864,774,2478,774,2416,767,2358,746,2303,716,2253,680,2209,641,2170,601,2117,537"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1ThreadScheduler.html" title=" " alt="" coords="1583,790,1764,817"/>
+<area shape="poly" id="edge6_Node000005_Node000006" title=" " alt="" coords="1765,783,1813,769,1864,750,1914,726,1959,695,2004,651,2041,601,2088,524,2091,520,2045,604,2008,654,1963,699,1917,730,1866,755,1815,774,1767,788"/>
+<area shape="rect" id="Node000041" href="$classRealm_1_1Thread.html" title=" " alt="" coords="2040,1208,2156,1236"/>
+<area shape="poly" id="edge61_Node000041_Node000006" title=" " alt="" coords="1701,826,2085,1208,2079,1208,1699,831"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1FIFOMutex.html" title=" " alt="" coords="704,596,846,624"/>
+<area shape="poly" id="edge7_Node000005_Node000007" title=" " alt="" coords="861,614,1034,622,1268,625,1398,623,1533,617,1668,607,1800,590,1872,576,1943,557,2061,521,2056,523,1945,562,1873,581,1800,596,1668,612,1533,623,1398,629,1268,631,1034,627,863,619"/>
+<area shape="rect" id="Node000030" href="$classRealm_1_1TaskQueue.html" title=" " alt="" coords="3791,938,3934,965"/>
+<area shape="poly" id="edge45_Node000030_Node000007" title=" " alt="" coords="861,613,881,621,896,634,909,653,914,672,909,710,904,747,909,764,920,782,957,816,993,839,1029,853,1065,860,1147,860,1247,857,3306,857,3434,856,3534,857,3633,870,3757,900,3801,916,3839,938,3834,937,3799,921,3756,905,3632,875,3534,863,3434,861,3306,862,1247,862,1147,866,1065,865,1027,858,991,844,954,820,916,785,904,766,899,747,904,709,908,672,904,655,892,637,878,626,862,618"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1noncopyable.html" title=" " alt="" coords="380,970,534,997"/>
+<area shape="poly" id="edge8_Node000007_Node000008" title=" " alt="" coords="490,959,525,932,563,897,600,856,630,809,638,784,640,761,634,718,632,698,632,677,639,656,654,634,677,617,706,610,702,613,679,622,658,637,643,658,637,678,637,697,640,718,646,761,643,785,634,811,604,859,567,901,528,936,494,963"/>
+<area shape="rect" id="Node000025" href="$classRealm_1_1UnfairMutex.html" title=" " alt="" coords="699,1191,851,1219"/>
+<area shape="poly" id="edge31_Node000025_Node000008" title=" " alt="" coords="491,1004,756,1190,751,1191,491,1009"/>
+<area shape="rect" id="Node000009" href="$classRealm_1_1atomic.html" title=" " alt="" coords="358,596,557,624"/>
+<area shape="poly" id="edge9_Node000007_Node000009" title=" " alt="" coords="572,608,706,609,702,612,574,613"/>
+<area shape="rect" id="Node000023" href="$classRealm_1_1BackgroundWorkManager.html" title=" " alt="" coords="1129,720,1368,748"/>
+<area shape="poly" id="edge39_Node000023_Node000009" title=" " alt="" coords="485,585,529,554,580,528,619,517,665,511,765,507,852,511,895,516,950,534,1003,559,1101,617,1181,674,1234,720,1228,720,1177,679,1098,621,1000,564,948,539,894,521,852,516,765,513,665,516,620,522,582,533,531,559,490,588"/>
+<area shape="poly" id="edge32_Node000025_Node000009" title=" " alt="" coords="480,634,521,685,559,746,587,801,604,846,635,951,641,988,643,1017,646,1045,658,1078,680,1112,706,1143,758,1191,752,1191,703,1147,676,1116,654,1081,641,1046,637,1017,636,988,629,952,599,848,582,803,555,749,516,688,481,639"/>
+<area shape="rect" id="Node000010" href="$classRealm_1_1DoorbellList.html" title=" " alt="" coords="383,759,532,787"/>
+<area shape="poly" id="edge10_Node000007_Node000010" title=" " alt="" coords="484,747,558,689,605,659,655,633,706,619,702,622,657,638,608,663,561,694,488,751"/>
+<area shape="rect" id="Node000015" href="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounter.html" title=" " alt="" coords="1136,431,1361,475"/>
+<area shape="poly" id="edge20_Node000015_Node000010" title=" " alt="" coords="478,746,515,695,555,634,561,618,563,604,568,590,579,577,607,564,644,556,733,551,824,550,894,546,1045,511,1179,474,1174,477,1047,516,895,551,824,556,733,556,644,562,609,569,583,582,572,593,568,605,566,620,559,637,520,698,482,748"/>
+<area shape="poly" id="edge41_Node000023_Node000010" title=" " alt="" coords="498,792,539,809,582,824,618,829,656,830,775,836,827,836,894,830,954,821,1000,811,1105,781,1212,747,1207,750,1106,786,1002,817,955,827,895,835,828,841,775,841,656,835,618,835,580,829,537,814,499,797"/>
+<area shape="poly" id="edge33_Node000025_Node000010" title=" " alt="" coords="474,798,550,923,602,1001,658,1078,713,1141,761,1191,756,1191,709,1145,654,1081,598,1004,546,925,474,803"/>
+<area shape="rect" id="Node000011" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,759,207,787"/>
+<area shape="poly" id="edge11_Node000010_Node000011" title=" " alt="" coords="221,771,384,771,380,775,224,775"/>
+<area shape="rect" id="Node000012" href="$classRealm_1_1IntrusiveList.html" title=" " alt="" coords="1581,171,1766,250"/>
+<area shape="poly" id="edge12_Node000005_Node000012" title=" " alt="" coords="1781,211,1827,218,1874,230,1920,247,1963,272,1991,297,2015,326,2054,389,2081,449,2095,494,2090,492,2076,451,2050,391,2011,329,1987,301,1959,276,1918,252,1873,235,1826,223,1782,216"/>
+<area shape="rect" id="Node000013" href="$classRealm_1_1PriorityQueue.html" title=" " alt="" coords="1575,273,1772,318"/>
+<area shape="poly" id="edge13_Node000005_Node000013" title=" " alt="" coords="1787,296,1876,312,1921,327,1962,347,2007,380,2044,421,2072,461,2091,494,2086,493,2068,464,2040,424,2003,384,1960,351,1919,332,1875,317,1788,302"/>
+<area shape="rect" id="Node000014" href="$classRealm_1_1atomic.html" title=" " alt="" coords="688,218,862,245"/>
+<area shape="poly" id="edge14_Node000005_Node000014" title=" " alt="" coords="820,209,905,175,1022,135,1165,95,1324,64,1408,55,1492,50,1577,52,1660,61,1741,78,1820,104,1894,141,1963,188,1997,223,2026,264,2048,308,2066,352,2088,435,2097,494,2092,492,2083,436,2061,354,2044,310,2021,266,1993,226,1959,192,1891,145,1818,109,1740,83,1659,66,1576,57,1492,56,1408,60,1325,69,1166,100,1024,140,907,180,824,213"/>
+<area shape="poly" id="edge17_Node000015_Node000014" title=" " alt="" coords="877,231,937,239,998,255,1056,282,1083,299,1107,320,1116,333,1120,346,1120,370,1120,394,1123,405,1131,416,1146,430,1141,430,1127,420,1118,407,1114,395,1115,370,1115,346,1112,335,1103,324,1080,303,1054,286,996,260,936,245,879,236"/>
+<area shape="poly" id="edge15_Node000005_Node000015" title=" " alt="" coords="1369,425,1464,410,1572,398,1686,394,1800,401,1883,416,1962,442,2020,467,2072,493,2066,493,2018,471,1960,447,1881,421,1800,406,1686,399,1572,403,1464,415,1372,430"/>
+<area shape="rect" id="Node000018" href="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html" title=" " alt="" coords="1561,519,1786,581"/>
+<area shape="poly" id="edge23_Node000018_Node000015" title=" " alt="" coords="1364,477,1563,524,1558,525,1365,482"/>
+<area shape="rect" id="Node000020" href="$classRealm_1_1ThreadedTaskScheduler_1_1WorkCounterUpdater.html" title=" " alt="" coords="1561,416,1786,495"/>
+<area shape="poly" id="edge26_Node000020_Node000015" title=" " alt="" coords="1376,451,1563,454,1558,456,1377,456"/>
+<area shape="rect" id="Node000016" href="$classRealm_1_1atomic.html" title=" " alt="" coords="358,350,557,377"/>
+<area shape="poly" id="edge16_Node000015_Node000016" title=" " alt="" coords="571,349,712,338,867,333,942,335,1009,341,1065,352,1107,369,1117,381,1121,393,1123,405,1131,416,1150,430,1144,430,1127,420,1118,408,1115,395,1113,383,1104,374,1064,357,1008,346,942,340,867,338,712,343,574,353"/>
+<area shape="rect" id="Node000017" href="$classRealm_1_1DelegatingMutex.html" title=" " alt="" coords="684,388,867,416"/>
+<area shape="poly" id="edge19_Node000017_Node000016" title=" " alt="" coords="551,378,581,382,685,394,681,397,581,387,554,383"/>
+<area shape="poly" id="edge18_Node000015_Node000017" title=" " alt="" coords="881,398,991,402,1106,413,1175,429,1170,431,1105,418,990,407,884,403"/>
+<area shape="poly" id="edge40_Node000023_Node000017" title=" " alt="" coords="830,419,919,443,961,447,1016,449,1069,454,1091,460,1107,470,1119,484,1125,498,1126,525,1124,554,1126,570,1132,586,1155,627,1183,664,1234,720,1229,720,1179,667,1151,630,1127,589,1121,571,1119,554,1121,525,1120,499,1114,486,1104,474,1089,465,1068,459,1016,454,960,452,918,449,832,424"/>
+<area shape="poly" id="edge21_Node000005_Node000018" title=" " alt="" coords="1801,540,1961,526,2012,521,2007,523,1961,531,1802,545"/>
+<area shape="rect" id="Node000019" href="$classRealm_1_1TaskQueue_1_1NotificationCallback.html" title=" " alt="" coords="1136,531,1361,575"/>
+<area shape="poly" id="edge22_Node000018_Node000019" title=" " alt="" coords="1376,550,1563,550,1558,552,1377,555"/>
+<area shape="poly" id="edge24_Node000005_Node000020" title=" " alt="" coords="1801,469,1987,493,1982,494,1802,474"/>
+<area shape="rect" id="Node000021" href="$classRealm_1_1PriorityQueue_1_1NotificationCallback.html" title=" " alt="" coords="1138,361,1359,406"/>
+<area shape="poly" id="edge25_Node000020_Node000021" title=" " alt="" coords="1373,397,1523,421,1563,430,1557,431,1522,426,1375,403"/>
+<area shape="rect" id="Node000022" href="$classRealm_1_1BackgroundWorkManager_1_1Worker.html" title=" " alt="" coords="1554,656,1792,701"/>
+<area shape="poly" id="edge27_Node000005_Node000022" title=" " alt="" coords="1808,689,1886,683,1924,674,1960,660,2004,629,2040,591,2068,552,2087,524,2091,520,2073,554,2045,594,2007,633,1962,664,1925,679,1886,688,1809,694"/>
+<area shape="poly" id="edge28_Node000022_Node000023" title=" " alt="" coords="1334,715,1391,705,1556,687,1551,689,1392,710,1336,720"/>
+<area shape="rect" id="Node000029" href="$classRealm_1_1BackgroundWorkItem.html" title=" " alt="" coords="1568,728,1779,756"/>
+<area shape="poly" id="edge38_Node000029_Node000023" title=" " alt="" coords="1383,734,1570,739,1565,741,1384,739"/>
+<area shape="rect" id="Node000024" href="$structRealm_1_1BackgroundWorkManager_1_1Config.html" title=" " alt="" coords="656,648,894,693"/>
+<area shape="poly" id="edge29_Node000023_Node000024" title=" " alt="" coords="909,676,1006,685,1106,698,1196,719,1191,721,1105,704,1006,690,911,681"/>
+<area shape="poly" id="edge30_Node000023_Node000025" title=" " alt="" coords="814,1181,874,1144,950,1094,1030,1032,1103,963,1150,904,1189,843,1239,750,1243,746,1194,845,1154,908,1107,966,1033,1036,953,1098,877,1149,817,1185"/>
+<area shape="rect" id="Node000036" href="$classRealm_1_1GaugeSampler.html" title=" " alt="" coords="2731,1275,2898,1303"/>
+<area shape="poly" id="edge77_Node000036_Node000025" title=" " alt="" coords="793,1229,844,1304,880,1345,920,1380,1002,1438,1073,1477,1108,1490,1148,1498,1247,1505,2099,1505,2205,1498,2311,1480,2415,1453,2513,1421,2602,1387,2679,1353,2784,1304,2789,1302,2681,1358,2604,1392,2514,1426,2416,1458,2312,1485,2205,1503,2099,1510,1247,1510,1147,1504,1107,1495,1070,1482,1000,1443,917,1384,876,1348,840,1308,791,1235"/>
+<area shape="rect" id="Node000037" href="$classRealm_1_1SamplingProfilerImpl.html" title=" " alt="" coords="2375,1208,2583,1236"/>
+<area shape="poly" id="edge51_Node000037_Node000025" title=" " alt="" coords="793,1230,815,1262,844,1297,879,1330,920,1356,949,1367,974,1373,1020,1373,1069,1366,1129,1362,1499,1364,1800,1362,1982,1336,2160,1300,2314,1264,2424,1237,2429,1236,2316,1269,2161,1306,1983,1341,1800,1367,1499,1369,1129,1368,1069,1371,1021,1378,974,1378,947,1372,917,1361,876,1335,840,1301,811,1265,791,1235"/>
+<area shape="poly" id="edge70_Node000041_Node000025" title=" " alt="" coords="802,1227,854,1268,886,1287,919,1302,1007,1330,1082,1347,1150,1355,1215,1357,1350,1347,1522,1333,1661,1320,1800,1300,1881,1289,1960,1272,2015,1254,2062,1237,2067,1236,2017,1259,1962,1277,1882,1294,1800,1305,1662,1325,1523,1338,1351,1352,1215,1362,1150,1361,1082,1352,1005,1335,917,1307,883,1292,851,1272,801,1232"/>
+<area shape="rect" id="Node000044" href="$classRealm_1_1GenEventImpl.html" title=" " alt="" coords="1167,1275,1330,1303"/>
+<area shape="poly" id="edge66_Node000044_Node000025" title=" " alt="" coords="808,1225,860,1254,919,1278,983,1290,1048,1296,1169,1297,1164,1298,1048,1301,982,1296,918,1283,857,1259,808,1230"/>
+<area shape="rect" id="Node000026" href="$classRealm_1_1atomic.html" title=" " alt="" coords="672,716,878,744"/>
+<area shape="poly" id="edge34_Node000023_Node000026" title=" " alt="" coords="892,729,1131,732,1126,734,894,734"/>
+<area shape="rect" id="Node000027" href="$classRealm_1_1atomic.html" title=" " alt="" coords="676,768,875,796"/>
+<area shape="poly" id="edge35_Node000023_Node000027" title=" " alt="" coords="890,777,995,771,1105,761,1189,747,1184,750,1106,766,995,777,892,782"/>
+<area shape="rect" id="Node000028" href="$classRealm_1_1atomic.html" title=" " alt="" coords="694,1040,857,1068"/>
+<area shape="poly" id="edge36_Node000023_Node000028" title=" " alt="" coords="798,1027,850,980,883,954,917,932,968,910,1012,900,1054,891,1104,868,1145,838,1181,805,1234,750,1238,747,1185,809,1148,842,1107,872,1056,896,1013,906,970,915,920,937,886,959,854,984,802,1031"/>
+<area shape="rect" id="Node000034" href="$classRealm_1_1ProfilingGauges_1_1AbsoluteRangeGauge.html" title=" " alt="" coords="3376,897,3593,942"/>
+<area shape="poly" id="edge79_Node000034_Node000028" title=" " alt="" coords="804,1028,855,994,885,978,918,965,1008,944,1080,939,1154,943,1247,946,3161,946,3272,942,3379,934,3373,935,3272,947,3161,952,1247,952,1154,948,1080,945,1008,949,919,970,888,983,858,999,807,1033"/>
+<area shape="poly" id="edge52_Node000037_Node000028" title=" " alt="" coords="872,1041,1072,1025,1343,1014,1494,1014,1651,1019,1808,1031,1961,1050,2034,1064,2107,1082,2246,1126,2364,1171,2449,1208,2443,1208,2362,1176,2244,1131,2105,1088,2033,1069,1961,1056,1807,1036,1651,1024,1494,1019,1343,1020,1072,1031,873,1046"/>
+<area shape="poly" id="edge69_Node000041_Node000028" title=" " alt="" coords="872,1054,1099,1065,1234,1074,1368,1088,1536,1110,1666,1131,1962,1190,2042,1209,2036,1209,1960,1196,1665,1137,1535,1115,1367,1093,1233,1080,1099,1070,873,1059"/>
+<area shape="rect" id="Node000043" href="$classRealm_1_1Operation.html" title=" " alt="" coords="1606,1210,1741,1237"/>
+<area shape="poly" id="edge68_Node000043_Node000028" title=" " alt="" coords="830,1071,966,1115,1047,1138,1130,1157,1608,1215,1603,1217,1129,1163,1046,1143,964,1120,831,1076"/>
+<area shape="poly" id="edge64_Node000044_Node000028" title=" " alt="" coords="804,1076,850,1122,897,1178,907,1201,911,1211,920,1220,944,1234,966,1243,1007,1248,1051,1247,1106,1253,1191,1274,1186,1275,1105,1258,1051,1253,1007,1253,964,1248,942,1239,917,1224,907,1214,902,1204,892,1181,846,1126,803,1082"/>
+<area shape="poly" id="edge37_Node000023_Node000029" title=" " alt="" coords="1599,762,1548,781,1523,791,1457,800,1391,791,1329,773,1279,751,1278,746,1331,768,1392,786,1457,794,1522,786,1546,776,1604,760"/>
+<area shape="poly" id="edge42_Node000002_Node000030" title=" " alt="" coords="3933,931,4157,875,4162,873,3934,936"/>
+<area shape="rect" id="Node000031" href="$classRealm_1_1atomic.html" title=" " alt="" coords="3382,966,3587,993"/>
+<area shape="poly" id="edge43_Node000030_Node000031" title=" " alt="" coords="3603,979,3679,977,3756,971,3805,966,3800,967,3757,977,3679,983,3603,985"/>
+<area shape="rect" id="Node000032" href="$classRealm_1_1atomic.html" title=" " alt="" coords="3392,1018,3577,1045"/>
+<area shape="poly" id="edge44_Node000030_Node000032" title=" " alt="" coords="3591,1033,3673,1027,3715,1020,3756,1010,3803,989,3840,967,3845,965,3806,993,3758,1015,3716,1025,3674,1032,3592,1038"/>
+<area shape="rect" id="Node000033" href="$classRealm_1_1IntrusivePriorityList.html" title=" " alt="" coords="3362,1341,3607,1437"/>
+<area shape="poly" id="edge46_Node000030_Node000033" title=" " alt="" coords="3602,1329,3605,1327,3652,1281,3695,1230,3734,1177,3768,1123,3822,1028,3853,967,3857,964,3826,1031,3773,1126,3738,1180,3699,1233,3656,1285,3608,1331,3605,1334"/>
+<area shape="poly" id="edge80_Node000002_Node000034" title=" " alt="" coords="3607,902,3630,900,3799,877,3873,867,3968,860,4119,858,4114,859,3968,865,3873,873,3799,882,3631,905,3608,908"/>
+<area shape="poly" id="edge47_Node000030_Node000034" title=" " alt="" coords="3608,927,3793,945,3788,946,3608,933"/>
+<area shape="rect" id="Node000035" href="$classRealm_1_1ProfilingGauges_1_1Gauge.html" title=" " alt="" coords="3073,1215,3246,1259"/>
+<area shape="poly" id="edge48_Node000034_Node000035" title=" " alt="" coords="3175,1198,3203,1144,3244,1078,3297,1010,3327,979,3361,952,3381,943,3386,941,3364,956,3331,983,3301,1013,3248,1081,3207,1147,3179,1203"/>
+<area shape="rect" id="Node000038" href="$classRealm_1_1DelayedGaugeAddition.html" title=" " alt="" coords="3374,1119,3595,1147"/>
+<area shape="poly" id="edge55_Node000038_Node000035" title=" " alt="" coords="3246,1207,3436,1148,3441,1147,3247,1212"/>
+<area shape="rect" id="Node000069" href="$classRealm_1_1ProfilingGauges_1_1AbsoluteGauge.html" title=" " alt="" coords="3398,1255,3571,1317"/>
+<area shape="poly" id="edge72_Node000069_Node000035" title=" " alt="" coords="3221,1263,3271,1278,3335,1287,3400,1291,3395,1291,3334,1292,3270,1283,3221,1268"/>
+<area shape="rect" id="Node000071" href="$classRealm_1_1ProfilingGauges_1_1EventCounter.html" title=" " alt="" coords="3381,1187,3588,1231"/>
+<area shape="poly" id="edge75_Node000071_Node000035" title=" " alt="" coords="3262,1225,3383,1218,3378,1218,3262,1231"/>
+<area shape="poly" id="edge49_Node000035_Node000036" title=" " alt="" coords="2913,1271,3070,1250,3075,1250,2914,1277"/>
+<area shape="poly" id="edge78_Node000036_Node000036" title=" " alt="" coords="2786,1257,2795,1251,2814,1248,2832,1251,2843,1257,2847,1266,2841,1277,2838,1272,2841,1266,2839,1260,2830,1256,2814,1254,2797,1256,2788,1262"/>
+<area shape="poly" id="edge53_Node000037_Node000036" title=" " alt="" coords="2741,1307,2676,1316,2641,1314,2606,1307,2572,1293,2541,1275,2495,1239,2496,1234,2544,1271,2575,1288,2607,1302,2641,1308,2676,1310,2746,1306"/>
+<area shape="poly" id="edge50_Node000036_Node000037" title=" " alt="" coords="2598,1230,2707,1249,2781,1275,2775,1274,2706,1254,2598,1235"/>
+<area shape="poly" id="edge54_Node000037_Node000038" title=" " alt="" coords="3356,1130,3206,1133,3018,1140,2812,1156,2708,1169,2607,1185,2561,1196,2518,1210,2517,1205,2559,1191,2606,1180,2707,1163,2811,1151,3017,1135,3206,1128,3361,1130"/>
+<area shape="poly" id="edge56_Node000038_Node000038" title=" " alt="" coords="3452,1101,3463,1095,3484,1092,3504,1095,3517,1101,3521,1110,3515,1121,3512,1116,3516,1110,3513,1104,3503,1100,3485,1098,3465,1100,3454,1106"/>
+<area shape="rect" id="Node000039" href="$classRealm_1_1CoreReservation.html" title=" " alt="" coords="2008,1438,2187,1465"/>
+<area shape="poly" id="edge86_Node000001_Node000039" title=" " alt="" coords="2203,1458,2334,1467,2478,1472,4217,1472,4255,1468,4292,1457,4327,1440,4359,1421,4415,1378,4451,1346,4456,1343,4418,1382,4362,1425,4329,1445,4293,1462,4256,1473,4217,1477,2478,1477,2334,1473,2203,1464"/>
+<area shape="poly" id="edge57_Node000037_Node000039" title=" " alt="" coords="2202,1449,2289,1443,2325,1436,2350,1426,2359,1418,2364,1409,2373,1386,2467,1238,2471,1235,2378,1389,2368,1412,2363,1422,2353,1431,2327,1441,2290,1448,2203,1454"/>
+<area shape="rect" id="Node000040" href="$classRealm_1_1CoreReservationParameters.html" title=" " alt="" coords="1547,1438,1800,1465"/>
+<area shape="poly" id="edge58_Node000039_Node000040" title=" " alt="" coords="1816,1449,2010,1451,2005,1452,1816,1454"/>
+<area shape="poly" id="edge59_Node000037_Node000041" title=" " alt="" coords="2171,1220,2377,1222,2372,1223,2172,1225"/>
+<area shape="rect" id="Node000042" href="$classRealm_1_1atomic.html" title=" " alt="" coords="1583,1263,1764,1291"/>
+<area shape="poly" id="edge60_Node000041_Node000042" title=" " alt="" coords="1779,1270,1868,1263,1961,1251,2046,1236,2041,1237,1961,1257,1868,1268,1779,1275"/>
+<area shape="poly" id="edge62_Node000041_Node000043" title=" " alt="" coords="1756,1221,2042,1222,2037,1223,1757,1226"/>
+<area shape="poly" id="edge67_Node000044_Node000043" title=" " alt="" coords="1587,1230,1495,1242,1392,1257,1303,1277,1301,1272,1391,1252,1494,1237,1593,1229"/>
+<area shape="poly" id="edge63_Node000043_Node000044" title=" " alt="" coords="1345,1301,1388,1303,1434,1300,1479,1292,1521,1277,1529,1271,1533,1265,1537,1257,1545,1249,1574,1236,1608,1230,1603,1231,1576,1241,1548,1254,1541,1260,1537,1267,1533,1275,1524,1282,1480,1297,1434,1305,1388,1308,1346,1306"/>
+<area shape="poly" id="edge65_Node000044_Node000044" title=" " alt="" coords="1211,1257,1224,1251,1248,1248,1271,1251,1286,1257,1290,1266,1284,1277,1280,1272,1285,1266,1282,1260,1270,1256,1249,1254,1225,1256,1213,1262"/>
+<area shape="poly" id="edge71_Node000037_Node000069" title=" " alt="" coords="3386,1316,3364,1331,3353,1344,3340,1357,3315,1365,3294,1366,3246,1362,3064,1374,2919,1383,2851,1381,2778,1372,2698,1352,2606,1321,2571,1303,2539,1281,2493,1239,2494,1234,2542,1277,2573,1299,2608,1316,2700,1347,2779,1367,2851,1376,2919,1378,3063,1368,3246,1357,3294,1360,3314,1360,3337,1352,3349,1340,3361,1327,3381,1318"/>
+<area shape="rect" id="Node000070" href="$classRealm_1_1atomic.html" title=" " alt="" coords="3080,1303,3239,1347"/>
+<area shape="poly" id="edge73_Node000069_Node000070" title=" " alt="" coords="3255,1345,3297,1347,3338,1341,3349,1335,3361,1327,3395,1315,3400,1313,3364,1331,3352,1339,3339,1346,3297,1352,3255,1350"/>
+<area shape="poly" id="edge76_Node000071_Node000070" title=" " alt="" coords="3244,1294,3337,1256,3361,1241,3391,1232,3396,1231,3363,1246,3340,1260,3245,1299"/>
+<area shape="poly" id="edge74_Node000037_Node000071" title=" " alt="" coords="3363,1205,3246,1205,2926,1196,2786,1196,2607,1206,2567,1210,2566,1205,2606,1201,2786,1191,2926,1191,3246,1200,3368,1205"/>
+<area shape="rect" id="Node000072" href="$classRealm_1_1RWLock.html" title=" " alt="" coords="3801,1562,3924,1589"/>
+<area shape="poly" id="edge81_Node000002_Node000072" title=" " alt="" coords="3876,1546,4205,875,4210,873,3879,1550"/>
+<area shape="rect" id="Node000073" href="$structRealm_1_1RWLock_1_1Writer.html" title=" " alt="" coords="4130,1536,4301,1564"/>
+<area shape="poly" id="edge83_Node000073_Node000072" title=" " alt="" coords="3924,1555,3968,1546,4051,1541,4132,1544,4127,1544,4051,1546,3968,1552,3925,1560"/>
+<area shape="rect" id="Node000074" href="$structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="4127,1646,4304,1673"/>
+<area shape="poly" id="edge85_Node000074_Node000072" title=" " alt="" coords="3921,1592,3969,1606,4137,1645,4131,1645,3967,1611,3920,1597"/>
+<area shape="poly" id="edge82_Node000072_Node000073" title=" " alt="" coords="4140,1567,4093,1577,4005,1581,3924,1581,3924,1576,4005,1576,4093,1571,4135,1568"/>
+<area shape="poly" id="edge84_Node000072_Node000074" title=" " alt="" coords="4167,1679,4122,1694,4071,1702,4018,1701,3992,1697,3967,1688,3934,1668,3906,1642,3871,1592,3873,1587,3910,1638,3937,1664,3969,1683,3993,1692,4019,1696,4071,1696,4121,1688,4162,1679"/>
 </map>

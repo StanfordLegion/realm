@@ -1,11 +1,11 @@
 <map id="Realm::Cuda::GlobalRegistrations" name="Realm::Cuda::GlobalRegistrations">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,93,247,119"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1RWLock.html" title=" " alt="" coords="343,5,467,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="344,37,269,57,157,96,156,91,268,52,342,32"/>
-<area shape="rect" id="Node000003" href="$structRealm_1_1RWLock_1_1Writer.html" title=" " alt="" coords="271,93,443,119"/>
-<area shape="poly" id="edge3_Node000003_Node000002" title=" " alt="" coords="345,39,327,56,325,65,327,74,343,91,339,95,323,76,319,65,322,53,342,35"/>
-<area shape="rect" id="Node000004" href="$structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="467,93,646,119"/>
-<area shape="poly" id="edge5_Node000004_Node000002" title=" " alt="" coords="431,37,475,67,527,91,525,96,473,72,428,42"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="368,80,396,30,401,32,372,82"/>
-<area shape="poly" id="edge4_Node000002_Node000004" title=" " alt="" coords="545,82,537,68,526,57,497,41,466,30,468,25,500,36,529,53,541,65,549,79"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,106,246,134"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1RWLock.html" title=" " alt="" coords="333,5,456,33"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="316,38,254,60,197,84,150,108,148,103,195,79,252,54,321,36"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1RWLock_1_1Writer.html" title=" " alt="" coords="269,106,440,134"/>
+<area shape="poly" id="edge3_Node000003_Node000002" title=" " alt="" coords="332,40,315,58,312,69,316,81,324,93,336,106,331,105,320,97,311,83,307,69,311,56,327,42"/>
+<area shape="rect" id="Node000004" href="$structRealm_1_1RWLock_1_1Reader.html" title=" " alt="" coords="465,106,642,134"/>
+<area shape="poly" id="edge5_Node000004_Node000002" title=" " alt="" coords="420,42,469,80,519,106,513,105,466,84,418,47"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="364,90,387,35,392,32,368,94"/>
+<area shape="poly" id="edge4_Node000002_Node000004" title=" " alt="" coords="544,90,535,74,522,59,491,40,456,30,457,24,493,35,526,55,540,71,548,92"/>
 </map>

@@ -1,8 +1,8 @@
 <map id="Realm::Type::PointerFields" name="Realm::Type::PointerFields">
-<area shape="rect" id="Node000001" title=" " alt="" coords="11,181,206,207"/>
-<area shape="rect" id="Node000002" href="$structRealm_1_1Type_1_1CommonFields.html" title=" " alt="" coords="5,5,212,31"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="111,44,111,181,106,181,106,44"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1Type.html" title=" " alt="" coords="125,93,228,119"/>
-<area shape="poly" id="edge3_Node000003_Node000002" title=" " alt="" coords="129,40,169,91,165,94,124,43"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="161,131,120,182,116,179,157,128"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="12,207,205,234"/>
+<area shape="rect" id="Node000002" href="$structRealm_1_1Type_1_1CommonFields.html" title=" " alt="" coords="5,5,212,33"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="111,48,111,207,106,206,106,50"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Type.html" title=" " alt="" coords="124,106,226,134"/>
+<area shape="poly" id="edge3_Node000003_Node000002" title=" " alt="" coords="127,43,169,105,164,106,125,48"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="160,146,119,208,115,204,155,147"/>
 </map>

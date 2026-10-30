@@ -1,8 +1,8 @@
 <map id="Realm::CachingAllocator&lt; T, N &gt;::Block::Chunk" name="Realm::CachingAllocator&lt; T, N &gt;::Block::Chunk">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,123,188,163"/>
-<area shape="rect" id="Node000002" href="$structRealm_1_1IntrusiveListLink.html" title=" " alt="" coords="103,5,301,60"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="129,70,113,86,104,104,100,123,95,122,99,102,109,82,125,66"/>
-<area shape="rect" id="Node000003" href="$structRealm_1_1CachingAllocator_1_1Block_1_1Chunk.html" title=" " alt="" coords="213,123,396,163"/>
-<area shape="poly" id="edge3_Node000003_Node000002" title=" " alt="" coords="194,74,196,86,200,97,212,110,227,120,224,125,209,114,196,100,190,88,189,74"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="291,111,276,86,249,62,252,58,280,82,296,108"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,140,187,185"/>
+<area shape="rect" id="Node000002" href="$structRealm_1_1IntrusiveListLink.html" title=" " alt="" coords="107,5,304,67"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="126,75,114,92,103,116,99,141,94,138,98,114,109,90,122,79"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1CachingAllocator_1_1Block_1_1Chunk.html" title=" " alt="" coords="217,140,399,185"/>
+<area shape="poly" id="edge3_Node000003_Node000002" title=" " alt="" coords="196,80,198,99,204,115,215,127,230,140,225,139,212,131,200,117,193,100,193,85"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="299,124,283,93,260,70,262,65,288,89,304,126"/>
 </map>

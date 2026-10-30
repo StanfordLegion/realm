@@ -5,5 +5,5 @@ var event_8h =
     [ "Realm::Barrier", "classRealm_1_1Barrier.html", "classRealm_1_1Barrier" ],
     [ "Realm::Barrier::ParticipantInfo", "structRealm_1_1Barrier_1_1ParticipantInfo.html", "structRealm_1_1Barrier_1_1ParticipantInfo" ],
     [ "Realm::CompletionQueue", "classRealm_1_1CompletionQueue.html", "classRealm_1_1CompletionQueue" ],
-    [ "ReductionOpID", "event_8h.html#ac4b330dde1ad1a2988e6241e3ad39d2d", null ]
+    [ "Realm::ReductionOpID", "namespaceRealm.html#ac4b330dde1ad1a2988e6241e3ad39d2d", null ]
 ];

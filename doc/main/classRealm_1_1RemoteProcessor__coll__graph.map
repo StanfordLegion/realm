@@ -1,12 +1,8 @@
 <map id="Realm::RemoteProcessor" name="Realm::RemoteProcessor">
-<area shape="rect" id="Node000001" title=" " alt="" coords="118,271,305,296"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1ProcessorImpl.html" title=" " alt="" coords="129,196,293,221"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="214,236,214,270,209,270,209,236"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1DynamicTableFreeList.html" title=" " alt="" coords="5,93,220,133"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="131,144,152,170,187,194,184,198,148,174,127,147"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1atomic.html" title=" " alt="" coords="25,5,200,31"/>
-<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="115,44,115,93,110,93,110,44"/>
-<area shape="rect" id="Node000005" href="$classRealm_1_1Processor.html" title=" " alt="" coords="244,101,379,126"/>
-<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="300,139,272,174,237,198,234,194,268,170,296,136"/>
-<area shape="poly" id="edge5_Node000005_Node000005" title=" " alt="" coords="394,104,405,113,397,122,380,125,379,120,395,117,400,114,391,108"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,183,191,211"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ProcessorImpl.html" title=" " alt="" coords="16,106,180,134"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="100,147,100,184,96,182,96,151"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Processor.html" title=" " alt="" coords="31,5,165,33"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="99,46,101,106,95,105,97,51"/>
+<area shape="poly" id="edge3_Node000003_Node000003" title=" " alt="" coords="180,10,192,19,184,28,167,31,164,26,181,23,187,19,181,15"/>
 </map>

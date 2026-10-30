@@ -1,9 +1,9 @@
 var classRealm_1_1ModuleRegistrar =
 [
-    [ "NetworkRegistration", "classRealm_1_1ModuleRegistrar_1_1NetworkRegistration.html", "classRealm_1_1ModuleRegistrar_1_1NetworkRegistration" ],
-    [ "NetworkRegistrationBase", "classRealm_1_1ModuleRegistrar_1_1NetworkRegistrationBase.html", "classRealm_1_1ModuleRegistrar_1_1NetworkRegistrationBase" ],
-    [ "StaticRegistration", "classRealm_1_1ModuleRegistrar_1_1StaticRegistration.html", "classRealm_1_1ModuleRegistrar_1_1StaticRegistration" ],
     [ "StaticRegistrationBase", "classRealm_1_1ModuleRegistrar_1_1StaticRegistrationBase.html", "classRealm_1_1ModuleRegistrar_1_1StaticRegistrationBase" ],
+    [ "StaticRegistration", "classRealm_1_1ModuleRegistrar_1_1StaticRegistration.html", "classRealm_1_1ModuleRegistrar_1_1StaticRegistration" ],
+    [ "NetworkRegistrationBase", "classRealm_1_1ModuleRegistrar_1_1NetworkRegistrationBase.html", "classRealm_1_1ModuleRegistrar_1_1NetworkRegistrationBase" ],
+    [ "NetworkRegistration", "classRealm_1_1ModuleRegistrar_1_1NetworkRegistration.html", "classRealm_1_1ModuleRegistrar_1_1NetworkRegistration" ],
     [ "ModuleRegistrar", "classRealm_1_1ModuleRegistrar.html#ab6b8b5b9bd759337f6e5ef7379227e78", null ],
     [ "create_dynamic_module_configs", "classRealm_1_1ModuleRegistrar.html#a6d41bddc3067edfd95988075c64d95ab", null ],
     [ "create_dynamic_modules", "classRealm_1_1ModuleRegistrar.html#aaf4503e8d64b822345445cda3d52b830", null ],

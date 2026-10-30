@@ -60,8 +60,8 @@ var cuda__internal_8h =
     [ "CUPTI_APIS", "cuda__internal_8h.html#a9db012d9f01205533fcf7cee4d7bfa2b", null ],
     [ "CUPTI_FNPTR", "cuda__internal_8h.html#a9f35720fe8dea542282800e22467da4e", null ],
     [ "CUPTI_HAS_FNPTR", "cuda__internal_8h.html#af09a82d4b8c11e8e6adc1aed4c54d036", null ],
-    [ "DECL_FNPTR_EXTERN", "cuda__internal_8h.html#a103d95f07f899e1f85c7351a401f4758", null ],
-    [ "DECL_FNPTR_EXTERN", "cuda__internal_8h.html#a103d95f07f899e1f85c7351a401f4758", null ],
+    [ "DECL_FNPTR_EXTERN", "cuda__internal_8h.html#a8a78a5fd39b01e81c9ea612bd662b32d", null ],
+    [ "DECL_FNPTR_EXTERN", "cuda__internal_8h.html#aa6c72390e575864906306da5177a2c7e", null ],
     [ "DECL_FNPTR_EXTERN", "cuda__internal_8h.html#a78a46ca86d0f01cef0906ea35fb99b1a", null ],
     [ "IS_DEFAULT_STREAM", "cuda__internal_8h.html#aceb7d8242bc8e9ce1e272d3f3ebf9397", null ],
     [ "NVML_11_APIS", "cuda__internal_8h.html#ad8a7b33d230f0059828256c6b24c654e", null ],
@@ -71,22 +71,22 @@ var cuda__internal_8h =
     [ "REPORT_CU_ERROR", "cuda__internal_8h.html#a6e674bbed65074f83ed076231397afd0", null ],
     [ "REPORT_CUPTI_ERROR", "cuda__internal_8h.html#a335626e129f6ebabcb7eb8b0f7094170", null ],
     [ "REPORT_NVML_ERROR", "cuda__internal_8h.html#a8632372a7716956c1143a6a18e311c89", null ],
-    [ "nvmlIntNvLinkDeviceType_t", "cuda__internal_8h.html#ad3f2b6de76383898e56a4823d7c3a99e", null ],
-    [ "GPUMemcpyKind", "cuda__internal_8h.html#a6938136ba824ee88993d3962a440359a", [
-      [ "GPU_MEMCPY_HOST_TO_DEVICE", "cuda__internal_8h.html#a6938136ba824ee88993d3962a440359aa8ae1812ef0b081fb4e78c06713a75430", null ],
-      [ "GPU_MEMCPY_DEVICE_TO_HOST", "cuda__internal_8h.html#a6938136ba824ee88993d3962a440359aaa0100411617686f8f8e5751c9e10e28c", null ],
-      [ "GPU_MEMCPY_DEVICE_TO_DEVICE", "cuda__internal_8h.html#a6938136ba824ee88993d3962a440359aaacef4caa69ebcfefea5d58d5161c8872", null ],
-      [ "GPU_MEMCPY_PEER_TO_PEER", "cuda__internal_8h.html#a6938136ba824ee88993d3962a440359aa5cacab53f8c7f614687ffe8f214d610e", null ]
+    [ "Realm::Cuda::nvmlIntNvLinkDeviceType_t", "namespaceRealm_1_1Cuda.html#ad3f2b6de76383898e56a4823d7c3a99e", null ],
+    [ "Realm::Cuda::GPUMemcpyKind", "namespaceRealm_1_1Cuda.html#a6938136ba824ee88993d3962a440359a", [
+      [ "Realm::Cuda::GPU_MEMCPY_HOST_TO_DEVICE", "namespaceRealm_1_1Cuda.html#a6938136ba824ee88993d3962a440359aa8ae1812ef0b081fb4e78c06713a75430", null ],
+      [ "Realm::Cuda::GPU_MEMCPY_DEVICE_TO_HOST", "namespaceRealm_1_1Cuda.html#a6938136ba824ee88993d3962a440359aaa0100411617686f8f8e5751c9e10e28c", null ],
+      [ "Realm::Cuda::GPU_MEMCPY_DEVICE_TO_DEVICE", "namespaceRealm_1_1Cuda.html#a6938136ba824ee88993d3962a440359aaacef4caa69ebcfefea5d58d5161c8872", null ],
+      [ "Realm::Cuda::GPU_MEMCPY_PEER_TO_PEER", "namespaceRealm_1_1Cuda.html#a6938136ba824ee88993d3962a440359aa5cacab53f8c7f614687ffe8f214d610e", null ]
     ] ],
-    [ "nvmlIntNvLinkDeviceType_enum", "cuda__internal_8h.html#acb8cb63b69f8ed18a4e13e6d6b3f36fe", [
-      [ "NVML_NVLINK_DEVICE_TYPE_GPU", "cuda__internal_8h.html#acb8cb63b69f8ed18a4e13e6d6b3f36fea7e0de3536fe3da44b57b72dfcac71f5f", null ],
-      [ "NVML_NVLINK_DEVICE_TYPE_IBMNPU", "cuda__internal_8h.html#acb8cb63b69f8ed18a4e13e6d6b3f36fea1766f5e4f76d19c481413d87a384e793", null ],
-      [ "NVML_NVLINK_DEVICE_TYPE_SWITCH", "cuda__internal_8h.html#acb8cb63b69f8ed18a4e13e6d6b3f36fea34f73f2f8b055efa2ea03a4ca43cf53e", null ],
-      [ "NVML_NVLINK_DEVICE_TYPE_UNKNOWN", "cuda__internal_8h.html#acb8cb63b69f8ed18a4e13e6d6b3f36fea69b8ededcec77a282cb5c3331efb5360", null ]
+    [ "Realm::Cuda::nvmlIntNvLinkDeviceType_enum", "namespaceRealm_1_1Cuda.html#acb8cb63b69f8ed18a4e13e6d6b3f36fe", [
+      [ "Realm::Cuda::NVML_NVLINK_DEVICE_TYPE_GPU", "namespaceRealm_1_1Cuda.html#acb8cb63b69f8ed18a4e13e6d6b3f36fea7e0de3536fe3da44b57b72dfcac71f5f", null ],
+      [ "Realm::Cuda::NVML_NVLINK_DEVICE_TYPE_IBMNPU", "namespaceRealm_1_1Cuda.html#acb8cb63b69f8ed18a4e13e6d6b3f36fea1766f5e4f76d19c481413d87a384e793", null ],
+      [ "Realm::Cuda::NVML_NVLINK_DEVICE_TYPE_SWITCH", "namespaceRealm_1_1Cuda.html#acb8cb63b69f8ed18a4e13e6d6b3f36fea34f73f2f8b055efa2ea03a4ca43cf53e", null ],
+      [ "Realm::Cuda::NVML_NVLINK_DEVICE_TYPE_UNKNOWN", "namespaceRealm_1_1Cuda.html#acb8cb63b69f8ed18a4e13e6d6b3f36fea69b8ededcec77a282cb5c3331efb5360", null ]
     ] ],
-    [ "cuCtxRecordEvent", "cuda__internal_8h.html#a5cae3cdde8c21f7814b427f0f8f2a984", null ],
-    [ "CUDA_DRIVER_APIS", "cuda__internal_8h.html#a66c15905bd7bb0646f7e2cf6a15f130a", null ],
-    [ "cuGetProcAddress", "cuda__internal_8h.html#a5790b53895b13e62b3a9aa524d5168f8", null ],
-    [ "nvmlDeviceGetNvLinkRemoteDeviceType", "cuda__internal_8h.html#abb53bd09ad00ea5d8c6243bdf33170b0", null ],
-    [ "cuda_module_singleton", "cuda__internal_8h.html#a32a9d24ca05f2256859cdbcba5f4bffc", null ]
+    [ "Realm::Cuda::cuCtxRecordEvent", "namespaceRealm_1_1Cuda.html#a5cae3cdde8c21f7814b427f0f8f2a984", null ],
+    [ "Realm::Cuda::CUDA_DRIVER_APIS", "namespaceRealm_1_1Cuda.html#a66c15905bd7bb0646f7e2cf6a15f130a", null ],
+    [ "Realm::Cuda::cuGetProcAddress", "namespaceRealm_1_1Cuda.html#a5790b53895b13e62b3a9aa524d5168f8", null ],
+    [ "Realm::Cuda::nvmlDeviceGetNvLinkRemoteDeviceType", "namespaceRealm_1_1Cuda.html#abb53bd09ad00ea5d8c6243bdf33170b0", null ],
+    [ "Realm::Cuda::cuda_module_singleton", "namespaceRealm_1_1Cuda.html#a32a9d24ca05f2256859cdbcba5f4bffc", null ]
 ];

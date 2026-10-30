@@ -1,3 +1,11 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1StructuredTransform.html" title=" " alt="" coords="5,5,209,45"/>
+<area shape="rect" id="Node000000" title=" " alt="" coords="5,57,119,85"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1ExecutionException.html" title=" " alt="" coords="167,57,365,85"/>
+<area shape="poly" id="edge422_Node000000_Node000001" title=" " alt="" coords="133,69,169,70,164,72,134,74"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1ApplicationException.html" title=" " alt="" coords="424,5,633,33"/>
+<area shape="poly" id="edge423_Node000001_Node000002" title=" " alt="" coords="354,51,457,33,452,34,355,56"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1CancellationException.html" title=" " alt="" coords="420,57,637,85"/>
+<area shape="poly" id="edge424_Node000001_Node000003" title=" " alt="" coords="381,69,423,71,417,71,381,74"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1PoisonedEventException.html" title=" " alt="" coords="413,109,644,137"/>
+<area shape="poly" id="edge425_Node000001_Node000004" title=" " alt="" coords="355,86,457,109,452,109,354,91"/>
 </map>

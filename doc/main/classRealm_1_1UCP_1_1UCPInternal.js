@@ -30,5 +30,6 @@ var classRealm_1_1UCP_1_1UCPInternal =
     [ "sample_quiescence_state", "classRealm_1_1UCP_1_1UCPInternal.html#ad4ce57bb216bc71b39c8d00222629004", null ],
     [ "::Realm::UCPModule", "classRealm_1_1UCP_1_1UCPInternal.html#ad058d45e7584c65605f765e5da37b4ef", null ],
     [ "UCPMessageImpl", "classRealm_1_1UCP_1_1UCPInternal.html#a00b7168ed70e6a35d37ce66c9b4ce878", null ],
-    [ "runtime", "classRealm_1_1UCP_1_1UCPInternal.html#a6706a501ad8cd22882887373937ace43", null ]
+    [ "module", "classRealm_1_1UCP_1_1UCPInternal.html#a87f07eaf971e664fbd583bde5eb31e3d", null ],
+    [ "runtime", "classRealm_1_1UCP_1_1UCPInternal.html#a083289913a54c84e17eb39c7a9226078", null ]
 ];

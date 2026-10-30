@@ -1,23 +1,23 @@
 <map id="Realm::ChunkedRecycler&lt; T, CHUNK_SIZE &gt;" name="Realm::ChunkedRecycler&lt; T, CHUNK_SIZE &gt;">
-<area shape="rect" id="Node000001" title=" " alt="" coords="1075,140,1259,180"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1UnfairMutex.html" title=" " alt="" coords="748,147,901,173"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="915,157,1074,157,1074,163,915,163"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1noncopyable.html" title=" " alt="" coords="382,99,537,125"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="551,119,700,137,749,145,748,150,700,143,550,124"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1atomic.html" title=" " alt="" coords="359,149,559,174"/>
-<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="573,158,748,158,748,163,573,164"/>
-<area shape="rect" id="Node000005" href="$classRealm_1_1DoorbellList.html" title=" " alt="" coords="384,198,535,223"/>
-<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="548,197,700,177,747,170,748,175,700,183,549,203"/>
-<area shape="rect" id="Node000006" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,198,208,223"/>
-<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="222,208,384,208,384,213,222,213"/>
-<area shape="rect" id="Node000007" href="$structRealm_1_1ChunkedRecycler_1_1Chunk.html" title=" " alt="" coords="724,44,925,84"/>
-<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="910,85,1095,137,1093,142,909,90"/>
-<area shape="poly" id="edge8_Node000007_Node000007" title=" " alt="" coords="794,28,805,20,825,17,842,19,854,25,859,34,857,44,852,43,853,35,850,29,841,25,825,23,807,25,797,32"/>
-<area shape="rect" id="Node000009" href="$structRealm_1_1ChunkedRecycler_1_1WithPtr.html" title=" " alt="" coords="1063,21,1271,61"/>
-<area shape="poly" id="edge10_Node000009_Node000007" title=" " alt="" coords="939,66,1038,63,1070,59,1070,64,1039,68,939,72"/>
-<area shape="rect" id="Node000008" href="$classRealm_1_1atomic.html" title=" " alt="" coords="356,50,563,75"/>
-<area shape="poly" id="edge7_Node000007_Node000008" title=" " alt="" coords="577,60,724,61,724,66,577,66"/>
-<area shape="poly" id="edge9_Node000007_Node000009" title=" " alt="" coords="1049,45,950,51,926,53,925,48,949,45,1049,40"/>
-<area shape="rect" id="Node000010" href="$classRealm_1_1atomic.html" title=" " alt="" coords="732,197,917,222"/>
-<area shape="poly" id="edge11_Node000001_Node000010" title=" " alt="" coords="931,193,1038,177,1074,172,1075,177,1039,183,931,198"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="1081,166,1265,211"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1UnfairMutex.html" title=" " alt="" coords="752,175,904,202"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="920,186,1084,189,1078,189,920,191"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1noncopyable.html" title=" " alt="" coords="383,123,538,150"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="553,139,627,145,704,155,779,174,774,174,704,161,627,150,553,144"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1atomic.html" title=" " alt="" coords="361,175,560,202"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="575,186,754,188,749,189,576,191"/>
+<area shape="rect" id="Node000005" href="$classRealm_1_1DoorbellList.html" title=" " alt="" coords="386,231,535,258"/>
+<area shape="poly" id="edge4_Node000002_Node000005" title=" " alt="" coords="550,236,704,216,773,203,778,203,704,222,551,241"/>
+<area shape="rect" id="Node000006" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,231,207,258"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="222,242,388,244,383,245,222,247"/>
+<area shape="rect" id="Node000007" href="$structRealm_1_1ChunkedRecycler_1_1Chunk.html" title=" " alt="" coords="728,54,928,99"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="914,102,1104,166,1099,166,913,107"/>
+<area shape="poly" id="edge8_Node000007_Node000007" title=" " alt="" coords="799,36,810,30,828,28,845,30,857,35,862,44,861,56,857,52,857,46,853,39,844,35,828,33,811,35,801,41"/>
+<area shape="rect" id="Node000009" href="$structRealm_1_1ChunkedRecycler_1_1WithPtr.html" title=" " alt="" coords="1069,26,1277,71"/>
+<area shape="poly" id="edge10_Node000009_Node000007" title=" " alt="" coords="943,82,994,82,1045,78,1090,72,1095,71,1046,83,995,87,944,87"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1atomic.html" title=" " alt="" coords="358,63,563,90"/>
+<area shape="poly" id="edge7_Node000007_Node000008" title=" " alt="" coords="578,74,730,76,725,77,579,79"/>
+<area shape="poly" id="edge9_Node000007_Node000009" title=" " alt="" coords="1051,45,953,53,927,56,926,51,952,47,1056,45"/>
+<area shape="rect" id="Node000010" href="$classRealm_1_1atomic.html" title=" " alt="" coords="736,231,920,258"/>
+<area shape="poly" id="edge11_Node000001_Node000010" title=" " alt="" coords="936,232,1045,216,1079,212,1085,211,1046,222,936,237"/>
 </map>

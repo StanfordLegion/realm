@@ -7,5 +7,8 @@ var classRealm_1_1OverlapTester_3_011_00_01T_01_4 =
     [ "test_overlap", "classRealm_1_1OverlapTester_3_011_00_01T_01_4.html#ae47431c744436c17966cc63f890fec8b", null ],
     [ "test_overlap", "classRealm_1_1OverlapTester_3_011_00_01T_01_4.html#aeb413b602982115900d251f031d560ef", null ],
     [ "test_overlap", "classRealm_1_1OverlapTester_3_011_00_01T_01_4.html#a35828a57abd0bf8f1cd617a9e335ad5e", null ],
-    [ "interval_tree", "classRealm_1_1OverlapTester_3_011_00_01T_01_4.html#a5028da3b90755e63bc7e157311dd2cd9", null ]
+    [ "approxs", "classRealm_1_1OverlapTester.html#ad3d40e687e120afde00f5c979e504efc", null ],
+    [ "interval_tree", "classRealm_1_1OverlapTester_3_011_00_01T_01_4.html#a5028da3b90755e63bc7e157311dd2cd9", null ],
+    [ "labels", "classRealm_1_1OverlapTester.html#ae2ab812b3cd6861e3e429fd20064f147", null ],
+    [ "spaces", "classRealm_1_1OverlapTester.html#a367dd68e219bad7cb6ea23f8f8ebe515", null ]
 ];

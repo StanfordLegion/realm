@@ -3,6 +3,7 @@ var classPRealm_1_1Machine =
     [ "Machine", "classPRealm_1_1Machine.html#aeb62a45e27a2b755b183ebc2201fd2cc", null ],
     [ "Machine", "classPRealm_1_1Machine.html#a9450a01b90e6d95ededf9e5e91bc38ca", null ],
     [ "Machine", "classPRealm_1_1Machine.html#a5084e77c73f176df5abcbfe6b4790c6f", null ],
+    [ "Machine", "classPRealm_1_1Machine.html#a7ea5d62bf5bd13b9b9f7b0dba075f900", null ],
     [ "get_all_processors", "classPRealm_1_1Machine.html#a3ec0026f20122ff089cdeeb163735c9f", null ],
     [ "get_local_processors", "classPRealm_1_1Machine.html#a7a59ea119c1e1a58f1c9c05a930a1c95", null ],
     [ "get_local_processors_by_kind", "classPRealm_1_1Machine.html#a850f17108296fadfd07d4c29e18ecaf4", null ],

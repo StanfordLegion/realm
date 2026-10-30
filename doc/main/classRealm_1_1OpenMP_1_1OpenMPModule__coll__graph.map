@@ -1,9 +1,9 @@
 <map id="Realm::OpenMP::OpenMPModule" name="Realm::OpenMP::OpenMPModule">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,183,241,208"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Module.html" title=" " alt="" coords="42,87,162,113"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="110,125,123,182,118,183,105,126"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1OpenMP_1_1OpenMPModuleConfig.html" title=" " alt="" coords="187,80,423,120"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="257,129,147,185,144,180,255,124"/>
-<area shape="rect" id="Node000004" href="$classRealm_1_1ModuleConfig.html" title=" " alt="" coords="224,5,385,31"/>
-<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="307,44,307,80,302,80,302,44"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="9,200,244,228"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Module.html" title=" " alt="" coords="5,91,125,118"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="82,130,121,199,116,200,79,134"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1OpenMP_1_1OpenMPModuleConfig.html" title=" " alt="" coords="149,82,384,127"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="229,137,145,202,142,197,223,137"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1ModuleConfig.html" title=" " alt="" coords="186,5,346,33"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="268,46,269,83,264,81,265,51"/>
 </map>

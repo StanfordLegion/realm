@@ -1,7 +1,7 @@
 var classRealm_1_1MemoryQueryImpl =
 [
-    [ "BestMemAffinityCostFn", "structRealm_1_1MemoryQueryImpl_1_1BestMemAffinityCostFn.html", "structRealm_1_1MemoryQueryImpl_1_1BestMemAffinityCostFn" ],
     [ "BestProcAffinityCostFn", "structRealm_1_1MemoryQueryImpl_1_1BestProcAffinityCostFn.html", "structRealm_1_1MemoryQueryImpl_1_1BestProcAffinityCostFn" ],
+    [ "BestMemAffinityCostFn", "structRealm_1_1MemoryQueryImpl_1_1BestMemAffinityCostFn.html", "structRealm_1_1MemoryQueryImpl_1_1BestMemAffinityCostFn" ],
     [ "MemoryQueryImpl", "classRealm_1_1MemoryQueryImpl.html#a3b0ba4e83ac7063c33b1ae564e5e3641", null ],
     [ "MemoryQueryImpl", "classRealm_1_1MemoryQueryImpl.html#adc79a99ad18bd8d3d399d86b70a34a01", null ],
     [ "MemoryQueryImpl", "classRealm_1_1MemoryQueryImpl.html#ab668c2439382edd1fbec165e197dc4e4", null ],

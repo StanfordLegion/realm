@@ -1,7 +1,7 @@
 <map id="Realm::ReplicatedHeap::Listener" name="Realm::ReplicatedHeap::Listener">
-<area shape="rect" id="Node000001" title=" " alt="" coords="144,5,319,45"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1Cuda_1_1GPUReplHeapListener.html" title=" " alt="" coords="5,93,209,133"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="194,55,136,95,133,91,191,51"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1Hip_1_1GPUReplHeapListener.html" title=" " alt="" coords="234,101,479,126"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="272,51,341,98,338,103,269,56"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="144,5,318,50"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1Cuda_1_1GPUReplHeapListener.html" title=" " alt="" coords="5,98,209,143"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="192,58,138,100,135,95,187,60"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1Hip_1_1GPUReplHeapListener.html" title=" " alt="" coords="233,106,477,134"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="274,57,340,106,334,106,272,62"/>
 </map>

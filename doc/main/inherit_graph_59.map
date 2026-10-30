@@ -1,3 +1,19 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1atomic.html" title=" " alt="" coords="5,5,236,45"/>
+<area shape="rect" id="Node000000" href="$structPRealm_1_1Type_1_1CommonFields.html" title=" " alt="" coords="5,109,220,137"/>
+<area shape="rect" id="Node000001" href="$structRealm_1_1Type_1_1FloatingPointFields.html" title=" " alt="" coords="275,57,470,102"/>
+<area shape="poly" id="edge81_Node000000_Node000001" title=" " alt="" coords="213,104,277,94,272,97,215,109"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1Type_1_1FunctionPointerFields.html" title=" " alt="" coords="268,126,478,171"/>
+<area shape="poly" id="edge82_Node000000_Node000003" title=" " alt="" coords="235,132,270,138,265,139,236,138"/>
+<area shape="rect" id="Node000004" href="$structRealm_1_1Type_1_1IntegerFields.html" title=" " alt="" coords="276,195,470,222"/>
+<area shape="poly" id="edge83_Node000000_Node000004" title=" " alt="" coords="200,139,221,147,245,164,269,181,300,194,295,194,266,186,242,169,218,152,200,145"/>
+<area shape="rect" id="Node000005" href="$structRealm_1_1Type_1_1OpaqueFields.html" title=" " alt="" coords="274,247,472,274"/>
+<area shape="poly" id="edge84_Node000000_Node000005" title=" " alt="" coords="212,142,221,148,239,169,246,191,253,212,269,232,292,247,287,246,266,236,248,215,241,193,234,172,218,152,211,147"/>
+<area shape="rect" id="Node000006" href="$structRealm_1_1Type_1_1PointerFields.html" title=" " alt="" coords="276,5,470,33"/>
+<area shape="poly" id="edge85_Node000000_Node000006" title=" " alt="" coords="149,99,204,70,267,42,305,32,300,35,269,47,206,75,152,104"/>
+<area shape="rect" id="Node000002" href="$structRealm_1_1Type_1_1CommonFields.html" title=" " alt="" coords="9,161,216,189"/>
+<area shape="poly" id="edge86_Node000002_Node000001" title=" " alt="" coords="200,154,218,146,242,129,266,112,297,101,292,103,269,116,245,134,221,151,202,159"/>
+<area shape="poly" id="edge87_Node000002_Node000003" title=" " alt="" coords="231,160,270,158,265,160,232,166"/>
+<area shape="poly" id="edge88_Node000002_Node000004" title=" " alt="" coords="231,188,278,196,273,197,231,193"/>
+<area shape="poly" id="edge89_Node000002_Node000005" title=" " alt="" coords="163,193,268,231,313,246,308,246,267,236,162,198"/>
+<area shape="poly" id="edge90_Node000002_Node000006" title=" " alt="" coords="211,151,218,147,229,134,236,122,241,96,247,69,254,55,266,42,287,32,283,35,269,47,258,58,252,71,246,97,241,124,234,138,221,150,214,156"/>
 </map>

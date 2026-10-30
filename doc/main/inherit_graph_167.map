@@ -1,3 +1,25 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="Node000000" href="$classRealm_1_1Cuda_1_1GPUAllocation.html" title="Class for managing the lifetime of a given gpu allocation. As instances of this class own an underlyi..." alt="" coords="5,5,212,31"/>
+<area shape="rect" id="Node000000" href="$structRealm_1_1CudaArrayPieceInfo.html" title=" " alt="" coords="302,78,501,106"/>
+<area shape="rect" id="Node000001" href="$classRealm_1_1CudaArrayLayoutPiece.html" title=" " alt="" coords="552,75,770,119"/>
+<area shape="poly" id="edge189_Node000000_Node000001" title=" " alt="" coords="516,91,554,94,549,95,517,97"/>
+<area shape="rect" id="Node000005" href="$structRealm_1_1HDF5PieceInfo.html" title=" " alt="" coords="318,267,485,295"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1HDF5LayoutPiece.html" title=" " alt="" coords="568,233,754,278"/>
+<area shape="poly" id="edge190_Node000005_Node000004" title=" " alt="" coords="500,269,565,265,570,265,501,274"/>
+<area shape="rect" id="Node000006" href="$classPRealm_1_1InstanceLayoutPieceBase.html" title=" " alt="" coords="5,112,251,140"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1InstanceLayoutPiece.html" title=" " alt="" coords="299,129,504,174"/>
+<area shape="poly" id="edge191_Node000006_Node000002" title=" " alt="" coords="266,137,301,141,296,143,267,142"/>
+<area shape="rect" id="Node000007" href="$classRealm_1_1InstanceLayoutPiece.html" title=" " alt="" coords="299,9,504,54"/>
+<area shape="poly" id="edge195_Node000006_Node000007" title=" " alt="" coords="182,105,298,64,335,53,331,56,300,69,185,109"/>
+<area shape="rect" id="Node000010" href="$classRealm_1_1InstanceLayoutPiece.html" title=" " alt="" coords="299,199,504,243"/>
+<area shape="poly" id="edge197_Node000006_Node000010" title=" " alt="" coords="229,142,252,151,276,167,300,184,328,198,323,198,297,189,273,171,249,155,229,148"/>
+<area shape="poly" id="edge193_Node000002_Node000001" title=" " alt="" coords="518,124,554,119,549,121,520,130"/>
+<area shape="poly" id="edge194_Node000002_Node000004" title=" " alt="" coords="487,177,505,184,614,233,609,233,503,189,486,182"/>
+<area shape="rect" id="Node000003" href="$classRealm_1_1AffineLayoutPiece.html" title=" " alt="" coords="567,144,755,189"/>
+<area shape="poly" id="edge192_Node000002_Node000003" title=" " alt="" coords="519,156,569,161,564,161,520,161"/>
+<area shape="rect" id="Node000008" href="$classRealm_1_1AffineLayoutPiece.html" title=" " alt="" coords="567,5,755,50"/>
+<area shape="poly" id="edge196_Node000007_Node000008" title=" " alt="" coords="519,27,569,28,564,30,520,32"/>
+<area shape="rect" id="Node000009" href="$classRealm_1_1InstanceLayoutPieceBase.html" title=" " alt="" coords="9,164,247,192"/>
+<area shape="poly" id="edge198_Node000009_Node000002" title=" " alt="" coords="262,163,301,161,296,163,263,168"/>
+<area shape="poly" id="edge199_Node000009_Node000007" title=" " alt="" coords="241,155,249,150,266,130,273,109,280,87,297,64,319,53,314,56,300,68,284,89,278,111,271,133,252,154,244,159"/>
+<area shape="poly" id="edge200_Node000009_Node000010" title=" " alt="" coords="236,192,301,204,296,206,236,198"/>
 </map>

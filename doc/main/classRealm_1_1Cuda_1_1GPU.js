@@ -1,7 +1,7 @@
 var classRealm_1_1Cuda_1_1GPU =
 [
-    [ "CudaIpcMapping", "structRealm_1_1Cuda_1_1GPU_1_1CudaIpcMapping.html", "structRealm_1_1Cuda_1_1GPU_1_1CudaIpcMapping" ],
     [ "GPUFuncInfo", "structRealm_1_1Cuda_1_1GPU_1_1GPUFuncInfo.html", "structRealm_1_1Cuda_1_1GPU_1_1GPUFuncInfo" ],
+    [ "CudaIpcMapping", "structRealm_1_1Cuda_1_1GPU_1_1CudaIpcMapping.html", "structRealm_1_1Cuda_1_1GPU_1_1CudaIpcMapping" ],
     [ "GPUReductionOpEntry", "structRealm_1_1Cuda_1_1GPU_1_1GPUReductionOpEntry.html", "structRealm_1_1Cuda_1_1GPU_1_1GPUReductionOpEntry" ],
     [ "GPU", "classRealm_1_1Cuda_1_1GPU.html#acdf2edac0a6dd344b992d98342375071", null ],
     [ "~GPU", "classRealm_1_1Cuda_1_1GPU.html#a5b4046ec9b5b2c48202508728d381db3", null ],
