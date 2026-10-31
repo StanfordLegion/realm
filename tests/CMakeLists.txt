@@ -111,6 +111,7 @@ list(
   memcpy_channel_test.cc
   comp_queue_test.cc
   event_test.cc
+  multicast_test.cc
   path_cache_test.cc
   transfer_utils_test.cc
   ib_redistribute_test.cc
@@ -321,6 +322,8 @@ add_integration_test(serializing "${REALM_TEST_DIR}/serializing.cc")
 set(ctxswitch_ARGS -ll:io 1 -t 30 -i 10000)
 add_integration_test(ctxswitch "${REALM_TEST_DIR}/ctxswitch.cc")
 add_integration_test(barrier_reduce "${REALM_TEST_DIR}/barrier_reduce.cc")
+# barrier_arrivals.cc existed but was never registered, so it was neither built nor run.
+add_integration_test(barrier_arrivals "${REALM_TEST_DIR}/barrier_arrivals.cc")
 add_integration_test(taskreg "${REALM_TEST_DIR}/taskreg.cc")
 add_integration_test(idcheck "${REALM_TEST_DIR}/idcheck.cc")
 add_integration_test(inst_reuse "${REALM_TEST_DIR}/inst_reuse.cc")
@@ -343,6 +346,24 @@ add_integration_test(memmodel "${REALM_TEST_DIR}/memmodel.cc")
 add_integration_test(coverings "${REALM_TEST_DIR}/coverings.cc")
 set(alltoall_ARGS -ll:csize 1024)
 add_integration_test(alltoall "${REALM_TEST_DIR}/alltoall.cc")
+# The only place the ActiveMessage chunked send path is reachable: the unit tests run on
+# the loopback network, whose max_payload_size() is SIZE_MAX, so chunked mode never
+# engages there.  This needs the internals (activemsg.h) as well as real ranks, so it
+# links realm_obj the way the unit tests do rather than the public Realm::Realm, while
+# still joining _integ_list to pick up the launcher below.
+add_executable(actmsg_large_payload "${REALM_TEST_DIR}/actmsg_large_payload.cc")
+target_link_libraries(
+  actmsg_large_payload PRIVATE realm_obj ${REALM_LIBRARIES} ${REALM_EXTRA_OBJS}
+)
+add_test(NAME actmsg_large_payload
+         COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:actmsg_large_payload>
+                 ${MPIEXEC_POSTFLAGS} ${actmsg_large_payload_ARGS}
+)
+set_property(
+  TEST actmsg_large_payload PROPERTY RESOURCE_LOCK
+                                     $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}>
+)
+list(APPEND _integ_list actmsg_large_payload)
 add_integration_test(realm_reinit "${REALM_TEST_DIR}/realm_reinit.cc")
 # Large and fragmented active message payloads between real ranks.  Uses the internals
 #  (activemsg.h), so it links realm_obj the way the unit tests do rather than the public

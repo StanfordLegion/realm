@@ -693,6 +693,66 @@ namespace {
 #endif
   }
 
+  // A multicast relay delivers the original message to its own handler through
+  //  add_local_message.  No network packet is behind such a delivery, so it must not
+  //  count toward the drain target, which the quiescence check derives from the
+  //  packets the network received: otherwise one relayed delivery leaves the handled
+  //  count permanently ahead of the received count, and the drain's count condition
+  //  is met before the packets it was meant to wait for have been handled.
+  class CountingManager : public IncomingMessageManager {
+  public:
+    using IncomingMessageManager::IncomingMessageManager;
+    size_t handled(void) const { return total_messages_handled; }
+  };
+
+  TEST_F(IncomingMessageManagerTest, LocalDeliveriesDoNotCountTowardTheDrainTarget)
+  {
+    CoreReservationSet crs(nullptr);
+    CountingManager mgr(2, /*dedicated_threads=*/0, crs);
+
+    unsigned short inline_msgid =
+        activemsg_handler_table.lookup_message_id<RegularMessage>();
+    unsigned short queued_msgid =
+        activemsg_handler_table.lookup_message_id<OversizedFragMessage>();
+    RegularMessage::call_count.store(0);
+    OversizedFragMessage::call_count.store(0);
+    const char data[4] = {'a', 'b', 'c', 'd'};
+
+    // three messages off the wire: two handled inline, one queued
+    RegularMessage rhdr;
+    for(int i = 0; i < 2; i++)
+      EXPECT_TRUE(mgr.add_incoming_message(1, inline_msgid, &rhdr, sizeof(rhdr),
+                                           PAYLOAD_COPY, data, sizeof(data), PAYLOAD_COPY,
+                                           nullptr, 0, 0, TimeLimit()));
+    OversizedFragMessage qhdr;
+    qhdr.frag_info = {0, 1, 0x3001ULL};
+    EXPECT_FALSE(mgr.add_incoming_message(1, queued_msgid, &qhdr, sizeof(qhdr),
+                                          PAYLOAD_COPY, data, sizeof(data), PAYLOAD_COPY,
+                                          nullptr, 0, 0, TimeLimit()));
+
+    // two local deliveries: one handled inline, one queued
+    EXPECT_TRUE(mgr.add_local_message(1, inline_msgid, &rhdr, sizeof(rhdr), PAYLOAD_COPY,
+                                      data, sizeof(data), PAYLOAD_COPY, nullptr, 0, 0,
+                                      TimeLimit()));
+    qhdr.frag_info = {0, 1, 0x3002ULL};
+    EXPECT_FALSE(mgr.add_local_message(1, queued_msgid, &qhdr, sizeof(qhdr), PAYLOAD_COPY,
+                                       data, sizeof(data), PAYLOAD_COPY, nullptr, 0, 0,
+                                       TimeLimit()));
+
+    for(int i = 0; (i < 4) && (OversizedFragMessage::call_count.load() < 2); i++)
+      mgr.do_work(TimeLimit());
+    EXPECT_EQ(RegularMessage::call_count.load(), 3);
+    EXPECT_EQ(OversizedFragMessage::call_count.load(), 2);
+
+    // every delivery was handled, but only the three that arrived off the wire count,
+    //  so the handled count still matches what the network received...
+    EXPECT_EQ(mgr.handled(), 3u);
+    // ...and a drain that waits for those three returns at once
+    mgr.drain_incoming_messages(3);
+
+    mgr.shutdown();
+  }
+
   class IncomingMessageManagerDeathTest : public IncomingMessageManagerTest {};
 
   // Two logical messages landing on one reassembly key, or a corrupt fragment header,

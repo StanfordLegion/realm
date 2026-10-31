@@ -18,7 +18,7 @@
 // Large active message payloads on a real network, between real ranks:
 //   - a payload above the network's per-message limit is sent in fragments and
 //     reassembled, including above the receiver's ~1MB message block size
-//   - the same through a multi-target (NodeSet) send
+//   - the same through a multicast (multicast_message) to every other rank
 //   - two message types fragmented at the same time by two threads of one rank, which
 //     used to share a reassembly on the receiver and abort it (or, with fragments
 //     arriving out of order, corrupt both and lose one)
@@ -216,20 +216,21 @@ namespace {
            sizes.back());
   }
 
+  // the payload is well above one network message, so the multicast travels as a
+  //  chunked envelope and is reassembled at every relay and target
   void test_multicast(NodeID num_nodes)
   {
-    NodeSet targets;
+    MulticastTargetSet targets;
     for(NodeID n = 1; n < num_nodes; n++)
       targets.add(n);
     const int seq = 20;
     std::vector<unsigned char> buf = make_payload(1 << 20, seq);
     begin_phase(int(targets.size()));
-    ActiveMessage<BigMessage> amsg(targets, buf.size());
-    amsg->seq = seq;
-    amsg->total = buf.size();
-    amsg->reply_to = Network::my_node_id;
-    amsg.add_payload(buf.data(), buf.size());
-    amsg.commit();
+    BigMessage hdr;
+    hdr.seq = seq;
+    hdr.total = buf.size();
+    hdr.reply_to = Network::my_node_id;
+    multicast_message<BigMessage>(targets, hdr, buf.data(), buf.size());
     g_phase_done.wait();
     printf("[actmsg_chunking] multicast to %zu ranks\n", targets.size());
   }
