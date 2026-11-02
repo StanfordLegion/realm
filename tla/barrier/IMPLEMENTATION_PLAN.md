@@ -72,10 +72,23 @@ generation — it lands in `Generation::unguarded_delta` and never touches
 `base_arrival_count`. No test in the repo calls the API. **C6 fixes this**, and
 `BarrierArrive.tla` already models the correct (persistent) semantics.
 
-**Known gap, deliberately carried:** the terminal-negative branch of
-`alter_arrival_count` (arrival §8.6) has no coverage and a *different* safety
-argument from the positive case. Either model it before implementing that branch
-or gate it behind a fatal-error check.
+**Was a known gap, now closed:** the terminal-negative branch of
+`alter_arrival_count` (arrival §8.6) had no coverage and a *different* safety
+argument from the positive case, so it was gated behind a fatal-error check -
+`apply_alter_locked` aborted the process on reaching it. It is now modelled
+(`MCNegative`, with the terminal negative as the thing the scenario is built
+around) and the check is gone; §8.6 records exactly what the new coverage does
+and does not reach.
+
+**New, and carried deliberately:** a handle that carries a causal timestamp is
+on the bypass path for ever (`advance_barrier` preserves the branch, as
+`event.h` says it must), and a node on the bypass path is excluded from every
+future arrival plan. For an application that alters a barrier and then
+distributes the RETURNED handle to its participants, that means the tree stops
+being used for that barrier. It is correct - a node whose arrivals never reach
+a `local_total` cannot be given a quota - but it is a performance cliff, and
+closing it needs the owner's applied-timestamp knowledge to reach the arriving
+nodes, which is a wire-format change. Not attempted here.
 
 **Scope:** `barrier_impl.{h,cc,inl}` is ~1,900 lines. Reduction barriers stay on
 the existing non-scalable path. Migration is removed (34 references, all three

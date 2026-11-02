@@ -72,6 +72,9 @@ MCPlanStart == <<1>>
 \* base + persistent delta must equal what the pattern issues:
 \*   gen 1: 3 + 1 = 4   gen 2: 2 + 1 = 3
 MCBaseCount == [g \in 1..2 |-> 3]
-MCAlterOps  == { [node |-> 2, gen |-> 1, delta |-> 1, ts |-> 1] }
+\* 'prev' and 'anc' are 0: the only alteration in this scenario has neither a
+\*  predecessor of its own node's nor an ancestor handle.
+MCAlterOps  == { [node |-> 2, gen |-> 1, delta |-> 1, ts |-> 1,
+                  prev |-> 0, anc |-> 0, givento |-> NoTarget] }
 
 =============================================================================

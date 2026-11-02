@@ -34,6 +34,7 @@
 // SCALE_TEST_PLAN.md section 2 is a follow-up.
 
 #include <assert.h>
+#include <set>
 
 #include "realm.h"
 #include "osdep.h"
@@ -52,7 +53,21 @@ enum
 {
   MAIN_TASK = Processor::TASK_ID_FIRST_AVAILABLE + 0,
   WORKER_TASK,
+  HANDOFF_TASK,
 };
+
+// P_HANDOFF: the causal timestamp of an altered handle, passed to other ranks
+//  as an application may pass a Barrier value.  Written once by HANDOFF_TASK
+//  and read unsynchronised: a rank that has not seen it keeps arriving
+//  untimestamped, a legal interleaving the phase deliberately explores.
+static atomic<unsigned long long> handoff_ts(0);
+
+static void handoff_task(const void *args, size_t arglen, const void *userdata,
+                         size_t userlen, Processor p)
+{
+  assert(arglen == sizeof(unsigned long long));
+  handoff_ts.store(*static_cast<const unsigned long long *>(args));
+}
 
 enum Phase
 {
@@ -84,18 +99,40 @@ enum Phase
                 //  barrier, never weighed.  Needs -gens >= 384 for the full
                 //  cycle count; shorter runs exercise a prefix (>= 128 gets
                 //  the churn arm), and the default 32 degenerates to steady.
+  P_REALTER,    // rule 9 + plan lifecycle: TWO persistent alterations far
+                //  enough apart to rebuild between them.  The second rebuild
+                //  is IDENTICAL to the plan just retired, and an owner that
+                //  skips on the hash alone never reactivates it and stays
+                //  eager for life.  P_ALTER cannot reach this.
+  P_HANDOFF,    // rule 8.1 + membership: a rank that altered NOTHING arrives
+                //  on a GIVEN handle, so it bypasses the tree while the live
+                //  plan still counts it, and its parent waits on a quota
+                //  nobody will reach.  The bypassed arrival is the owner's
+                //  only view, so it is what must retire the plan.  Elsewhere
+                //  only ALTERING ranks bypass, and those are rescued by the
+                //  retirement their own alteration causes - hence this phase.
+                //  A FAILURE HERE IS A HANG, not a wrong answer.
   P_NUM_PHASES
 };
 
 static const char *phase_names[P_NUM_PHASES] = {"steady", "over",  "outsider", "runahead",
                                                 "churn",  "alter", "split",    "poison",
-                                                "chaos",  "step",  "depart"};
+                                                "chaos",  "step",  "depart",   "realter",
+                                                "handoff"};
 
 namespace TestConfig {
   int gens = 32;       // generations per phase
   int runahead = 4;    // max generations arrivals may lead waits (P_RUNAHEAD)
   int phase_mask = -1; // bitmask of phases to run, -1 = all
   int seed = 12345;
+  // P_HANDOFF: which rank receives the altered branch; -1 picks the highest,
+  //  always a leaf.  Tunable because it must be a rank still AGGREGATING -
+  //  one already eager-flushing reports regardless of quota, stranding nobody.
+  int handoff_to = -1;
+  // P_HANDOFF: how MANY ranks receive the altered branch, from the highest
+  //  down.  1 is the correctness probe (one stranded leaf); larger values
+  //  sweep the cost of an application passing the RETURNED handle around.
+  int handoff_n = 1;
 }; // namespace TestConfig
 
 struct WorkerArgs {
@@ -167,7 +204,9 @@ static int arrivals_for(int phase, int seed, int nranks, int gens, int g, int r)
     return 1;
   }
   case P_ALTER:
-    return 1; // the altering rank adds its extra arrival explicitly (below)
+  case P_REALTER:
+  case P_HANDOFF:
+    return 1; // the altering rank adds its extra arrivals explicitly (below)
   case P_SPLITWAIT:
   {
     // first half of the ranks carry all arrivals; second half only waits
@@ -270,6 +309,51 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
   const int alter_at = G / 2;
   const bool i_alter = (wa.phase == P_ALTER) && (R == 0) && (N > 1);
 
+  // P_REALTER: the same rank alters TWICE, a third of the phase apart - wide
+  //  enough for the owner to rebuild in between, since the bug is in what the
+  //  SECOND retirement does to that rebuilt plan.  The second alteration uses
+  //  the handle the first returned, so it carries the first as its ancestor.
+  const int realter_1 = G / 3;
+  const int realter_2 = (2 * G) / 3;
+  const bool i_realter = (wa.phase == P_REALTER) && (R == 0) && (N > 1) && (G >= 6);
+
+  // P_HANDOFF: an early alteration retires the plan, the owner rebuilds over
+  //  the ranks that did NOT alter, and only at 'handoff_use' do those ranks
+  //  start bypassing - with that rebuilt plan installed and counting them.
+  // THE PLAN MUST BE CONVERGED by then or the phase tests nothing (eager
+  //  flush reports regardless of quota).  Hence: the alterer is NOT the owner
+  //  (an altering owner never completes its own evidence), and it alters
+  //  EARLY (one retirement, then the rest of the phase to settle).  The first
+  //  version got both wrong: flush_episodes 67/96, rebuilds_declined 50.
+  const bool handoff_phase = (wa.phase == P_HANDOFF) && (N > 3) && (G >= 12);
+  const int handoff_at = 2;
+  const int handoff_use = (2 * G) / 3;
+  const int handoff_from = 1;
+  const bool i_hand = handoff_phase && (R == handoff_from);
+  // EXACTLY ONE RECIPIENT - the hazard is a MIXTURE.  Hand the branch to
+  //  everybody and the tree is simply unused, so nothing strands; hand it to
+  //  one and its parent keeps aggregating under a plan that counts a node no
+  //  longer feeding it, so the subtree quota is unreachable.
+  // THE RECIPIENT MUST STILL BE AGGREGATING - an eager-flushing rank reports
+  //  regardless of quota and strands nobody.  Measured: at rank N-1 the phase
+  //  passes on the BROKEN build (in flush 95 of 96 generations); the sweep
+  //  {2,5,10,11,15} at 16 ranks hangs pre-fix on 5, 10 and 11 only.
+  const int def_to = (N >= 6) ? (N - 5) : (N - 1);
+  const int handoff_to =
+      ((TestConfig::handoff_to >= 0) && (TestConfig::handoff_to < N) &&
+       (TestConfig::handoff_to != handoff_from))
+          ? TestConfig::handoff_to
+          : def_to;
+  // With n > 1 the single named recipient is ignored and the top n ranks get
+  //  the branch instead - the alterer excluded, since it is already on the
+  //  bypass path by its own arrival floor.
+  const int handoff_n =
+      (TestConfig::handoff_n > 1)
+          ? ((TestConfig::handoff_n > (N - 2)) ? (N - 2) : TestConfig::handoff_n)
+          : 1;
+  const bool i_receive =
+      (handoff_n > 1) ? ((R != handoff_from) && (R >= (N - handoff_n))) : (R == handoff_to);
+
   // arrivals first walk
   std::vector<Barrier> wait_handles;
   wait_handles.reserve(G);
@@ -294,6 +378,67 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
     }
     if(i_alter && (g >= alter_at)) {
       count += 1; // persistent: one extra every generation from the alteration on
+    }
+
+    if(i_realter && ((g == realter_1) || (g == realter_2))) {
+      assert(count > 0); // the reserved arrival the contract asks for
+      ab = ab.alter_arrival_count(1);
+      wait_handles.back() = ab;
+    }
+    if(i_realter) {
+      count += ((g >= realter_1) ? 1 : 0) + ((g >= realter_2) ? 1 : 0);
+    }
+
+    if(i_hand && (g == handoff_at)) {
+      assert(count > 0); // the reserved arrival the contract asks for
+      ab = ab.alter_arrival_count(1);
+      wait_handles.back() = ab;
+      // hand the branch to everybody else.  Fire and forget: a rank that has
+      //  not received it by 'handoff_use' simply stays on the tree for a few
+      //  more generations, which is just as legal.
+      const unsigned long long ts = (unsigned long long)ab.timestamp;
+      Machine::ProcessorQuery hq =
+          Machine::ProcessorQuery(Machine::get_machine()).only_kind(Processor::LOC_PROC);
+      // WAIT FOR IT TO LAND.  Fire-and-forget loses the race against the rest
+      //  of a single-digit-second phase, so the recipient never sees the
+      //  branch and the phase passes for the wrong reason.  Safe: the others
+      //  are blocked on this generation and the handoff task touches no
+      //  barrier.
+      std::vector<Event> handed;
+      std::set<AddressSpace> told;
+      for(Machine::ProcessorQuery::iterator it = hq.begin(); it != hq.end(); ++it) {
+        const AddressSpace sp = (*it).address_space();
+        const int sr = (int)sp;
+        const bool want = (handoff_n > 1)
+                              ? ((sr != handoff_from) && (sr >= (N - handoff_n)))
+                              : (sr == handoff_to);
+        if(!want || (told.count(sp) != 0)) {
+          continue;
+        }
+        told.insert(sp);
+        handed.push_back((*it).spawn(HANDOFF_TASK, &ts, sizeof(ts)));
+      }
+      assert(!handed.empty());
+      Event::merge_events(handed).wait();
+      log_app.print() << "handoff: rank " << R << " altered at gen " << g
+                      << " ts=" << ts << " -> " << told.size() << " rank(s)";
+    }
+    if(i_hand && (g >= handoff_at)) {
+      count += 1; // persistent, exactly as in P_ALTER
+    }
+    if(handoff_phase && i_receive && (g >= handoff_use)) {
+      // ARRIVE ON THE HANDLE WE WERE GIVEN.  This rank has altered nothing, so
+      //  it has no arrival floor of its own; the only thing putting it on the
+      //  bypass path is the timestamp the handle carries.
+      const unsigned long long ts = handoff_ts.load();
+      // the recipient says so ONCE, so that a phase which passed can be told
+      //  apart from a phase that never got the branch at all
+      assert(ts != 0); // the handoff was waited for, so it has landed
+      if(g == handoff_use) {
+        log_app.print() << "handoff: rank " << R << " arriving on the given branch"
+                        << " from gen " << g << " ts=" << ts;
+      }
+      ab.timestamp = (Barrier::timestamp_t)ts;
     }
 
     if(poisoned_gen(wa.phase, G, g) && (R == (g % N)) && (count > 0)) {
@@ -448,6 +593,8 @@ int main(int argc, char **argv)
   cp.add_option_int("-seed", TestConfig::seed);
   cp.add_option_int("-runahead", TestConfig::runahead);
   cp.add_option_int("-phases", TestConfig::phase_mask);
+  cp.add_option_int("-handoff_to", TestConfig::handoff_to);
+  cp.add_option_int("-handoff_n", TestConfig::handoff_n);
   bool ok = cp.parse_command_line(argc, const_cast<const char **>(argv));
   assert(ok);
 
@@ -461,6 +608,10 @@ int main(int argc, char **argv)
       .external_wait();
   Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/, WORKER_TASK,
                                    CodeDescriptor(worker_task), ProfilingRequestSet())
+      .external_wait();
+
+  Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/, HANDOFF_TASK,
+                                   CodeDescriptor(handoff_task), ProfilingRequestSet())
       .external_wait();
 
   Event e = rt.collective_spawn(p, MAIN_TASK, 0, 0);

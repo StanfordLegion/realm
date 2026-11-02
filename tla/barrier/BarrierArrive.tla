@@ -98,11 +98,66 @@ CONSTANTS
     Plans,          \* [1..NumPlans -> [Nodes -> [quota, inplan, kids]]]
     PlanStart,      \* [1..NumPlans -> Gens] first generation each plan applies to
     BaseCount,      \* [Gens -> Nat] expected arrival count BEFORE any alteration
-    AlterOps        \* set of [node, gen, delta, ts] - ts distinct and positive
+    AlterOps        \* set of [node, gen, delta, ts, prev, anc]
+
+\* AN ALTERATION RECORD.  'ts' is its causal timestamp - distinct and positive
+\*  across the whole run, because the implementation mints them from a counter
+\*  seeded with the node id.  'delta' MAY BE NEGATIVE (event.h permits it and
+\*  the implementation applies it; see the terminal-negative note on Alter).
+\*
+\*  'prev' and 'anc' are the two PREDECESSORS, each 0 for "none":
+\*    prev - the previous alteration THIS node issued on this barrier
+\*           (barrier_impl.cc, 'last_alter_ts').  Same node, so it orders a
+\*           chain that active messages may otherwise reorder.
+\*    anc  - the alteration whose HANDLE this one was invoked on.  A handle can
+\*           be passed BETWEEN NODES, so 'anc' may name an alteration issued
+\*           somewhere else, and that is a dependency 'prev' cannot express.
+\*           Applying a descendant before its ancestor moves the owner's
+\*           'expected' to a value the application never asked for, and the
+\*           arrivals gated on the descendant are then released against it.
+\*
+\*  The owner HOLDS an alteration until both are applied: RecvAlter below is
+\*  simply disabled, which is the model's standard way of writing a queue.
+\*
+\*  'givento' is the node the application HANDS THE RETURNED HANDLE TO, or
+\*   NoTarget for nobody.  It exists so the model can say the common shape of
+\*   a positive alteration: the count goes up because a NEW participant will
+\*   arrive, and that participant needs a handle which witnesses the
+\*   alteration.  See ArriveOnGivenHandle.
+\*
+\*   RESTRICTION, and it is load-bearing: a node may be the 'givento' of AT
+\*   MOST ONE alteration.  'tsSent[n][g]' is one cumulative counter per
+\*   (node, generation), which is sound only while every bypassed arrival a
+\*   node makes for a generation carries the SAME gate.  Two handles would
+\*   give it two gates sharing one counter, and a message whose gate is open
+\*   would then carry arrivals whose gates are still shut - TLC catches it
+\*   immediately as a TriggerCorrect violation, which is how this restriction
+\*   came to be written down.  (The implementation has no such restriction:
+\*   it keys ts_issued and the owner's streams per (sender, gate).)
 
 Gens   == 1..MaxGen
 Gens0  == 0..MaxGen
 Epochs == 1..NumPlans
+
+\* PLAN WELL-FORMEDNESS was tried here as an ASSUME - "every child id exceeds
+\*  its parent's", which is how the implementation gets acyclic pinned edges
+\*  (it assigns heap parents over ascending node ids, so a parent's id is
+\*  always lower).  IT IS NOT A PROPERTY OF THE SCENARIOS, and the attempt is
+\*  recorded rather than repeated: MCGateDemote's second plan has node 3 as
+\*  the parent of node 1, which is the demoted owner-child the scenario is
+\*  named for, and MCGateMove and MCGatePark do the same.  TLC rejects the
+\*  whole spec on a failed ASSUME, so all three stopped running.
+\*
+\*  Ascending ids are SUFFICIENT for what rule 10 needs but not NECESSARY.
+\*  What is actually needed is that the UNION of the pinned edges every plan
+\*  can produce is acyclic - MCGateDemote's union (1->0, 2->1, 3->0, 1->3)
+\*  is, despite the descending edge.  Checking that needs a transitive
+\*  closure over the plan constants; it is NOT done, and ARRIVAL_PROTOCOL
+\*  section 8.9 still lists it as an assumption rather than a result.
+\*
+\*  Note also that these scenarios supply plans the implementation CANNOT
+\*  build.  That is a safe over-approximation - it explores more - but it
+\*  means a mutation they catch is not necessarily reachable in the code.
 
 RECURSIVE SumFn(_, _)
 SumFn(S, f) == IF S = {} THEN 0
@@ -134,11 +189,23 @@ VARIABLES
     unaltered,    \* SUBSET AlterOps  alterations not yet issued
     myTs,         \* [Nodes -> [Gens -> Nat]] timestamp this node's arrivals carry
     reportTo,     \* [Nodes -> [Gens -> Nodes \cup {NoTarget}]] PINNED report edge
+    \* [Nodes -> [Gens -> Nat]] arrivals this node BYPASSED the tree with.
+    \*  ONE COUNTER PER (node, generation), which is sound only while every
+    \*  bypassed arrival a node makes for a generation carries the SAME gate.
+    \*  A node that alters TWICE over one generation has two - myTs moves from
+    \*  the first timestamp to the second - and they would then share this
+    \*  counter, so a message whose gate is open would carry arrivals whose
+    \*  gates are still shut.  TLC reports that as a TriggerCorrect violation
+    \*  in the UNMUTATED spec, which is how the limitation was found; see
+    \*  MCGiven2's header.  The implementation does NOT share it: ts_issued is
+    \*  keyed per gate and the owner's streams per (sender, gate).  Scenarios
+    \*  must therefore give each node at most one gate per generation.
+    tsSent,
     tsAcc         \* [Gens -> Nat]   owner's count of TIMESTAMPED arrivals
 
 vars == << unissued, localTotal, reportedUp, childAcc, flushing, curPlan,
            myEpoch, invalEpoch, deferEpoch, ownerAcc, watermark, triggered, msgs,
-           expected, appliedTs, unaltered, myTs, tsAcc, reportTo >>
+           expected, appliedTs, unaltered, myTs, tsAcc, tsSent, reportTo >>
 
 \* Everything alter_arrival_count adds.  Existing actions leave all of it alone,
 \*  so they gain a single conjunct rather than five entries in a frame list.
@@ -151,12 +218,58 @@ alterVars == << expected, appliedTs, unaltered, myTs, tsAcc >>
 Total(g) == SumFn(Nodes, [n \in Nodes |-> Pattern[g][n]])
             + SumDeltas({ a \in (AlterOps \ unaltered) : a.gen <= g })
 
-\* Arrivals this node has issued for g, and how many of those BYPASSED the tree.
-\*  A bypassed arrival never enters localTotal, so the difference is exact.
 AppliedDelta(n, g) ==
     SumDeltas({ a \in (AlterOps \ unaltered) : (a.node = n) /\ (a.gen <= g) })
-Issued(n, g)   == Pattern[g][n] + AppliedDelta(n, g) - unissued[n][g]
-TsIssued(n, g) == Issued(n, g) - localTotal[n][g]
+
+\* How many arrivals this node has BYPASSED the tree with, for g.  It used to be
+\*  derived - issued minus localTotal - which silently assumed every arrival a
+\*  node makes is booked against its OWN obligation.  That stops being true as
+\*  soon as handles cross nodes (see ArriveForAncestor), so it is now kept.
+\* THE GATE ON A BYPASSED ARRIVAL, in one place.  It has two independent
+\*  components and either may be 0 for "no dependency on this axis", so the
+\*  test is needed verbatim by everything that looks at a tsdirect message -
+\*  the receive and the stale-drop alike.  Writing it twice is how the
+\*  stale-drop came to test only one component and only for a non-zero value,
+\*  which left an ungated stale message on the wire for ever and showed up as
+\*  an EventuallyDrained counter-example rather than as any safety failure.
+\*  This is barrier_impl.cc's ts_gate_open_locked().
+TsGateOpen(m) == /\ ((m.ts = 0)       \/ (m.ts \in appliedTs))
+                 /\ ((m.local_ts = 0) \/ (m.local_ts \in appliedTs))
+
+\* HOW LONG A RECEIVED HANDLE GATES - the one operator the whole question
+\*  turns on, so that comparing the two designs is a one-line change and
+\*  cannot drift between the places that depend on it.
+\*
+\*  AS WRITTEN: only the generation the alteration NAMES.  That is the design
+\*   under test - the recipient bypasses once and is back in the tree.  It is
+\*   also the WEAKEST version of the rule: the implementation cannot know
+\*   a.gen and would use the first generation it actually used the handle at,
+\*   which is >= a.gen, so it gates a superset.  Clearing the weak version
+\*   clears the strong one.
+\*
+\*  Mutation HANDLE_GATES_FOREVER rewrites this to 'g >= a.gen', which is the
+\*   behaviour as shipped: advance_barrier preserves the timestamp, so every
+\*   handle derived from it gates too and the recipient never returns to the
+\*   tree.
+HandleGateWindow(a, g) == g = a.gen
+
+\* Is this node's arrival routed around the tree for this generation?  Either
+\*  because it altered (its own arrival floor) or because it is arriving on a
+\*  handle somebody gave it.
+Bypassing(m, g) ==
+    \/ myTs[m][g] # 0
+    \/ \E a \in AlterOps : /\ a.givento = m
+                          /\ a \notin unaltered
+                          /\ HandleGateWindow(a, g)
+
+\* The node set of a subtree under a supplied plan.  Terminates because the
+\*  ASSUME above makes every child id exceed its parent's.
+RECURSIVE SubNodes(_, _)
+SubNodes(e, n) == {n} \cup UNION { SubNodes(e, c) : c \in Plans[e][n].kids }
+
+\* The alteration a given timestamp names.  Timestamps are globally unique, so
+\*  this is a function.  Guard every use with 'ts # 0'.
+AlterOf(ts) == CHOOSE a \in AlterOps : a.ts = ts
 
 \* The owner's timestamped total is a SUM OF CUMULATIVE PER-NODE VALUES, exactly
 \*  like the tree's childAcc.  One direction, one semantics: every accumulator
@@ -169,9 +282,15 @@ Msgs ==
     \cup [ kind : {"invalidate"}, from : Nodes, to : Nodes, epoch : 0..NumPlans ]
     \cup [ kind : {"newplan"},    from : Nodes, to : Nodes, epoch : Epochs ]
     \cup [ kind : {"alter"},      from : Nodes, to : Nodes, gen : Gens,
-                                  delta : 0..8, ts : 1..8 ]
-    \cup [ kind : {"tsdirect"},   from : Nodes, to : Nodes, gen : Gens, ts : 1..8,
-                                  val : 0..64 ]
+                                  delta : -8..8, ts : 1..8,
+                                  prev : 0..8, anc : 0..8 ]
+    \* THE GATE HAS TWO COMPONENTS, exactly as Generation::TsKey does: the
+    \*  timestamp the HANDLE carries ('ts', which may name an alteration issued
+    \*  on another node) and this node's own arrival floor ('local_ts', the
+    \*  implementation's ts_floor).  Either may be 0 for "no dependency here",
+    \*  and the owner may count the arrival only once BOTH are applied.
+    \cup [ kind : {"tsdirect"},   from : Nodes, to : Nodes, gen : Gens,
+                                  ts : 0..8, local_ts : 0..8, val : 0..64 ]
 
 (***************************************************************************)
 (* THE PINNED REPORT EDGE.  A node's report target for a generation is      *)
@@ -289,6 +408,7 @@ Init ==
     /\ unaltered  = AlterOps
     /\ myTs       = [n \in Nodes |-> [g \in Gens |-> 0]]
     /\ reportTo   = [n \in Nodes |-> [g \in Gens |-> NoTarget]]
+    /\ tsSent     = [n \in Nodes |-> [g \in Gens |-> 0]]
     /\ tsAcc      = [n \in Nodes |-> [g \in Gens |-> 0]]
 
 (***************************************************************************)
@@ -302,11 +422,13 @@ Arrive(n, g) ==
           \*  single integer and would ERASE that timestamp, so a timestamped
           \*  arrival BYPASSES THE TREE and is reported to the owner on its own.
           /\ myTs[n][g] > 0
+          /\ tsSent' = [tsSent EXCEPT ![n][g] = @ + 1]
           /\ msgs' = msgs \cup
-               {[ kind |-> "tsdirect", from |-> n, to |-> Owner,
-                  gen |-> g, ts |-> myTs[n][g], val |-> TsIssued(n, g) + 1 ]}
+               {[ kind |-> "tsdirect", from |-> n, to |-> Owner, gen |-> g,
+                  ts |-> 0, local_ts |-> myTs[n][g], val |-> tsSent[n][g] + 1 ]}
           /\ UNCHANGED << localTotal, reportedUp, flushing >>
        \/ /\ myTs[n][g] = 0
+          /\ UNCHANGED tsSent
           /\ localTotal' = [localTotal EXCEPT ![n][g] = @ + 1]
           /\ LET lt  == localTotal[n][g] + 1
                  sub == lt + SumFn(Nodes, [c \in Nodes |-> childAcc[n][c][g]])
@@ -348,6 +470,12 @@ Arrive(n, g) ==
     /\ reportTo' = Pin(reportTo, n, {g})
     /\ UNCHANGED << childAcc, curPlan, myEpoch, invalEpoch, deferEpoch,
                     ownerAcc, watermark, triggered >>
+    \* 'tsSent' is NOT in alterVars, because THIS action writes it.  A frame
+    \*  conjunct naming a variable the action also assigns is a contradiction,
+    \*  and TLC reports a contradiction as nothing at all - the action simply
+    \*  stops being enabled.  It silently did: with tsSent inside alterVars
+    \*  every timestamped arrival disappeared from the model and the ancestor
+    \*  bisection "passed" because the hazard had become unreachable.
     /\ UNCHANGED alterVars
 
 (***************************************************************************)
@@ -393,18 +521,20 @@ RecvReport(m) ==
     /\ UNCHANGED << unissued, localTotal, curPlan, myEpoch, invalEpoch,
                     deferEpoch, watermark, triggered >>
     /\ UNCHANGED alterVars
+    /\ UNCHANGED tsSent
 
 DropStale ==
     \E m \in msgs :
         /\ \/ /\ m.kind \in {"report","direct"}
               /\ m.val <= childAcc[m.to][m.from][m.gen]
            \/ /\ m.kind = "tsdirect"
-              /\ m.ts \in appliedTs
+              /\ TsGateOpen(m)
               /\ m.val <= tsAcc[m.from][m.gen]
         /\ msgs' = msgs \ {m}
         /\ UNCHANGED << unissued, localTotal, reportedUp, childAcc, flushing, curPlan,
                         myEpoch, invalEpoch, deferEpoch, ownerAcc, watermark, triggered >>
         /\ UNCHANGED alterVars
+    /\ UNCHANGED tsSent
     /\ UNCHANGED reportTo
 
 (***************************************************************************)
@@ -426,6 +556,7 @@ RecvFlush(m) ==
     /\ UNCHANGED << unissued, localTotal, childAcc, curPlan, myEpoch, invalEpoch,
                     deferEpoch, ownerAcc, watermark, triggered >>
     /\ UNCHANGED alterVars
+    /\ UNCHANGED tsSent
 
 (***************************************************************************)
 (* ACTION 4 - the owner triggers a generation, in order, and switches plans *)
@@ -469,6 +600,7 @@ Trigger(g) ==
                       /\ UNCHANGED deferEpoch
     /\ UNCHANGED << unissued, localTotal, reportedUp, childAcc, ownerAcc >>
     /\ UNCHANGED alterVars
+    /\ UNCHANGED tsSent
     /\ UNCHANGED reportTo
 
 (***************************************************************************)
@@ -569,6 +701,7 @@ RecvInvalidate(m) ==
                         { g \in Gens : ~triggered[g] /\ Unreported(m.to, g) > 0 })
     /\ UNCHANGED << unissued, localTotal, childAcc, ownerAcc, watermark, triggered >>
     /\ UNCHANGED alterVars
+    /\ UNCHANGED tsSent
 
 (***************************************************************************)
 (* ACTION 6 - the new plan.  PARK it while still an un-invalidated member   *)
@@ -621,6 +754,7 @@ RecvNewPlan(m) ==
     /\ UNCHANGED << unissued, localTotal, childAcc, invalEpoch,
                     ownerAcc, watermark, triggered >>
     /\ UNCHANGED alterVars
+    /\ UNCHANGED tsSent
 
 (***************************************************************************)
 (* ACTION 7 - alter_arrival_count.  The change is PERSISTENT: it applies to *)
@@ -631,20 +765,51 @@ RecvNewPlan(m) ==
 Alter(a) ==
     /\ a \in unaltered
     /\ ~triggered[a.gen]
+    \* AN ALTERATION FOLLOWS ITS PREDECESSORS AT THE ISSUING SIDE TOO.  'prev'
+    \*  is the previous alteration this node issued, so it has to have been
+    \*  issued; 'anc' is the alteration whose handle this one is invoked on, so
+    \*  THAT handle has to exist - the application cannot hold a handle for an
+    \*  alteration nobody has made yet.  Both are about ISSUE order, which is
+    \*  program order; the owner's APPLY order is RecvAlter's problem.
+    /\ \A b \in AlterOps : ((b.ts = a.prev) \/ (b.ts = a.anc)) => (b \notin unaltered)
     \* THE APPLICATION CONTRACT (event.h): before issuing an alteration the
     \*  caller must still hold at least one unissued arrival from the
     \*  pre-alteration count.  That RESERVED ARRIVAL is what stops the barrier
     \*  triggering before the owner has learned of the alteration - the safety
     \*  argument lives in the API contract, not in the protocol.
     /\ unissued[a.node][a.gen] > 0
+    \* A NEGATIVE ALTERATION CANCELS AN OBLIGATION, and it can only cancel one
+    \*  that is still outstanding: the application may not withdraw an arrival
+    \*  it has already made.  For a positive delta this is vacuous.  When the
+    \*  cancellation takes the count for a generation to exactly zero, that is
+    \*  the TERMINAL NEGATIVE of event.h:293-297 - the generation completes with
+    \*  no arrival on the returned handle at all, which is why this guard is a
+    \*  '>= 0' and not a '> 0'.
+    /\ \A g \in Gens : (g >= a.gen) => (unissued[a.node][g] + a.delta >= 0)
+    \* RULE 9 - the expected count must stay positive for every generation the
+    \*  alteration reaches, this one included.  Without this a scenario could
+    \*  drive a barrier to zero expected arrivals, which event.h makes a fatal
+    \*  application error rather than a protocol state.
+    /\ \A g \in Gens : (g >= a.gen) => (Total(g) + a.delta > 0)
     /\ unaltered' = unaltered \ {a}
     \* PERSISTENT: the delta applies to this generation and every later one, and
-    \*  it is a promise of real arrivals still to be issued by this node.
+    \*  it is a promise of real arrivals still to be issued by this node (or,
+    \*  when negative, the withdrawal of one).
     /\ unissued' = [unissued EXCEPT ![a.node] =
                       [g \in Gens |-> IF g >= a.gen THEN unissued[a.node][g] + a.delta
                                                     ELSE unissued[a.node][g]]]
-    /\ myTs' = [myTs EXCEPT ![a.node] =
-                  [g \in Gens |-> IF g >= a.gen THEN a.ts ELSE myTs[a.node][g]]]
+    \* THE HANDLE SETS THE RECIPIENT'S GATE TOO.  Not just the arrival that
+    \*  discharges the obligation: the recipient holds a handle carrying the
+    \*  timestamp, so EVERY arrival it makes on it is routed around the tree.
+    \*  That is the whole cost of preserving the timestamp, and the model
+    \*  could not say it before.
+    /\ myTs' = [n \in Nodes |->
+                  CASE n = a.node ->
+                         [g \in Gens |-> IF g >= a.gen THEN a.ts ELSE myTs[n][g]]
+                    [] n = a.givento ->
+                         [g \in Gens |-> IF HandleGateWindow(a, g) THEN a.ts
+                                                                   ELSE myTs[n][g]]
+                    [] OTHER -> myTs[n]]
     \* Altering the count makes this node's plan quota wrong, and because its own
     \*  arrivals now bypass the tree its localTotal can never reach that quota -
     \*  so as a RELAY it would go silent and strand its children.  Enter EAGER
@@ -661,23 +826,132 @@ Alter(a) ==
                                                             ELSE reportedUp[a.node][g]]]
            /\ msgs' = msgs
                       \cup {[ kind |-> "alter", from |-> a.node, to |-> Owner,
-                              gen |-> a.gen, delta |-> a.delta, ts |-> a.ts ]}
+                              gen |-> a.gen, delta |-> a.delta, ts |-> a.ts,
+                              prev |-> a.prev, anc |-> a.anc ]}
                       \cup UNION { FlushFan(a.node, g) : g \in aff }
                       \cup UNION { Send(a.node, g, SubtreeKnown(a.node, g)) : g \in held }
     /\ UNCHANGED << localTotal, childAcc, curPlan,
                     myEpoch, invalEpoch, deferEpoch, ownerAcc, watermark, triggered,
-                    expected, appliedTs, tsAcc >>
+                    expected, appliedTs, tsAcc, tsSent >>
     /\ UNCHANGED reportTo
 
+\* THE OWNER-SIDE HOLD (barrier_impl.cc, 'held_alters').  An alteration is
+\*  applied only once BOTH its predecessors have been.  Writing it as a
+\*  disabled action rather than an explicit queue is the same device
+\*  RecvTsDirect uses: it needs no message ordering, and it means TLC explores
+\*  every order in which the two could land.
+\*
+\*  'prev' alone is not enough.  It is per-node, and a handle crosses nodes: B
+\*  can issue an alteration descended from A's while A's is still in flight, and
+\*  nothing in B's own chain mentions A.  Dropping the 'anc' conjunct below is
+\*  the mutation that reproduces that bug, and it reproduces it on MCHandoff -
+\*  NOT on MCAncestor, where the ancestor's node arrives too and its own floor
+\*  already gates the generation.
 RecvAlter(m) ==
     /\ m \in msgs /\ m.kind = "alter"
+    /\ ((m.prev = 0) \/ (m.prev \in appliedTs))
+    /\ ((m.anc  = 0) \/ (m.anc  \in appliedTs))
     /\ expected' = [g \in Gens |-> IF g >= m.gen THEN expected[g] + m.delta
                                                  ELSE expected[g]]
     /\ appliedTs' = appliedTs \cup {m.ts}
     /\ msgs' = msgs \ {m}
     /\ UNCHANGED << unissued, localTotal, reportedUp, childAcc, flushing, curPlan,
                     myEpoch, invalEpoch, deferEpoch, ownerAcc, watermark, triggered,
-                    unaltered, myTs, tsAcc >>
+                    unaltered, myTs, tsAcc, tsSent >>
+    /\ UNCHANGED reportTo
+
+(***************************************************************************)
+(* ACTION 7b - AN ARRIVAL MADE ON A DESCENDANT HANDLE, BY ANOTHER NODE.     *)
+(*                                                                         *)
+(* event.h: the handle an alteration returns must be used by an arrival on  *)
+(* it, by a further alteration on it, or by "a descendant chain of          *)
+(* alterations that ends in such an arrival" - and "an arrival on a         *)
+(* descendant witnesses only the ancestors on its own causal path".  So an  *)
+(* arrival made by node B, on a handle B obtained by altering a handle A    *)
+(* gave it, DISCHARGES A's reserved arrival.  A itself may never arrive.    *)
+(*                                                                         *)
+(* THIS IS THE CASE THE PER-NODE MACHINERY CANNOT SEE.  A's own arrival     *)
+(* floor gates A's arrivals; here A makes none.  B's arrival carries only   *)
+(* B's timestamp, so on its own it witnesses only B's alteration.  What     *)
+(* makes it witness A's too is the owner HOLDING B's alteration until A's   *)
+(* is applied (the 'anc' conjunct of RecvAlter): after that, "B's timestamp *)
+(* is applied" implies "A's is applied".  Delete that conjunct and this     *)
+(* action triggers a generation one arrival short - see MCHandoff.          *)
+(***************************************************************************)
+ArriveForAncestor(a, g) ==
+    /\ a \notin unaltered          \* the handle exists only once a is issued
+    /\ a.anc # 0                   \* ... and only a descendant has an ancestor
+    /\ g >= a.gen                  \* alterations are persistent, so the handle
+                                   \*  covers this generation and every later one
+    /\ ~triggered[g]
+    /\ LET anc == AlterOf(a.anc)
+       IN  /\ anc \notin unaltered
+           /\ anc.node # a.node    \* a same-node chain is 'prev', not a handoff
+           /\ unissued[anc.node][g] > 0
+           /\ unissued' = [unissued EXCEPT ![anc.node][g] = @ - 1]
+    \* RULE 8.1 - an arrival on a timestamped handle always bypasses the tree.
+    \*  Its gate carries the HANDLE's timestamp and, independently, the
+    \*  arriving node's own floor.
+    /\ tsSent' = [tsSent EXCEPT ![a.node][g] = @ + 1]
+    /\ msgs' = msgs \cup
+         {[ kind |-> "tsdirect", from |-> a.node, to |-> Owner, gen |-> g,
+            ts |-> a.ts, local_ts |-> myTs[a.node][g], val |-> tsSent[a.node][g] + 1 ]}
+    /\ UNCHANGED << localTotal, reportedUp, childAcc, flushing, curPlan,
+                    myEpoch, invalEpoch, deferEpoch, ownerAcc, watermark, triggered,
+                    expected, appliedTs, unaltered, myTs, tsAcc >>
+    /\ UNCHANGED reportTo
+
+(***************************************************************************)
+(* ACTION 7c - AN ARRIVAL BY A NODE THAT WAS SIMPLY GIVEN THE HANDLE.       *)
+(*                                                                         *)
+(* The case the model had no way to say.  A rank joins a barrier BECAUSE of *)
+(* an alteration - somebody raised the count on its behalf and handed it    *)
+(* the returned handle - so it arrives on that handle without ever altering *)
+(* anything itself.  ArriveForAncestor is NOT this: that one requires the   *)
+(* arriving node to have issued a descendant alteration of its own.         *)
+(*                                                                         *)
+(* THE QUESTION THIS EXISTS TO ANSWER.  advance_barrier preserves the       *)
+(* causal timestamp, so this node's handle carries it for every later       *)
+(* generation and every arrival it makes bypasses the tree for ever.  The   *)
+(* implementation used to zero it, which gated only the alteration's own    *)
+(* generation.  Is the gate on the LATER generations load-bearing, or is    *)
+(* the reserved arrival at the alteration's own generation already enough,  *)
+(* given that generations trigger in watermark order?                       *)
+(*                                                                         *)
+(* Mutation GIVEN_HANDLE_UNGATED_AFTER rewrites the gate below to           *)
+(*   ts |-> IF g = a.gen THEN a.ts ELSE 0                                   *)
+(* which is the pre-change behaviour.  Caught => preservation is load-      *)
+(* bearing on the arrival path and its cost is the price of correctness.    *)
+(* Not caught => preservation is needed only so a later alter_arrival_count *)
+(* can chain its ancestry, and the arrival path can be let back into the    *)
+(* tree.                                                                    *)
+(*                                                                         *)
+(* OVER-APPROXIMATION, stated: an ungated arrival here still goes DIRECT to *)
+(* the owner rather than through the tree, which is where the implementation*)
+(* would route a zero gate.  Direct is strictly the more dangerous of the   *)
+(* two for an early-trigger question - it is countable sooner - so a clean  *)
+(* result here covers the tree route too.                                   *)
+(***************************************************************************)
+ArriveOnGivenHandle(a, g) ==
+    /\ a \notin unaltered          \* the handle exists only once a is issued
+    /\ a.givento # NoTarget        \* ... and was actually handed to somebody
+    /\ LET n == a.givento IN
+       /\ n # a.node               \* somebody else's handle
+       /\ myTs[n][g] = 0           \* and that node has altered nothing itself
+    /\ g >= a.gen                  \* alterations are persistent
+    /\ ~triggered[g]
+    \* it discharges an obligation the ALTERING node booked.  event.h allows
+    \*  that: the returned handle needs one use, by anybody on its branch.
+    /\ unissued[a.node][g] > 0
+    /\ unissued' = [unissued EXCEPT ![a.node][g] = @ - 1]
+    /\ tsSent' = [tsSent EXCEPT ![a.givento][g] = @ + 1]
+    /\ msgs' = msgs \cup
+         {[ kind |-> "tsdirect", from |-> a.givento, to |-> Owner, gen |-> g,
+            ts |-> (IF HandleGateWindow(a, g) THEN a.ts ELSE 0), local_ts |-> 0,
+            val |-> tsSent[a.givento][g] + 1 ]}
+    /\ UNCHANGED << localTotal, reportedUp, childAcc, flushing, curPlan,
+                    myEpoch, invalEpoch, deferEpoch, ownerAcc, watermark, triggered,
+                    expected, appliedTs, unaltered, myTs, tsAcc >>
     /\ UNCHANGED reportTo
 
 (***************************************************************************)
@@ -688,13 +962,13 @@ RecvAlter(m) ==
 (***************************************************************************)
 RecvTsDirect(m) ==
     /\ m \in msgs /\ m.kind = "tsdirect"
-    /\ m.ts \in appliedTs
+    /\ TsGateOpen(m)
     /\ m.val > tsAcc[m.from][m.gen]
     /\ tsAcc' = [tsAcc EXCEPT ![m.from][m.gen] = m.val]
     /\ msgs' = msgs \ {m}
     /\ UNCHANGED << unissued, localTotal, reportedUp, childAcc, flushing, curPlan,
                     myEpoch, invalEpoch, deferEpoch, ownerAcc, watermark, triggered,
-                    expected, appliedTs, unaltered, myTs >>
+                    expected, appliedTs, unaltered, myTs, tsSent >>
     /\ UNCHANGED reportTo
 
 (***************************************************************************)
@@ -715,8 +989,85 @@ Next ==
     \/ \E a \in unaltered : Alter(a)
     \/ \E m \in msgs : RecvAlter(m)
     \/ \E m \in msgs : RecvTsDirect(m)
+    \/ \E a \in AlterOps, g \in Gens : ArriveForAncestor(a, g)
+    \/ \E a \in AlterOps, g \in Gens : ArriveOnGivenHandle(a, g)
+
+\* Everything except the terminal stutter.  'Done' is in Next so that a
+\*  finished run is not reported as a deadlock; it must stay OUT of the
+\*  fairness condition, or "the run has finished" would discharge the
+\*  obligation to make progress on a run that has not.
+Active ==
+    \/ DropStale
+    \/ \E n \in Nodes, g \in Gens : Arrive(n, g)
+    \/ \E m \in msgs : RecvReport(m)
+    \/ \E m \in msgs : RecvFlush(m)
+    \/ \E m \in msgs : RecvInvalidate(m)
+    \/ \E m \in msgs : RecvNewPlan(m)
+    \/ \E g \in Gens : Trigger(g)
+    \/ \E a \in unaltered : Alter(a)
+    \/ \E m \in msgs : RecvAlter(m)
+    \/ \E m \in msgs : RecvTsDirect(m)
+    \/ \E a \in AlterOps, g \in Gens : ArriveForAncestor(a, g)
+    \/ \E a \in AlterOps, g \in Gens : ArriveOnGivenHandle(a, g)
 
 Spec == Init /\ [][Next]_vars
+
+\* THE FAIRNESS THIS PROTOCOL ACTUALLY ASSUMES, written down.  Weak fairness
+\*  on each action family separately, and not WF_vars(Active) as a whole:
+\*  WF of a disjunction is discharged by any one disjunct firing forever, so
+\*  a run that delivers reports and never delivers the alteration would
+\*  satisfy it.  Per-family is what "every handler eventually runs" means.
+\*
+\*  The application is fair too (Arrive and Alter): a barrier whose arrivals
+\*  are never issued does not trigger, and that is not the protocol's fault.
+\*  There is no fairness on 'Done' - it changes nothing.
+\*
+\*  SYMMETRY IS UNSOUND WITH THIS.  Liveness configs must not declare it.
+\*  The delivery conjuncts quantify over 'msgs' INSIDE the WF, not over the
+\*  message type outside it.  'Msgs' is a type with thousands of members and
+\*  would become thousands of fairness conditions for TLC's liveness graph;
+\*  'msgs' is the handful actually in flight.  The weaker reading - "if some
+\*  report is continuously deliverable then some report is delivered" -
+\*  suffices here because every budget in these scenarios is finite, so no
+\*  infinite stream of other messages exists to starve one behind.
+Fairness ==
+    /\ WF_vars(DropStale)
+    /\ \A n \in Nodes, g \in Gens : WF_vars(Arrive(n, g))
+    /\ \A a \in AlterOps        : WF_vars(Alter(a))
+    /\ \A a \in AlterOps, g \in Gens : WF_vars(ArriveForAncestor(a, g))
+    /\ \A a \in AlterOps, g \in Gens : WF_vars(ArriveOnGivenHandle(a, g))
+    /\ \A g \in Gens            : WF_vars(Trigger(g))
+    /\ WF_vars(\E m \in msgs : RecvReport(m))
+    /\ WF_vars(\E m \in msgs : RecvFlush(m))
+    /\ WF_vars(\E m \in msgs : RecvInvalidate(m))
+    /\ WF_vars(\E m \in msgs : RecvNewPlan(m))
+    /\ WF_vars(\E m \in msgs : RecvAlter(m))
+    /\ WF_vars(\E m \in msgs : RecvTsDirect(m))
+
+FairSpec == Spec /\ Fairness
+
+(***************************************************************************)
+(* LIVENESS.  Safety plus deadlock detection does NOT establish these:      *)
+(* deadlock detection finds a state with no successor, and an execution     *)
+(* that keeps taking steps forever without ever triggering has successors   *)
+(* at every step.  These need FairSpec.                                     *)
+(***************************************************************************)
+
+\* Every generation eventually triggers.  The headline property: this is what
+\*  a barrier is for, and no invariant in this file implies it.
+EventuallyTriggered == <>(\A g \in Gens : triggered[g])
+
+\* And the protocol drains: no message is left on the wire forever.  A
+\*  protocol can trigger everything and still leak - a report nobody will ever
+\*  accept, an invalidation to a node that has moved on - and a leak is a
+\*  retained record in the implementation.
+EventuallyDrained == <>[](msgs = {})
+
+\* Nothing is held for ever.  'Holding' is unreported work; this says every
+\*  node's unreported work is eventually collected rather than merely that
+\*  somebody could collect it, which is all ReachableWhileHolding claims.
+EventuallyCollected ==
+    \A n \in Nodes, g \in Gens : <>[](~Holding(n, g) \/ triggered[g])
 
 (***************************************************************************)
 (* SAFETY                                                                   *)
@@ -726,6 +1077,8 @@ TypeOK == /\ watermark \in Gens0
           /\ \A g \in Gens : ownerAcc[g] \in 0..64
           /\ \A n \in Nodes, g \in Gens : tsAcc[n][g] \in 0..64
           /\ \A g \in Gens : expected[g] \in 0..64
+          /\ \A n \in Nodes, g \in Gens : unissued[n][g] \in 0..64
+          /\ \A n \in Nodes, g \in Gens : tsSent[n][g] \in 0..64
 
 TriggerInOrder == \A g \in Gens : triggered[g] => (\A h \in 1..(g-1) : triggered[h])
 \* A triggered generation has accounted for EXACTLY every arrival the
@@ -738,10 +1091,35 @@ TriggerCorrect == \A g \in Gens : triggered[g] =>
 NoOverCount    == \A g \in Gens :
                       ownerAcc[g] + localTotal[Owner][g] + TsTotal(g) <= Total(g)
 
-\* Scenario sanity: with only non-negative alterations the owner's expected
-\*  count climbs toward - never past - the arrivals the application will issue.
-\*  Catches a mis-specified scenario rather than a protocol defect.
-ExpectedSane == \A g \in Gens : expected[g] <= Total(g)
+\* THE OWNER'S COUNT IS EXACTLY THE BASE PLUS WHAT IT HAS APPLIED.  This
+\*  replaces an 'expected[g] <= Total(g)' bound that only held for NON-NEGATIVE
+\*  alterations: with a negative delta in flight, Total(g) has already dropped
+\*  (the application issued it) while the owner's count has not, so the old
+\*  form reported a mis-specified scenario on a perfectly legal run.
+\*
+\*  The equality is also strictly stronger where the bound did hold.  It is
+\*  violated by applying an alteration twice, by applying one to the wrong
+\*  generation, and by applying one that is still being held - none of which
+\*  an inequality in either direction can see.
+ExpectedSane ==
+    \A g \in Gens :
+        expected[g] = BaseCount[g]
+                      + SumDeltas({ a \in AlterOps : (a.gen <= g)
+                                                    /\ (a.ts \in appliedTs) })
+
+\* THE NO-EARLY-TRIGGER PROPERTY, stated directly.  'TriggerCorrect' says the
+\*  accepted total EQUALS the arrivals the application will issue, which is an
+\*  aggregate: counting one node's arrival twice while another node still owes
+\*  one produces the right sum and passes.  This says the thing event.h
+\*  actually promises - when a generation triggers, nobody still owes it an
+\*  arrival - and it says it per node, so the two errors cannot cancel.
+\*
+\*  'unissued' is the application's obligation, not the protocol's belief: it
+\*  drops only in Arrive (an arrival really made) and moves in Alter (an
+\*  obligation created or withdrawn).  No action of the owner's can touch it,
+\*  so this cannot be satisfied by the owner deciding it is satisfied.
+NoEarlyTrigger ==
+    \A g \in Gens : triggered[g] => (\A n \in Nodes : unissued[n][g] = 0)
 
 \* No node may sit on unreported work with nothing that will ever collect it.
 \*  The in-flight cases matter: a parent that has already forwarded an
@@ -756,5 +1134,73 @@ ReachableWhileHolding ==
 
 \* Retained state is bounded: at most one parked plan per node.
 BoundedRetention == \A n \in Nodes : deferEpoch[n] \in 0..NumPlans
+
+\* ONE GATE PER NODE PER GENERATION, checked rather than remembered.
+\*  'tsSent' is a single cumulative counter per (node, generation), which is
+\*  sound only while every bypassed arrival a node makes for a generation
+\*  carries the same gate.  Two gates sharing one counter means a message
+\*  whose gate is OPEN carries arrivals whose gates are still SHUT, and the
+\*  owner counts them early.  That shows up as a TriggerCorrect violation
+\*  several steps later with a trace that says nothing about the cause - it
+\*  cost two confusing debugging rounds before it was understood.  This says
+\*  it at the point of the mistake.
+\*
+\*  The implementation has no such restriction: ts_issued is keyed per gate
+\*  and the owner's streams per (sender, gate).  This is a MODEL fidelity
+\*  bound, and a scenario that trips it is mis-specified, not a protocol bug.
+\*  WHAT COUNTS AS "THE SAME GATE" IS THE SET OF TIMESTAMPS IT DEMANDS, not
+\*  the two components.  TsGateOpen requires BOTH to be applied, so {0, T}
+\*  and {T, T} open at the same instant and may share a counter safely - and
+\*  a node that has altered sends both: {0, T} when it arrives on a clean
+\*  handle and {T, T} on its own returned one.  The first draft of this
+\*  compared components and fired on MCHandoff and MCAncestor, which are
+\*  fine.  What must not share a counter is two gates demanding DIFFERENT
+\*  timestamps, which is what a node altering twice produces.
+GateSet(m) == {m.ts, m.local_ts} \ {0}
+
+TsStreamSingleGate ==
+    \A m1 \in msgs, m2 \in msgs :
+        (/\ m1.kind = "tsdirect"
+         /\ m2.kind = "tsdirect"
+         /\ m1.from = m2.from
+         /\ m1.gen = m2.gen) => (GateSet(m1) = GateSet(m2))
+
+\* A RECIPIENT MUST NOT STILL BE BYPASSING AFTER THE GENERATION ITS HANDLE
+\*  NAMED, while holding a quota somebody is silent on.
+\*
+\*  BE CLEAR ABOUT WHAT THIS IS.  With HandleGateWindow as written it is
+\*  VACUOUS BY CONSTRUCTION - the window ends at a.gen, so "bypassing beyond
+\*  a.gen" cannot arise.  It is a REGRESSION GUARD against the window being
+\*  widened again, not independent evidence, and it must not be cited as the
+\*  latter.
+\*
+\*  The first draft of it said "no gated node may have ANY bypasser holding a
+\*  quota in its subtree", which fired in both arms: the bypass at the
+\*  alteration's OWN generation is legitimate and happens under either
+\*  design.  Making that version sound needs the owner's retirement on first
+\*  bypass, which costs 4,365x on MCAlter (306M states, 55 minutes) and is
+\*  not affordable here.  The real hazard - a node silent for ever - is what
+\*  TLC's deadlock check already reports, and MCReadmit is paired with it.
+NoLingeringBypasser ==
+    \A n \in Nodes, g \in Gens :
+        (/\ n # Owner
+         /\ ~triggered[g]
+         /\ curPlan[n].inplan
+         /\ ~flushing[n][g]) =>
+            (\A m \in SubNodes(myEpoch[n], n) :
+                (/\ Plans[myEpoch[n]][m].quota > 0
+                 /\ \E a \in AlterOps : /\ a.givento = m
+                                       /\ a \notin unaltered
+                                       /\ g > a.gen
+                                       /\ HandleGateWindow(a, g)) => FALSE)
+
+\* A gate names an alteration that exists.  Cheap, and it catches the class of
+\*  modelling slip where an action invents a timestamp - which is how a new
+\*  action can look correct and gate on nothing at all.
+GateNamesRealAlteration ==
+    \A m \in msgs :
+        (m.kind = "tsdirect") =>
+            (/\ (m.ts = 0)       \/ (\E a \in AlterOps : a.ts = m.ts)
+             /\ (m.local_ts = 0) \/ (\E a \in AlterOps : a.ts = m.local_ts))
 
 =============================================================================

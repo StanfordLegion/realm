@@ -57,10 +57,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 JAVA = os.environ.get("TLA_JAVA", "/opt/homebrew/opt/openjdk/bin/java")
 if not os.path.exists(JAVA):
     JAVA = "java"
-JAR = os.path.join(HERE, "tools", "tla2tools.jar")
+JAR = os.environ.get("TLA_JAR", os.path.join(HERE, "tools", "tla2tools.jar"))
 
-# (name, spec, config, module, expect, [(old, new), ...])
-#   expect: "CATCH" or "BENIGN"
+# (name, config, module, expect, [(old, new), ...][, {allowed invariants}])
+#   expect:  "CATCH"  - the mutation must be caught, and by a protocol
+#                       property (see NOT_A_CATCH) and, if the row names a
+#                       set, by one of those
+#            "BENIGN" - a negative control: the mutation must NOT be caught
+#   The SCENARIO is part of the claim, not a backdrop.  The same mutation can
+#   be load-bearing in one scenario and benign in another - ANCESTOR_HOLD is
+#   caught on MCHandoff and benign on MCAlter, because on MCAlter the altering
+#   node's own arrival floor already gates the generation.
 ARRIVAL = [
  ("no deferral: park condition disabled", "Park.cfg", "MCPark", "CATCH",
   [("         ELSE IF curPlan[m.to].inplan /\\ (invalEpoch[m.to] < myEpoch[m.to])",
@@ -205,8 +212,14 @@ GATE = [
 
 ALTER = [
  ("owner counts a ts arrival WITHOUT applying its alteration", "Alter.cfg", "MCAlter", "CATCH",
-  [("    /\\ m.ts \\in appliedTs\n    /\\ m.val > tsAcc[m.from][m.gen]\n",
-    "    /\\ m.val > tsAcc[m.from][m.gen]\n")]),
+  # anchored on RecvTsDirect's header: DropStale tests the same gate, at a
+  #  different indentation, and must keep it - dropping a message whose gate is
+  #  still shut is a different mutation with a different meaning.
+  [("""    /\\ m \\in msgs /\\ m.kind = "tsdirect"
+    /\\ TsGateOpen(m)
+""", """    /\\ m \\in msgs /\\ m.kind = "tsdirect"
+""")],
+  {"TriggerCorrect", "NoEarlyTrigger", "NoOverCount"}),
  ("timestamped arrivals aggregate through the TREE (ts erased)", "Alter.cfg", "MCAlter", "CATCH",
   [("          /\\ myTs[n][g] > 0\n", "          /\\ FALSE\n"),
    ("       \\/ /\\ myTs[n][g] = 0\n", "       \\/ /\\ TRUE\n")]),
@@ -216,7 +229,72 @@ ALTER = [
                                                           ELSE flushing[a.node][g]]]""",
     """       IN  /\\ flushing' = flushing""")]),
  ("no reserved-arrival contract guard", "Alter.cfg", "MCAlter", "CATCH",
-  [("    /\\ unissued[a.node][a.gen] > 0\n", "")]),
+  [("    /\\ unissued[a.node][a.gen] > 0\n", "")],
+  {"TriggerCorrect", "NoEarlyTrigger"}),
+ # THE CROSS-NODE ANCESTRY HOLD.  Runs on MCHandoff, where the ancestor's node
+ #  makes no arrivals of its own, so nothing local gates the generation; on
+ #  MCAlter the altering node's own floor hides the hazard and this mutation
+ #  is benign, which is why the scenario is part of the row and not an
+ #  afterthought.
+ ("owner applies an alteration before its ANCESTOR", "Handoff.cfg", "MCHandoff", "CATCH",
+  [("    /\\ ((m.anc  = 0) \\/ (m.anc  \\in appliedTs))\n", "")],
+  {"TriggerCorrect", "NoEarlyTrigger", "NoOverCount"}),
+ # THE SAME-NODE CHAIN HOLD.  The scenario has to be MCChainSign and not
+ #  MCNegative, and the battery is how we found that out: on MCNegative the
+ #  chain is -1 then +1, and applying the +1 first only ever leaves 'expected'
+ #  too HIGH, so the trigger waits instead of firing early and the mutation is
+ #  benign.  +1 then -1 is what puts the owner BELOW the count the application
+ #  asked for.
+ ("owner applies an alteration before its PREDECESSOR", "ChainSign.cfg", "MCChainSign", "CATCH",
+  [("    /\\ ((m.prev = 0) \\/ (m.prev \\in appliedTs))\n", "")],
+  {"TriggerCorrect", "NoEarlyTrigger", "NoOverCount"}),
+ # HOW LONG A RECEIVED HANDLE GATES.  advance_barrier preserves the causal
+ #  timestamp, so as shipped a handle gates for ever and its recipient never
+ #  returns to the tree - which is why the owner must exclude recipients from
+ #  every future plan.  Narrowing the window to the generation the alteration
+ #  NAMED lets the recipient back in, and MCReadmit is the scenario that says
+ #  whether re-admitting it is then safe: node 3 is outside plan 1 (it
+ #  contributed nothing through the tree) and taken back in plan 2.
+ #
+ #  Widening the window again must be caught.  NOTE the asymmetry: under the
+ #  spec as written this invariant is vacuous, so what establishes SAFETY is
+ #  MCReadmit running exhaustively clean with deadlock detection on - not
+ #  this row.  This row establishes that the OLD behaviour was unsafe.
+ ("a received handle gates for ever (the recipient never rejoins)", "Readmit.cfg", "MCReadmit", "CATCH",
+  [("HandleGateWindow(a, g) == g = a.gen", "HandleGateWindow(a, g) == g >= a.gen")],
+  {"NoLingeringBypasser", "deadlock"}),
+ # THE ALTERING NODE'S FLUSH FAN IS NOT LOAD-BEARING, and the implementation
+ #  relies on that: adjust_arrival's bypass branches only announce to their
+ #  children while the plan still gives this node a quota, so that one
+ #  alteration costs a few generations of re-learning instead of eager flush
+ #  for the rest of the barrier's life.  MCAlter is the scenario that can
+ #  speak to it - its altering node is a RELAY WITH A CHILD, which is the
+ #  structure a lost announcement would strand.  The altering node still has
+ #  'flushing' set by Alter, so it keeps reporting eagerly and the child's
+ #  counts still flow up; the child never needed to be eager itself.
+ #
+ #  Recorded as BENIGN so that a future change which makes it fire shows up as
+ #  a change in meaning.  NOTE: this mutation is VACUOUS on any scenario whose
+ #  AlterOps is empty, and on one whose altering node is a leaf - check the
+ #  distinct-state count moved before believing a pass.
+ ("altering node never announces to its children (control)", "Alter.cfg", "MCAlter", "BENIGN",
+  [("                      \\cup UNION { FlushFan(a.node, g) : g \\in aff }\n", "")]),
+ # NEGATIVE CONTROL for the prev-hold row: the same mutation, the same rule,
+ #  the other sign order - and it must NOT be caught.  Recorded so that a future
+ #  change which makes it fire is visible as a change in meaning.
+ ("prev hold removed, negative alteration FIRST (control)", "Negative.cfg", "MCNegative", "BENIGN",
+  [("    /\\ ((m.prev = 0) \\/ (m.prev \\in appliedTs))\n", "")]),
+ # NEGATIVE ALTERATIONS ARE REAL WORK, not a no-op the owner may skip.  An
+ #  owner that drops them never lowers 'expected', so the terminal-negative
+ #  generation is owed an arrival that will never come: no invariant fires,
+ #  the run simply stops, and DEADLOCK is the catch.
+ ("owner ignores NEGATIVE alterations", "Negative.cfg", "MCNegative", "CATCH",
+  [("""    /\\ expected' = [g \\in Gens |-> IF g >= m.gen THEN expected[g] + m.delta
+                                                 ELSE expected[g]]""",
+    """    /\\ expected' = [g \\in Gens |-> IF (g >= m.gen) /\\ (m.delta > 0)
+                                   THEN expected[g] + m.delta
+                                   ELSE expected[g]]""")],
+  {"deadlock", "ExpectedSane"}),
 ]
 
 NOTIFY = [
@@ -262,39 +340,130 @@ SUITES = {
 }
 
 
-def classify(out):
+# Invariants that are NOT acceptable as a mutation catch.  Both describe the
+#  SCENARIO rather than the protocol: TypeOK catches a value leaving its
+#  declared range, ExpectedSane catches a mis-specified alteration set.  A
+#  mutation "caught" by one of these has not demonstrated that the rule it
+#  removed was protecting anything - it has demonstrated that the mutated spec
+#  no longer type-checks, which is a different and much weaker claim.
+#  (ExpectedSane is NOT in here: it used to be a scenario bound, but it now
+#  states an equality about the owner's applied-alteration set, which is a
+#  protocol property and a legitimate thing for a mutation to break.)
+NOT_A_CATCH = {"TypeOK"}
+
+
+# How long a single TLC run may take.  A MUTATION is expected to be caught, and
+#  a catch is usually shallow, so it does not need long; a CONTROL has to
+#  explore, and the canonical notification scenario is ~150M distinct states.
+#  Neither is allowed to run unbounded: a battery nobody can finish is a
+#  battery nobody runs.
+MUT_TIMEOUT = int(os.environ.get("TLA_MUT_TIMEOUT", "1800"))
+CTRL_TIMEOUT = int(os.environ.get("TLA_CTRL_TIMEOUT", "900"))
+
+
+def depth_of(out):
+    d = 0
+    for line in out.splitlines():
+        if line.startswith("Progress("):
+            try:
+                d = max(d, int(line.split("(", 1)[1].split(")", 1)[0]))
+            except ValueError:
+                pass
+    return d
+
+
+def classify(out, rc, err):
+    """Return (verdict, catcher).  'catcher' is the invariant name, "deadlock",
+    or None."""
     # NOTE the 'Error:' prefix: grepping for the bare 'Invariant ... is
     #  violated' misses it, which once degraded every verdict to a fallback.
     if "Error: Invariant" in out:
-        return "caught: " + out.split("Error: Invariant")[1].split("is violated")[0].strip()
+        inv = out.split("Error: Invariant")[1].split("is violated")[0].strip()
+        return ("caught: " + inv, inv)
+    if "Error: Temporal properties were violated" in out:
+        return ("caught: temporal", "temporal")
     if "Deadlock reached" in out:
-        return "caught: deadlock"
+        return ("caught: deadlock", "deadlock")
     if "No error has been found" in out:
-        return "not caught"
-    return "ERROR/UNPARSED"
+        return ("not caught", None)
+    # NEITHER verdict line appeared.  That is a run that did not finish - a
+    #  parse error, an out-of-memory, a timeout, a java that would not start -
+    #  and it used to fall through to a bare string that a startswith("caught")
+    #  test read as a pass.  The exit status and stderr say which.
+    tail = (err or "").strip().splitlines()
+    return ("ERROR rc=%s %s" % (rc, tail[-1][:80] if tail else "no stderr"), None)
 
 
-def run_row(specfile, name, cfg, module, expect, edits):
+def run_tlc(specfile, spec, cfg, module, timeout):
+    with tempfile.TemporaryDirectory(prefix="battery_") as d:
+        os.makedirs(os.path.join(d, "jtmp"))
+        shutil.copy(os.path.join(HERE, cfg), d)
+        shutil.copy(os.path.join(HERE, module + ".tla"), d)
+        open(os.path.join(d, specfile), "w").write(spec)
+        try:
+            r = subprocess.run(
+                [JAVA, "-Xmx8g", "-XX:+UseParallelGC",
+                 "-Djava.io.tmpdir=" + os.path.join(d, "jtmp"),
+                 "-cp", JAR, "tlc2.TLC", "-workers", "8", "-config", cfg,
+                 module + ".tla"],
+                capture_output=True, text=True, cwd=d, timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            # A killed run is BOUNDED-CLEAN to the depth it reached, and never
+            #  a pass.  Say which, and say to what depth, so a timeout is not
+            #  quietly read as either verdict.
+            out = e.stdout or ""
+            if isinstance(out, bytes):
+                out = out.decode("utf-8", "replace")
+            v, catcher = classify(out, "timeout", "")
+            if catcher is not None:
+                return (v, catcher)   # it found something before it ran out
+            return ("bounded clean to depth %d (%ds)" % (depth_of(out), timeout),
+                    None)
+        return classify(r.stdout, r.returncode, r.stderr)
+
+
+_control_cache = {}
+
+
+def control(specfile, cfg, module):
+    """THE HEALTHY CONTROL.  Check the UNMUTATED spec against this scenario
+    before believing anything a mutation of it reports.  Without this an
+    already-broken canonical scenario makes every mutation of it 'caught', and
+    the battery reports a clean sweep while checking nothing at all.
+
+    Bounded on purpose.  The canonical notification scenario is ~150M distinct
+    states and exhausting it here would cost more than the whole rest of the
+    battery; what this has to rule out is a canonical scenario that is ALREADY
+    FAILING, and that shows up early.  A bounded control is recorded as
+    bounded, never as a pass."""
+    key = (specfile, cfg, module)
+    if key not in _control_cache:
+        spec = open(os.path.join(HERE, specfile)).read()
+        _control_cache[key] = run_tlc(specfile, spec, cfg, module, CTRL_TIMEOUT)
+    return _control_cache[key]
+
+
+def run_row(specfile, name, cfg, module, expect, edits, allowed=None):
+    cv, ccatch = control(specfile, cfg, module)
+    if ccatch is not None:
+        return ("CTRL", "control run is not clean: " + cv)
     spec = open(os.path.join(HERE, specfile)).read()
     for old, new in edits:
         n = spec.count(old)
         if n != 1:
             return ("EDIT-FAIL", "pattern matches %d sites (need exactly 1)" % n)
         spec = spec.replace(old, new, 1)
-    with tempfile.TemporaryDirectory(prefix="battery_") as d:
-        os.makedirs(os.path.join(d, "jtmp"))
-        shutil.copy(os.path.join(HERE, cfg), d)
-        shutil.copy(os.path.join(HERE, module + ".tla"), d)
-        open(os.path.join(d, specfile), "w").write(spec)
-        r = subprocess.run(
-            [JAVA, "-Xmx8g", "-XX:+UseParallelGC",
-             "-Djava.io.tmpdir=" + os.path.join(d, "jtmp"),
-             "-cp", JAR, "tlc2.TLC", "-workers", "8", "-config", cfg,
-             module + ".tla"],
-            capture_output=True, text=True, cwd=d, timeout=7200)
-        v = classify(r.stdout)
+    v, catcher = run_tlc(specfile, spec, cfg, module, MUT_TIMEOUT)
     if expect == "CATCH":
-        return ("OK" if v.startswith("caught") else "XX", v)
+        if not v.startswith("caught"):
+            return ("XX", v)
+        if catcher in NOT_A_CATCH:
+            return ("XX", v + " (scenario/type check, not a protocol property)")
+        if allowed and catcher not in allowed:
+            return ("XX", v + " (expected one of %s)" % "/".join(sorted(allowed)))
+        return ("OK", v)
+    # a BENIGN row has to be EXHAUSTED to mean anything: "nothing found so far"
+    #  is not "nothing to find".
     return ("OK" if v == "not caught" else "XX", v + " (expected benign)")
 
 
@@ -305,11 +474,20 @@ def main():
     for suite in names:
         specfile, rows = SUITES[suite]
         print("== %s (%s) ==" % (suite, specfile))
-        for name, cfg, module, expect, edits in rows:
-            tag, verdict = run_row(specfile, name, cfg, module, expect, edits)
+        for row in rows:
+            name, cfg, module, expect, edits = row[:5]
+            allowed = row[5] if len(row) > 5 else None
+            tag, verdict = run_row(specfile, name, cfg, module, expect, edits,
+                                   allowed)
             if tag != "OK":
                 failures += 1
-            print("  %-3s %-13s %-36s %s" % (tag, module, verdict, name), flush=True)
+            print("  %-8s %-13s %-40s %s" % (tag, module, verdict, name),
+                  flush=True)
+    # the controls are results too: print them so a clean sweep can be seen to
+    #  have been measured against something
+    print("-- controls --")
+    for (sf, cfg, mod), (v, c) in sorted(_control_cache.items()):
+        print("  %-8s %-13s %s" % ("OK" if c is None else "XX", mod, v))
     print("battery:", "PASS" if failures == 0 else "%d FAILURES" % failures)
     return 0 if failures == 0 else 1
 

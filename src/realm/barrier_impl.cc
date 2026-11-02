@@ -75,7 +75,10 @@ namespace Realm {
     nextid.barrier_generation() = ID(id).barrier_generation() + 1;
 
     Barrier nextgen = nextid.convert<Barrier>();
-    nextgen.timestamp = 0;
+    // THE CAUSAL BRANCH SURVIVES A PHASE BOUNDARY (event.h:258-263).  An
+    // alteration is persistent, so a derived handle still carries the dependency;
+    // zeroing it let a transferred handle arrive against the pre-alteration count.
+    nextgen.timestamp = timestamp;
 
     return nextgen;
   }
@@ -91,11 +94,12 @@ namespace Realm {
     }
 
     BarrierImpl *impl = get_runtime()->get_barrier_impl(*this);
-    // ARRIVAL_PROTOCOL rules 8 and 9, action AL.  The causal timestamp is
-    //  minted INSIDE the one critical section that also installs the arrival
-    //  floor, enters eager flush and records the message (section 12); it comes
-    //  back out so it can go on the returned handle.
-    timestamp_t timestamp = impl->alter_arrival_count(ID(id).barrier_generation(), delta);
+    // ARRIVAL_PROTOCOL rules 8 and 9, action AL.  The timestamp is minted inside
+    //  the one critical section (section 12) and comes back out on the handle.
+    //  'this->timestamp' is the ANCESTOR: the handle may have crossed a node
+    //  boundary, which the per-node chain ('prev_ts') cannot express.
+    timestamp_t timestamp =
+        impl->alter_arrival_count(ID(id).barrier_generation(), delta, this->timestamp);
 
     Barrier with_ts;
     with_ts.id = id;
@@ -112,7 +116,8 @@ namespace Realm {
     previd.barrier_generation() = ((gen > 0) ? (gen - 1) : gen);
 
     Barrier prevgen = previd.convert<Barrier>();
-    prevgen.timestamp = 0;
+    // preserved for the same reason as in advance_barrier (event.h:315-318)
+    prevgen.timestamp = timestamp;
 
     return prevgen;
   }
@@ -385,13 +390,14 @@ namespace Realm {
     BarrierImpl *impl = get_runtime()->get_barrier_impl(b);
 
     impl->handle_remote_alter(sender, args.gen, args.delta, args.ts, args.prev_ts,
-                              work_until);
+                              args.anc_ts, work_until);
   }
 
   /*static*/ void BarrierAlterMessage::send_request(NodeID target, ID::IDType barrier_id,
                                                     EventImpl::gen_t gen, int delta,
                                                     Barrier::timestamp_t ts,
-                                                    Barrier::timestamp_t prev_ts)
+                                                    Barrier::timestamp_t prev_ts,
+                                                    Barrier::timestamp_t anc_ts)
   {
     ActiveMessage<BarrierAlterMessage> amsg(target);
     amsg->barrier_id = barrier_id;
@@ -399,6 +405,7 @@ namespace Realm {
     amsg->delta = delta;
     amsg->ts = ts;
     amsg->prev_ts = prev_ts;
+    amsg->anc_ts = anc_ts;
     amsg.commit();
   }
 
@@ -808,16 +815,129 @@ namespace Realm {
     delete[] poisoned_generations;
   }
 
+  ////////////////////////////////////////////////////////////////////////
+  //
+  // class BarrierNotifyFlusher   [PROTOTYPE, small-scale throughput fix 2]
+  //
+
+  BarrierNotifyFlusher::BarrierNotifyFlusher(void)
+    : BackgroundWorkItem("barrier notify flush")
+  {}
+
+  void BarrierNotifyFlusher::enqueue(BarrierImpl *impl)
+  {
+    bool inline_flush = false;
+    {
+      AutoLock<> al(flusher_mutex);
+      if(shutting_down) {
+        // the item is on its way to STATE_SHUTDOWN, and make_active() on a
+        //  shut-down item aborts; publish inline instead so nothing is lost
+        inline_flush = true;
+      } else {
+        const bool was_empty = queue.empty();
+        queue.push_back(impl);
+        if(was_empty) {
+          // ADVERTISED UNDER THE MUTEX: outside it, shutdown() can run in the gap and
+          // make_active() then aborts on a shut-down item.  bgwork permits duplicate
+          // activations (bgwork.h:155-161), so holding the lock costs nothing.
+          make_active();
+        }
+      }
+    }
+    if(inline_flush) {
+      // safe to call without the flusher mutex, and emit_pending_sends (our
+      //  only caller) does not hold the barrier mutex either
+      impl->flush_deferred_notify();
+    }
+  }
+
+  // PUBLISH EVERYTHING OWED - unconditional, in release builds too: a deferred
+  // publication that never goes out is a waiter that never wakes.  Does NOT set
+  // 'shutting_down'; the shutdown quiescence loop still expects more.
+  void BarrierNotifyFlusher::drain(void)
+  {
+    for(;;) {
+      std::vector<BarrierImpl *> todo;
+      {
+        AutoLock<> al(flusher_mutex);
+        todo.swap(queue);
+      }
+      if(todo.empty()) {
+        return;
+      }
+      for(size_t i = 0; i < todo.size(); i++) {
+        todo[i]->flush_deferred_notify();
+      }
+    }
+  }
+
+  void BarrierNotifyFlusher::shutdown(void)
+  {
+    {
+      AutoLock<> al(flusher_mutex);
+      shutting_down = true;
+    }
+    // By here the network is detached, so anything still queued cannot go out.
+    // runtime_impl drains inside the quiescence loop, so this should be empty -
+    // say so loudly rather than emitting onto a dead transport.
+    bool leftover = false;
+    {
+      AutoLock<> al(flusher_mutex);
+      leftover = !queue.empty();
+      queue.clear();
+    }
+    if(leftover) {
+      log_barrier.fatal() << "barrier notification deferred past network detach"
+                          << " - a waiter has been lost";
+    }
+#ifdef DEBUG_REALM
+    // shutdown_work_item() requires STATE_IDLE and draining does not touch
+    // 'state': an item advertised but never claimed is still STATE_ACTIVE, which
+    // aborts.  make_inactive() is the one transition that puts it back.
+    make_inactive();
+    shutdown_work_item();
+#endif
+  }
+
+  bool BarrierNotifyFlusher::do_work(TimeLimit work_until)
+  {
+    std::vector<BarrierImpl *> todo;
+    {
+      AutoLock<> al(flusher_mutex);
+      todo.swap(queue);
+    }
+    size_t i = 0;
+    for(; i < todo.size(); i++) {
+      todo[i]->flush_deferred_notify();
+      // RESPECT THE QUANTUM (bgwork.h:138-141).  The remainder goes back at the
+      // FRONT so the oldest deferral is still published first.
+      if(((i + 1) < todo.size()) && work_until.is_expired()) {
+        AutoLock<> al(flusher_mutex);
+        queue.insert(queue.begin(), todo.begin() + (i + 1), todo.end());
+        return true;
+      }
+    }
+    bool more;
+    {
+      AutoLock<> al(flusher_mutex);
+      more = !queue.empty();
+    }
+    return more; // requeue if work arrived while we were draining
+  }
+
   bool BarrierImpl::BarrierCounters::any(void) const
   {
     return (departs_sent | departs_suppressed | leave_rejoin_cycles | churn_backoffs |
             subscribe_fan_in | departs_received | shrinks_applied | shrinks_declined |
             nodes_removed | flush_episodes | flush_report_bytes | plan_rebuilds |
             plan_rebuilds_declined | gathering_declared | identical_plans_skipped |
+            plan_reactivations | bypass_retirements | handle_gates_released |
             plans_parked | parked_plans_applied | dead_plans_discarded |
             retro_flushes_sent | stale_edge_forwards | report_edges_pinned |
             pin_conflicts_avoided | gap_pulls | reports_received | notifies_received |
-            reports_gated | owner_valve_flushes) != 0;
+            reports_gated | ts_arrivals_received | owner_valve_flushes |
+            notifies_coalesced |
+            notify_backstops | reclaim_pulls) != 0;
   }
 
   // IMPLEMENTATION_PLAN section 5 - the counters' way out.  Everything in
@@ -849,6 +969,9 @@ namespace Realm {
                        << " plan_rebuilds_declined=" << counters.plan_rebuilds_declined
                        << " gathering_declared=" << counters.gathering_declared
                        << " identical_plans_skipped=" << counters.identical_plans_skipped
+                       << " plan_reactivations=" << counters.plan_reactivations
+                       << " handle_gates_released=" << counters.handle_gates_released
+                       << " bypass_retirements=" << counters.bypass_retirements
                        << " agg_peak_entries=" << counters.agg_peak_entries
                        << " plans_parked=" << counters.plans_parked
                        << " parked_plans_applied=" << counters.parked_plans_applied
@@ -861,7 +984,11 @@ namespace Realm {
                        << " reports_received=" << counters.reports_received
                        << " notifies_received=" << counters.notifies_received
                        << " reports_gated=" << counters.reports_gated
-                       << " owner_valve_flushes=" << counters.owner_valve_flushes;
+                       << " ts_arrivals_received=" << counters.ts_arrivals_received
+                       << " owner_valve_flushes=" << counters.owner_valve_flushes
+                       << " notifies_coalesced=" << counters.notifies_coalesced
+                       << " notify_backstops=" << counters.notify_backstops
+                       << " reclaim_pulls=" << counters.reclaim_pulls;
   }
 
 #ifdef DEBUG_REALM
@@ -958,6 +1085,15 @@ namespace Realm {
     // a node that altered the PREVIOUS life of this slot has no arrival floor
     //  for this one, so it is a legitimate plan member again
     ts_bypass_nodes.clear();
+    ts_seen_bypassing.clear();
+    handle_first_gen.clear();
+    // PROTOTYPE (fix 2) - per-lifetime, and not optional: a surviving
+    // 'notify_deferred_prev' names a generation of the PREVIOUS barrier, so the
+    // first notification of the new one is a permanent gap-pull storm.
+    notify_deferred = false;
+    notify_deferred_prev = 0;
+    notify_deferrals = 0;
+    notify_flush_queued = false;
     generation.store_release(0);
   }
 
@@ -1500,38 +1636,47 @@ namespace Realm {
   //  the bug this replaces.
   void BarrierImpl::apply_alter_locked(gen_t alter_gen, int delta,
                                        Barrier::timestamp_t ts,
-                                       Barrier::timestamp_t prev_ts, PendingSends &sends)
+                                       Barrier::timestamp_t prev_ts,
+                                       Barrier::timestamp_t anc_ts, PendingSends &sends)
   {
     REALM_BARRIER_ASSERT_LOCKED();
-    // step 1 - ORDERING.  One node's alterations are applied in the order it
-    //  issued them: an alteration whose predecessor has not landed yet is held
-    //  right here.  That is what makes a single timestamp on an arrival a
-    //  sound gate for the entire chain behind it, and it is checked by exact
-    //  membership rather than by comparing timestamps.
-    if((prev_ts != 0) && (applied_ts.count(prev_ts) == 0)) {
-      HeldAlter ha;
-      ha.gen = alter_gen;
-      ha.delta = delta;
-      ha.ts = ts;
-      held_alters.insert(std::make_pair(prev_ts, ha));
-      log_barrier.info() << "holding barrier alteration: " << me << "/" << alter_gen
-                         << " delta=" << delta << " ts=" << ts << " needs=" << prev_ts;
-      return;
-    }
 
-    // a worklist rather than recursion: applying this one may release others
+    // a worklist rather than recursion: applying one may release others.  The
+    // ordering test is INSIDE the loop - a released alteration may still be
+    // waiting on its other predecessor and has to be re-held, not applied.
     std::vector<HeldAlter> ready;
     {
       HeldAlter ha;
       ha.gen = alter_gen;
       ha.delta = delta;
       ha.ts = ts;
+      ha.prev_ts = prev_ts;
+      ha.anc_ts = anc_ts;
       ready.push_back(ha);
     }
 
     while(!ready.empty()) {
       const HeldAlter cur = ready.back();
       ready.pop_back();
+
+      // step 0 - ORDERING ON BOTH AXES.  'prev_ts' is this node's previous
+      // alteration; 'anc_ts' is the one its HANDLE came from, possibly issued
+      // elsewhere.  Exact membership, because timestamps across nodes do not compare.
+      {
+        Barrier::timestamp_t needs = 0;
+        if((cur.prev_ts != 0) && (applied_ts.count(cur.prev_ts) == 0)) {
+          needs = cur.prev_ts;
+        } else if((cur.anc_ts != 0) && (applied_ts.count(cur.anc_ts) == 0)) {
+          needs = cur.anc_ts;
+        }
+        if(needs != 0) {
+          held_alters.insert(std::make_pair(needs, cur));
+          log_barrier.info()
+              << "holding barrier alteration: " << me << "/" << cur.gen
+              << " delta=" << cur.delta << " ts=" << cur.ts << " needs=" << needs;
+          continue;
+        }
+      }
 
       // an alteration is applied EXACTLY ONCE.  The transport does not
       //  duplicate messages, so this is belt and braces - but a delta applied
@@ -1609,26 +1754,12 @@ namespace Realm {
         //  rule 4 is idempotent so the overlap costs nothing.
         enter_flush_from_locked(apply_gen, sends);
 
-        // THE TERMINAL-NEGATIVE CASE (event.h:293-297): a negative alteration
-        //  that drives the remaining count to exactly zero needs no arrival on
-        //  the returned handle, so it is the one branch of the contract whose
-        //  safety argument does NOT rest on a reserved arrival.  It has no
-        //  formal coverage (ARRIVAL_PROTOCOL section 8.6), so it is gated here
-        //  rather than implemented speculatively.
-        for(std::map<gen_t, Generation *>::iterator it = generations.begin();
-            it != generations.end(); ++it) {
-          if((it->first <= watermark) || (it->first < apply_gen)) {
-            continue;
-          }
-          if(generation_complete_locked(it->first, *(it->second))) {
-            log_barrier.fatal()
-                << "terminal-negative alter_arrival_count is not implemented: " << me
-                << "/" << it->first << " delta=" << cur.delta
-                << " (a negative alteration that completes a generation by itself"
-                << " has no formal coverage - see ARRIVAL_PROTOCOL section 8.6)";
-            abort();
-          }
-        }
+        // THE TERMINAL NEGATIVE (event.h:293-297) needs no arrival on the
+        //  returned handle.  It cannot trigger early - 'expected' only moves
+        //  DOWN, so any generation it completes has already accounted for the
+        //  lowered count - and all three callers run check_triggers_locked in
+        //  this same critical section (:3943, :4640, :4722), which is the only
+        //  thing that moves the watermark.
       }
 
       log_barrier.info() << "applied barrier alteration: " << me << "/" << apply_gen
@@ -1677,6 +1808,57 @@ namespace Realm {
         ts_floor.erase(ts_floor.begin(), it);
       }
     }
+  }
+
+  // B01 - RECLAMATION FOR A NODE THAT NEVER CONSULTS.  Records are freed only
+  // in publish_watermark_locked, reached only by a notification, which reaches
+  // only subscribers - so an arrival-only rank never frees anything.  Pull a
+  // watermark through the ordinary subscribe path instead.
+  void BarrierImpl::maybe_reclaim_pull_locked(PendingSends &sends)
+  {
+    REALM_BARRIER_ASSERT_LOCKED();
+    // the OWNER reclaims when it triggers; without this guard it would record a
+    // consultation and count a pull that consult_subscribe_locked never makes.
+    if(owner == Network::my_node_id) {
+      return;
+    }
+    if((generations.size() >= RECLAIM_PULL_THRESHOLD) && (member == MEMBER_NO) &&
+       !pull_outstanding) {
+      counters.reclaim_pulls++;
+      consult_subscribe_locked(sends);
+    }
+  }
+
+  // RULE 8.1 - HOW LONG A HANDLE'S TIMESTAMP KEEPS AN ARRIVAL OFF THE TREE.
+  // Only the first generation the handle was used at: past that the alteration
+  // is certainly applied, because a generation cannot trigger while one naming
+  // it is outstanding and generations trigger in watermark order.  Conservative
+  // - the model cleared gating only a.gen, which this node cannot see.
+  Barrier::timestamp_t BarrierImpl::handle_gate_locked(Barrier::timestamp_t ts,
+                                                       gen_t gen)
+  {
+    REALM_BARRIER_ASSERT_LOCKED();
+    if(ts == 0) {
+      return 0;
+    }
+    std::map<Barrier::timestamp_t, gen_t>::iterator it = handle_first_gen.find(ts);
+    if(it == handle_first_gen.end()) {
+      // first sight: THIS generation is the one that needs the gate
+      handle_first_gen[ts] = gen;
+      return ts;
+    }
+    if(it->second == RELEASED) {
+      return 0;
+    }
+    if(gen <= it->second) {
+      return ts;
+    }
+    // RELEASED is recorded IN PLACE, never erased: ABSENCE MEANS "GATE IT", so
+    // forgetting a released timestamp re-arms the gate and the node never
+    // rejoins the tree.  The first version pruned here and did exactly that.
+    it->second = RELEASED;
+    counters.handle_gates_released++;
+    return 0;
   }
 
   // ARRIVAL_PROTOCOL section 11.1 - the (node,count) map this node speaks for.
@@ -2408,7 +2590,15 @@ namespace Realm {
         h = (h ^ static_cast<uint64_t>(tv[i])) * 0x100000001B3ull;
         h = (h ^ static_cast<uint64_t>(quota[i])) * 0x100000001B3ull;
       }
-      if((my_epoch != 0) && (h == last_plan_hash)) {
+      // B03: the hash asks "same as the last plan I computed", but the question is
+      // "is the plan the nodes hold still live".  After an alteration the rebuild
+      // reproduces it exactly, and skipping leaves everyone invalidated for good.
+      if((my_epoch != 0) && (h == last_plan_hash) && plan_retired_locked()) {
+        // B03 - identical AND retired, so it has to go out again.  Counted separately
+        // from plan_rebuilds because it is the proof this path ran: P_REALTER's
+        // acceptance check reads it.
+        counters.plan_reactivations++;
+      } else if((my_epoch != 0) && (h == last_plan_hash)) {
         counters.identical_plans_skipped++;
         gather_backoff = (gather_backoff == 0)
                              ? 1
@@ -2636,9 +2826,11 @@ namespace Realm {
     if(sends.has_alter) {
       log_barrier.info() << "sending barrier alter: " << me << "/" << sends.alter.gen
                          << " delta=" << sends.alter.delta << " ts=" << sends.alter.ts
-                         << " prev_ts=" << sends.alter.prev_ts << " dest=" << owner;
+                         << " prev_ts=" << sends.alter.prev_ts
+                         << " anc_ts=" << sends.alter.anc_ts << " dest=" << owner;
       BarrierAlterMessage::send_request(owner, me.id, sends.alter.gen, sends.alter.delta,
-                                        sends.alter.ts, sends.alter.prev_ts);
+                                        sends.alter.ts, sends.alter.prev_ts,
+                                        sends.alter.anc_ts);
     }
 
     if(sends.has_ts_arrival) {
@@ -2695,6 +2887,12 @@ namespace Realm {
     if(sends.has_depart) {
       log_barrier.info() << "sending barrier depart: " << me << " dest=" << owner;
       BarrierDepartMessage::send_request(owner, me.id, Network::my_node_id);
+    }
+
+    // PROTOTYPE (fix 2): this section deferred its publication, so arm the
+    //  backstop that will carry it out if no later trigger does.
+    if(sends.arm_notify_flush) {
+      get_runtime()->barrier_notify_flusher.enqueue(this);
     }
 
     // NOTIFICATION_PROTOCOL rule 5 - the pull.  'owner' is write-once, so
@@ -3079,6 +3277,11 @@ namespace Realm {
     if(has_waiters_locked()) {
       return;
     }
+    if(generations.size() >= RECLAIM_PULL_THRESHOLD) {
+      // B01 - a node holding a backlog of generation records is NOT idle: leaving
+      // would freeze its watermark and the backlog with it.
+      return;
+    }
 
     const gen_t wm = generation.load();
     // THE STAGGER, and it is expressed in GENERATIONS rather than in time, so
@@ -3214,6 +3417,140 @@ namespace Realm {
     }
     // the model's ownerAcc[g] + localTotal[Owner][g] + TsTotal(g) = expected[g]
     return (g.local_total + g.child_sum + g.ts_acc) == expected_locked(gen);
+  }
+
+  bool BarrierImpl::defer_notify_locked(gen_t trigger_gen) const
+  {
+    REALM_BARRIER_ASSERT_LOCKED();
+    // an unbounded run would let the delta - and the recipients' wait - grow
+    //  without limit, and keep one barrier's publication permanently behind
+    //  the backstop
+    if(notify_deferrals >= NOTIFY_MAX_DEFERRALS) {
+      return false;
+    }
+    std::map<gen_t, Generation *>::const_iterator it = generations.find(trigger_gen + 1);
+    if(it == generations.end()) {
+      return false;
+    }
+    // section 11.5 - THE ONE THING THAT MUST NOT BE DEFERRED.  A gathering
+    // declaration RIDES this notification: the receiver must mark the generation
+    // eager in the same critical section that wakes its waiters, or the plan never
+    // re-converges (measured: flush_episodes 1 -> 1024 with every test green).
+    if(it->second->flushing) {
+      return false;
+    }
+    // THE REGIME TEST: a serial barrier has nobody arrived on the next generation,
+    // so this is false and the round trip is unaffected.
+    return (it->second->subtree_known() > 0);
+  }
+
+  void BarrierImpl::flush_deferred_notify(void)
+  {
+    PendingSends sends;
+    {
+      AutoLock<> a(mutex);
+      notify_flush_queued = false;
+      if(!notify_deferred) {
+        return; // a later trigger already published it
+      }
+      const gen_t wm = generation.load();
+      const gen_t prev = notify_deferred_prev;
+      notify_deferred = false;
+      notify_deferrals = 0;
+      if(wm <= prev) {
+        return;
+      }
+      counters.notify_backstops++;
+      // by construction the deferred run carries no poison: a trigger with
+      //  poison to publish is never deferred
+      std::vector<gen_t> no_poison;
+      compose_notify_locked(wm, prev, no_poison, sends);
+    }
+    emit_pending_sends(sends);
+  }
+
+  // PROTOTYPE (fix 2): action T's notification half, lifted out so the backstop
+  // can publish the same thing a later trigger would have.
+  void BarrierImpl::compose_notify_locked(gen_t wm, gen_t prev,
+                                          std::vector<gen_t> &poison,
+                                          PendingSends &sends)
+  {
+    REALM_BARRIER_ASSERT_LOCKED();
+    // Step 1: choose the shrink.  RULE 3 - removals are DISCRETIONARY, so ANY
+    //  subset of the collected intents is a legal choice and the model checks
+    //  exactly that ("the owner may shrink by ANY subset").
+    MulticastTargetSet departing;
+    for(MulticastTargetSet::const_iterator wit = want_out.begin();
+        wit != want_out.end(); ++wit) {
+      // only a node that is actually IN the set is being removed; anything
+      //  else in 'want_out' is a stale intent and changes no version
+      if(sub_set.contains(*wit)) {
+        departing.append_increasing_node(*wit);
+      }
+    }
+
+    // Step 1b: RULE 3's COST TEST.  A shrink is only worth its version bump if the
+    // departing set is cheap to remove; 'shrink_hint' carries rule 8's advice.
+    // B01: a node over the retention threshold is never counted as idle.
+    if(!departing.empty()) {
+      if(shrink_pays_locked(departing)) {
+        shrink_pays = true;
+        counters.shrinks_applied++;
+        counters.nodes_removed += departing.size();
+      } else {
+        shrink_pays = false;
+        counters.shrinks_declined++;
+        log_barrier.info() << "declining barrier subscriber shrink: " << me
+                           << " set=" << sub_set.size()
+                           << " departing=" << departing.size();
+        departing.clear();
+      }
+    }
+
+    // Step 2: SNAPSHOT THE PRE-SHRINK SET.  RULE 1 - a shrink must be published to
+    // the set as it was, so a departing node hears about its own removal.
+    sends.notify.targets = sub_set;
+
+    // Step 3: apply the shrink and bump the version.  RULE 2 - 'set_ver' moves on
+    // every change, and that is what makes a stale notification identifiable.
+    if(!departing.empty()) {
+      for(MulticastTargetSet::const_iterator dit = departing.begin();
+          dit != departing.end(); ++dit) {
+        sub_set.remove(*dit);
+      }
+      set_ver += 1;
+    }
+    want_out.clear();
+
+    // Step 4: compose the delta.  There is nobody to tell if the set is
+    //  empty - and a node that is not in it pulls, which is the correctness
+    //  guarantee; the set is only a cache.
+    if(!sends.notify.targets.empty()) {
+      sends.notify.valid = true;
+      sends.notify.wm = wm;
+      sends.notify.prev = prev;
+      // section 11.5: a declared gathering generation rides THIS notification, so
+      // the receiver marks it eager in the section that wakes its waiters.
+      {
+        std::map<gen_t, Generation *>::iterator git = generations.find(wm + 1);
+        sends.notify.gather_gen = ((git != generations.end()) && git->second->flushing)
+                                      ? (wm + 1)
+                                      : 0;
+      }
+      sends.notify.set_ver = set_ver;
+      // rule 8's one-byte hint rides the notification that was going out
+      //  anyway, so it costs nothing on the wire
+      sends.notify.shrink_hint = shrink_pays;
+      sends.notify.poison.swap(poison);
+      if(!departing.empty()) {
+        // only carried when 'set_ver' moved: with an unchanged version no
+        //  recipient would apply membership, so the bytes would be waste
+        EncodedMulticastTargets enc =
+            EncodedMulticastTargets::encode(departing, Network::max_node_id + 1);
+        const unsigned char *encp = static_cast<const unsigned char *>(enc.data());
+        sends.notify.departing.assign(encp, encp + enc.bytes());
+      }
+    }
   }
 
   // OWNER ONLY.  Drains the contiguous run of complete generations.  Nothing is
@@ -3356,99 +3693,30 @@ namespace Realm {
     } else {
       // ---- NOTIFICATION_PROTOCOL action T, the notification half -----------
       //
-      // Step 1: choose the shrink.  RULE 3 - removals are DISCRETIONARY, so ANY
-      //  subset of the collected intents is a legal choice and the model checks
-      //  exactly that ("the owner may shrink by ANY subset").
-      MulticastTargetSet departing;
-      for(MulticastTargetSet::const_iterator wit = want_out.begin();
-          wit != want_out.end(); ++wit) {
-        // only a node that is actually IN the set is being removed; anything
-        //  else in 'want_out' is a stale intent and changes no version
-        if(sub_set.contains(*wit)) {
-          departing.append_increasing_node(*wit);
+      // PROTOTYPE (fix 2): the publication may be DEFERRED so a burst of generations
+      // shares one delta.  defer_notify_locked owns the conditions - nothing that
+      // must go out promptly, and the next generation already has arrivals in flight.
+      if(want_out.empty() && newly_poisoned.empty() &&
+         defer_notify_locked(trigger_gen)) {
+        if(!notify_deferred) {
+          notify_deferred = true;
+          notify_deferred_prev = old_watermark;
         }
-      }
-
-      // Step 1b: RULE 3's COST TEST, and rule 8's advisory byte.  A shrink is
-      //  applied only if it actually reduces what a notification costs; if it
-      //  does not, 'departing' is emptied and the removal is DECLINED, which
-      //  needs no protocol at all - it is just the next publication with the
-      //  node still in it.
-      //
-      // The verdict is published as the hint so the rest of the machine stops
-      //  asking for something that is not going to be granted, and it is
-      //  STICKY: a trigger with nothing to weigh leaves it alone, because a
-      //  verdict does not go stale until the set it was about changes shape.
-      //  An add is the thing that changes shape, so action S is what puts the
-      //  hint back to optimistic.  Resetting it here instead would make the
-      //  suppression last exactly one notification and buy nothing.
-      if(!departing.empty()) {
-        if(shrink_pays_locked(departing)) {
-          shrink_pays = true;
-          counters.shrinks_applied++;
-          counters.nodes_removed += departing.size();
-        } else {
-          shrink_pays = false;
-          counters.shrinks_declined++;
-          log_barrier.info() << "declining barrier subscriber shrink: " << me
-                             << " set=" << sub_set.size()
-                             << " departing=" << departing.size();
-          departing.clear();
+        notify_deferrals++;
+        counters.notifies_coalesced++;
+        // the backstop is what makes the deferral safe: if no later trigger
+        //  carries this publication out, it publishes it
+        if(!notify_flush_queued) {
+          notify_flush_queued = true;
+          sends.arm_notify_flush = true;
         }
-      }
-
-      // Step 2: SNAPSHOT THE PRE-SHRINK SET.  RULE 1 - "any shrink must be
-      //  published to the PRE-SHRINK set", so a node being removed always hears
-      //  about its own removal.  This is the one thing in this protocol that
-      //  message reordering cannot repair, which is why it is handled by
-      //  snapshotting inside the section rather than by ordering (S5).
-      sends.notify.targets = sub_set;
-
-      // Step 3: apply the shrink and bump the version.  RULE 2 - 'set_ver'
-      //  moves on EVERY change to the set and is stamped on every publication;
-      //  when nothing changes it does not move, every recipient's version gate
-      //  says "stale", and no membership is applied at all.
-      if(!departing.empty()) {
-        for(MulticastTargetSet::const_iterator dit = departing.begin();
-            dit != departing.end(); ++dit) {
-          sub_set.remove(*dit);
-        }
-        set_ver += 1;
-      }
-      want_out.clear();
-
-      // Step 4: compose the delta.  There is nobody to tell if the set is
-      //  empty - and a node that is not in it pulls, which is the correctness
-      //  guarantee; the set is only a cache.
-      if(!sends.notify.targets.empty()) {
-        sends.notify.valid = true;
-        sends.notify.wm = trigger_gen;
-        sends.notify.prev = old_watermark;
-        // section 11.5: if the rebuild declined and declared the next
-        //  generation a gathering generation, the declaration RIDES THIS
-        //  NOTIFICATION - the receiver marks it eager in the same critical
-        //  section that wakes its waiters, which is the only ordering that
-        //  beats the wake->arrive race (P_STEP measured the flush-message
-        //  version losing on nearly every generation).
-        {
-          std::map<gen_t, Generation *>::iterator git = generations.find(trigger_gen + 1);
-          sends.notify.gather_gen = ((git != generations.end()) && git->second->flushing)
-                                        ? (trigger_gen + 1)
-                                        : 0;
-        }
-        sends.notify.set_ver = set_ver;
-        // rule 8's one-byte hint rides the notification that was going out
-        //  anyway, so it costs nothing on the wire
-        sends.notify.shrink_hint = shrink_pays;
-        sends.notify.poison.swap(newly_poisoned);
-        if(!departing.empty()) {
-          // only carried when 'set_ver' moved: with an unchanged version no
-          //  recipient would apply membership, so the bytes would be waste
-          EncodedMulticastTargets enc =
-              EncodedMulticastTargets::encode(departing, Network::max_node_id + 1);
-          const unsigned char *encp = static_cast<const unsigned char *>(enc.data());
-          sends.notify.departing.assign(encp, encp + enc.bytes());
-        }
+      } else {
+        // 'prev' has to reach back to the watermark before the OLDEST deferred
+        //  trigger, or the recipients see a gap and pull
+        const gen_t notify_prev = notify_deferred ? notify_deferred_prev : old_watermark;
+        notify_deferred = false;
+        notify_deferrals = 0;
+        compose_notify_locked(trigger_gen, notify_prev, newly_poisoned, sends);
       }
     }
 
@@ -3605,7 +3873,7 @@ namespace Realm {
       //  integer and erase the timestamps with it.
       Generation::TsKey gate;
       if(scalable_route) {
-        gate.ts = timestamp;
+        gate.ts = handle_gate_locked(timestamp, barrier_gen);
         gate.local_ts = ts_floor_locked(barrier_gen);
       }
       const bool bypass = ((gate.ts != 0) || (gate.local_ts != 0));
@@ -3659,7 +3927,20 @@ namespace Realm {
           //  children, so it stops aggregating for this generation and reports
           //  what it is already holding.  (Over-signalling a flush is always
           //  safe - it only ever causes MORE eager reporting.)
-          enter_flush_locked(*g, barrier_gen, sends);
+          // ... BUT ONLY WHILE THE PLAN IS STILL WRONG ABOUT THIS NODE.  Once
+          //  the owner has rebuilt, a bypassing node has quota 0, so there is
+          //  no quota to miss and announcing again only drags the tree back
+          //  into eager mode for the rest of the barrier's life.  This
+          //  suppresses the ANNOUNCEMENT TO THE CHILDREN, who have reachable
+          //  quotas of their own; this node's own eager reporting is
+          //  unaffected (flush_mode_locked derives it from its arrival floor).
+          if(cur_plan.inplan && (cur_plan.quota > 0)) {
+            enter_flush_locked(*g, barrier_gen, sends);
+          }
+
+          // B01 ALSO APPLIES HERE, and matters most: the bypass route mints a record,
+          // never subscribes, and the 'break' below used to skip the check entirely.
+          maybe_reclaim_pull_locked(sends);
           break;
         }
 
@@ -3689,6 +3970,8 @@ namespace Realm {
         }
         // otherwise: SILENCE.  Below quota, or missing a child, this node says
         //  nothing at all - that is the aggregation that makes this scalable.
+
+        maybe_reclaim_pull_locked(sends);
         break;
       }
 
@@ -3725,15 +4008,39 @@ namespace Realm {
           if(redop_id == 0) {
             ts_bypass_nodes.insert(sender);
           }
-          apply_alter_locked(barrier_gen, delta, timestamp, /*prev_ts=*/0, sends);
+          // the HANDLE's timestamp is used as this alteration's own identity, which only
+          // works while a handle can carry nothing else.  advance_barrier now preserves
+          // the branch, so a derived handle would be discarded as a duplicate.  Nothing
+          // produces delta > 0 here today; make it loud if that changes.
+          assert((timestamp == 0) || (applied_ts.count(timestamp) == 0));
+          apply_alter_locked(barrier_gen, delta, timestamp, /*prev_ts=*/0,
+                             /*anc_ts=*/0, sends);
         } else if(bypass) {
           // RULE 8.1 at the owner: the arrival still bypasses the tree, but
           //  the "message" is applied inline rather than sent to ourselves.
           //  Action A step 4 and action TS, fused into one section (S1).
+          //
+          // NOT recorded in 'ts_bypass_nodes': that set stops a node being
+          //  given an unreachable quota, and THE OWNER CANNOT STRAND ANYBODY -
+          //  it has no parent and should_report_locked() returns false for it
+          //  (:1382-1385).  Adding it would pin its quota at 0 for ever, so a
+          //  later untimestamped arrival of its own would re-enter flush every
+          //  generation.  alter_arrival_count does add the owner, correctly:
+          //  an alteration is a persistent FLOOR, so there every later arrival
+          //  really does bypass.
           int64_t &issued = g->ts_issued[gate];
           issued += -static_cast<int64_t>(delta);
           apply_ts_arrival_locked(Network::my_node_id, *g, gate, issued);
-          enter_flush_locked(*g, barrier_gen, sends);
+          // ... BUT ONLY WHILE THE PLAN IS STILL WRONG ABOUT THIS NODE.  Once
+          //  the owner has rebuilt, a bypassing node has quota 0, so there is
+          //  no quota to miss and announcing again only drags the tree back
+          //  into eager mode for the rest of the barrier's life.  This
+          //  suppresses the ANNOUNCEMENT TO THE CHILDREN, who have reachable
+          //  quotas of their own; this node's own eager reporting is
+          //  unaffected (flush_mode_locked derives it from its arrival floor).
+          if(cur_plan.inplan && (cur_plan.quota > 0)) {
+            enter_flush_locked(*g, barrier_gen, sends);
+          }
         } else if((redop_id != 0) && (timestamp != 0)) {
           // A LEGACY arrival that names an alteration.  Reduction barriers stay
           //  on the eager path, but the ordering question is the same one rule
@@ -4072,6 +4379,10 @@ namespace Realm {
           //  the message-count saving, made visible (section 13)
           counters.reports_gated++;
         }
+        // B01, THE OTHER MINT SITES: get_generation_locked above is
+        //  find-OR-CREATE, so a node that neither arrives nor waits still
+        //  accumulates records.
+        maybe_reclaim_pull_locked(sends);
       }
     } while(0);
 
@@ -4123,6 +4434,10 @@ namespace Realm {
         //  aggregating, which is the silence the announcement came to break.
         Generation *g = get_generation_locked(flush_gen);
         enter_flush_locked(*g, flush_gen, sends);
+        // B01, THE OTHER MINT SITES: get_generation_locked above is
+        //  find-OR-CREATE, so a node that neither arrives nor waits still
+        //  accumulates one record per generation it is told about.
+        maybe_reclaim_pull_locked(sends);
       }
     }
 
@@ -4260,6 +4575,13 @@ namespace Realm {
               pf.to.push_back(owner);
             }
           }
+
+          // A NODE LEFT WITH NO LIVE PLAN IS AN OUTSIDER - BarrierArrive.tla's
+          //  RecvInvalidate has always cleared it here.  Keeping the child list
+          //  made an excluded node eager-flush down a dead edge list for ever
+          //  (11 of 16 ranks at 95 of 96 episodes).  Rule 6 is intact: step 2
+          //  resolved the targets long before this line.
+          cur_plan = ArrivalPlan();
         }
         if(defer_epoch != 0) {
           defer_epoch = 0;
@@ -4373,7 +4695,8 @@ namespace Realm {
   //  including one made on a pre-alteration handle, which is exactly the
   //  reserved arrival.
   //
-  Barrier::timestamp_t BarrierImpl::alter_arrival_count(gen_t barrier_gen, int delta)
+  Barrier::timestamp_t BarrierImpl::alter_arrival_count(gen_t barrier_gen, int delta,
+                                                        Barrier::timestamp_t anc_ts)
   {
     Barrier::timestamp_t ts = 0;
     PendingSends sends;
@@ -4422,7 +4745,7 @@ namespace Realm {
         if(redop_id == 0) {
           ts_bypass_nodes.insert(Network::my_node_id);
         }
-        apply_alter_locked(barrier_gen, delta, ts, prev_ts, sends);
+        apply_alter_locked(barrier_gen, delta, ts, prev_ts, anc_ts, sends);
         trigger_gen = check_triggers_locked(local_notifications, poisoned_notifications,
                                             remote_notifications, oldest_previous, sends);
         if(trigger_gen && redop) {
@@ -4440,6 +4763,7 @@ namespace Realm {
         sends.alter.delta = delta;
         sends.alter.ts = ts;
         sends.alter.prev_ts = prev_ts;
+        sends.alter.anc_ts = anc_ts;
       }
 
       log_barrier.info() << "barrier alteration: " << make_barrier(barrier_gen, ts)
@@ -4470,6 +4794,7 @@ namespace Realm {
   void BarrierImpl::handle_remote_alter(NodeID from, gen_t alter_gen, int delta,
                                         Barrier::timestamp_t ts,
                                         Barrier::timestamp_t prev_ts,
+                                        Barrier::timestamp_t anc_ts,
                                         TimeLimit work_until)
   {
     gen_t trigger_gen = 0;
@@ -4504,7 +4829,7 @@ namespace Realm {
         ts_bypass_nodes.insert(from);
       }
 
-      apply_alter_locked(alter_gen, delta, ts, prev_ts, sends);
+      apply_alter_locked(alter_gen, delta, ts, prev_ts, anc_ts, sends);
 
       // applying it may have raised the count this generation waits for, or
       //  lowered it, or released a pile of arrivals that were parked behind it
@@ -4562,6 +4887,31 @@ namespace Realm {
         log_barrier.fatal() << "barrier ts arrival delivered to a non-owner: " << me
                             << "/" << arrival_gen << " from=" << from;
         abort();
+      }
+      counters.ts_arrivals_received++;
+
+      // RULE 8.1 / MEMBERSHIP, THE SECOND SOURCE: a timestamped handle can be
+      //  passed to a node that altered nothing, and the bypassed arrival is the
+      //  owner's only evidence.  THE LIVE PLAN HAS TO GO TOO: the sender's
+      //  quota sits in its parent's, so the parent child-waits for ever.
+      if(redop_id == 0) {
+        // WHICH KIND OF BYPASS?  Non-zero 'local_ts' means the sender ALTERED:
+        //  a persistent floor, so it stays out of every future plan.  Zero means
+        //  a handle only, released by handle_gate_locked after one generation.
+        if(local_ts != 0) {
+          ts_bypass_nodes.insert(from);
+        }
+
+        // THE RETIREMENT IS STILL NEEDED FOR EITHER KIND: even one generation off the
+        // tree is one where this node's quota cannot be met.  Kept in its own set -
+        // at most once per node per barrier lifetime, so it stays bounded.
+        const bool first_time = ts_seen_bypassing.insert(from).second;
+        if(first_time && cur_plan.inplan) {
+          counters.bypass_retirements++;
+          log_barrier.info() << "retiring barrier plan for a bypassing node: " << me
+                             << " node=" << from << " altered=" << (local_ts != 0);
+          retire_plan_locked(sends);
+        }
       }
 
       if(arrival_gen <= generation.load()) {

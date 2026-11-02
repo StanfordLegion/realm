@@ -72,7 +72,13 @@ VARIABLES
     watermark,   \* owner: highest triggered generation
     subSet,      \* owner: SUBSET Nodes, the current subscriber set
     setVer,      \* owner: version, bumped on EVERY change to subSet
-    wantOut,     \* owner: SUBSET Nodes, departure intents collected so far
+    wantOut,     \* owner: SUBSET Nodes, departure intents the owner HAS
+                 \*  RECEIVED.  Not the same thing as which nodes consider
+                 \*  themselves idle - see 'departing'.
+    departing,   \* [Nodes -> BOOLEAN] this node has SENT a departure intent
+                 \*  and has not consulted since.  Purely local: it stands for
+                 \*  the implementation's idle counter, and the owner cannot
+                 \*  see it.
     known,       \* [Nodes -> Gens0]        node's known watermark
     knownPois,   \* [Nodes -> SUBSET Gens]  node's known poisoned set
     member,      \* [Nodes -> {"NO","PENDING","YES"}]  node's belief about membership
@@ -80,7 +86,7 @@ VARIABLES
     waiting,     \* [Nodes -> SUBSET Gens]  generations this node still needs
     msgs         \* set of in-flight messages (a set, so delivery may reorder)
 
-vars == << watermark, subSet, setVer, wantOut, known, knownPois,
+vars == << watermark, subSet, setVer, wantOut, departing, known, knownPois,
            member, myVer, waiting, msgs >>
 
 Msgs ==
@@ -89,12 +95,18 @@ Msgs ==
   \cup [ kind : {"subscribe"}, from : Nodes, lk : Gens0 ]
   \cup [ kind : {"reply"},     to : Nodes, wm : Gens0, pois : SUBSET Gens,
                               sv : Nat ]
+  \* THE DEPARTURE INTENT IS A MESSAGE, not a shared variable.  Issuing it and
+  \*  the owner receiving it are separate steps, and in between the node may
+  \*  consult again while the intent is still on the wire.  That ordering is
+  \*  the whole point: it is the one the owner cannot be told about in time.
+  \cup [ kind : {"depart"},    from : Nodes ]
 
 Init ==
     /\ watermark = 0
     /\ subSet    = {}
     /\ setVer    = 0
     /\ wantOut   = {}
+    /\ departing = [n \in Nodes |-> FALSE]
     /\ known     = [n \in Nodes |-> 0]
     /\ knownPois = [n \in Nodes |-> {}]
     /\ member    = [n \in Nodes |-> "NO"]
@@ -121,7 +133,7 @@ Trigger ==
                  { [ kind |-> "notify", to |-> c, wm |-> g, prev |-> watermark,
                      pois |-> (IF g \in PoisonGens THEN {g} ELSE {}),
                      inset |-> (c \notin R), sv |-> sv2 ] : c \in subSet }
-    /\ UNCHANGED << known, knownPois, member, myVer, waiting >>
+    /\ UNCHANGED << known, knownPois, member, myVer, waiting, departing >>
 
 (***************************************************************************)
 (* ACTION 2 - local code consults the barrier: a blocking wait, an explicit *)
@@ -133,13 +145,23 @@ Consult(n, g) ==
     /\ g \notin waiting[n]
     /\ known[n] < g
     /\ waiting' = [waiting EXCEPT ![n] = @ \cup {g}]
-    /\ wantOut' = wantOut \ {n}          \* consulting resets the idle counter
+    \* CONSULTING RESETS THE LOCAL IDLE COUNTER - AND NOTHING ELSE.  It used to
+    \*  also remove this node from the owner's 'wantOut', which gave a purely
+    \*  local action an instantaneous effect on the owner.  A node cannot
+    \*  retract an intent the owner has already received; if it believes itself
+    \*  a member it does not even send anything (barrier_impl.cc:2894-2895), so
+    \*  there is no message for the owner to reconsider on.  The owner may
+    \*  therefore shrink the set under a node that has just started waiting
+    \*  again, and the recovery for that is the removal notice and the
+    \*  re-subscribe it provokes (RecvNotify's 'resub').  Cancelling here
+    \*  excluded exactly that ordering from the model.
+    /\ departing' = [departing EXCEPT ![n] = FALSE]
     /\ IF member[n] = "NO"
          THEN /\ msgs'   = msgs \cup
                             {[ kind |-> "subscribe", from |-> n, lk |-> known[n] ]}
               /\ member' = [member EXCEPT ![n] = "PENDING"]
          ELSE UNCHANGED << msgs, member >>
-    /\ UNCHANGED << watermark, subSet, setVer, known, knownPois, myVer >>
+    /\ UNCHANGED << watermark, subSet, setVer, wantOut, known, knownPois, myVer >>
 
 (***************************************************************************)
 (* ACTION 3 - a notification arrives.  It is a DELTA, so it can only be    *)
@@ -180,7 +202,7 @@ RecvNotify(m) ==
                       (IF pull THEN {[ kind |-> "subscribe", from |-> m.to,
                                        lk |-> nk ]}
                                ELSE {})
-    /\ UNCHANGED << watermark, subSet, setVer, wantOut >>
+    /\ UNCHANGED << watermark, subSet, setVer, wantOut, departing >>
 
 (***************************************************************************)
 (* ACTION 4 - the owner receives a pull.  The add is MANDATORY, and the     *)
@@ -197,7 +219,11 @@ RecvSubscribe(m) ==
                       {[ kind |-> "reply", to |-> m.from, wm |-> watermark,
                          pois |-> { g \in PoisonGens : (g > m.lk) /\ (g <= watermark) },
                          sv |-> sv2 ]}
-    /\ UNCHANGED << watermark, known, knownPois, member, myVer, waiting >>
+    \* THE CANCELLATION LIVES HERE.  A subscribe is a message the owner has
+    \*  actually received, and it is evidence that the sender is not idle; an
+    \*  intent still on the wire, or one the owner has already acted on, is not
+    \*  retracted by anything the node did locally.
+    /\ UNCHANGED << watermark, known, knownPois, member, myVer, waiting, departing >>
 
 RecvReply(m) ==
     /\ m \in msgs /\ m.kind = "reply"
@@ -214,7 +240,7 @@ RecvReply(m) ==
            /\ member'    = [member    EXCEPT ![m.to] =
                               IF newv THEN "YES" ELSE member[m.to]]
            /\ msgs'      = msgs \ {m}
-    /\ UNCHANGED << watermark, subSet, setVer, wantOut >>
+    /\ UNCHANGED << watermark, subSet, setVer, wantOut, departing >>
 
 (***************************************************************************)
 (* ACTION 5 - a node signals that it wants out.  Nondeterministic: this     *)
@@ -226,10 +252,22 @@ Depart(n) ==
     /\ n \in subSet
     /\ member[n] = "YES"
     /\ waiting[n] = {}
-    /\ n \notin wantOut
-    /\ wantOut' = wantOut \cup {n}
-    /\ UNCHANGED << watermark, subSet, setVer, known, knownPois,
-                    member, myVer, waiting, msgs >>
+    /\ ~departing[n]
+    /\ departing' = [departing EXCEPT ![n] = TRUE]
+    /\ msgs' = msgs \cup {[ kind |-> "depart", from |-> n ]}
+    /\ UNCHANGED << watermark, subSet, setVer, wantOut, known, knownPois,
+                    member, myVer, waiting >>
+
+\* ACTION 5b - the intent reaches the owner.  Between Depart and here the node
+\*  may have consulted again, re-registered a waiter and told the owner
+\*  nothing, so this may add a node that is at this moment waiting.  That is
+\*  the real race, and the removal notice is what recovers it.
+RecvDepart(m) ==
+    /\ m \in msgs /\ m.kind = "depart"
+    /\ wantOut' = wantOut \cup {m.from}
+    /\ msgs' = msgs \ {m}
+    /\ UNCHANGED << watermark, subSet, setVer, departing, known, knownPois,
+                    member, myVer, waiting >>
 
 (***************************************************************************)
 (* A settled run stutters, so "finished" is never mistaken for "stuck".     *)
@@ -248,8 +286,39 @@ Next ==
     \/ \E m \in msgs : RecvSubscribe(m)
     \/ \E m \in msgs : RecvReply(m)
     \/ \E n \in Nodes : Depart(n)
+    \/ \E m \in msgs : RecvDepart(m)
 
 Spec == Init /\ [][Next]_vars
+
+\* THE FAIRNESS THIS PROTOCOL ASSUMES.  'Done' is excluded: it changes nothing,
+\*  so it can never discharge a WF obligation anyway, but naming the families
+\*  individually is what makes "every handler eventually runs" explicit.
+\*  Departure is deliberately NOT fair - a node is never obliged to go idle.
+\*  SYMMETRY IS UNSOUND WITH THIS; liveness configs must not declare it.
+Fairness ==
+    /\ WF_vars(Trigger)
+    /\ \A n \in Nodes, g \in Gens : WF_vars(Consult(n, g))
+    /\ WF_vars(\E m \in msgs : RecvNotify(m))
+    /\ WF_vars(\E m \in msgs : RecvSubscribe(m))
+    /\ WF_vars(\E m \in msgs : RecvReply(m))
+    /\ WF_vars(\E m \in msgs : RecvDepart(m))
+
+FairSpec == Spec /\ Fairness
+
+(***************************************************************************)
+(* LIVENESS.  'NoStranded' says a waiter has SOMETHING that could satisfy   *)
+(* it; these say it actually is satisfied.  Neither follows from safety     *)
+(* plus deadlock detection - an execution that keeps taking steps without   *)
+(* ever waking a waiter has a successor at every step.                      *)
+(***************************************************************************)
+
+\* Every waiter is eventually woken.  The headline property.
+EventuallyWoken == \A n \in Nodes : <>[](waiting[n] = {})
+
+\* And the protocol settles: the watermark reaches the last generation and
+\*  nothing is left on the wire.  A protocol that wakes every waiter can
+\*  still churn subscribe/remove/re-subscribe for ever.
+EventuallySettled == <>[]((watermark = MaxGen) /\ (msgs = {}))
 
 (***************************************************************************)
 (* SAFETY                                                                   *)

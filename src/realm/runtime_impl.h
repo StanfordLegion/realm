@@ -387,6 +387,9 @@ namespace Realm {
         GenEventImpl::GenEventImplAllocator(&event_triggerer, &event_communicator)};
     LocalEventTableAllocator::FreeList *local_event_free_list{nullptr};
     BarrierTableAllocator::FreeList *local_barrier_free_list{nullptr};
+    // PROTOTYPE (small-scale throughput fix 2): liveness backstop for the
+    //  owner's coalesced watermark publication
+    BarrierNotifyFlusher barrier_notify_flusher;
     ReservationTableAllocator::FreeList *local_reservation_free_list{nullptr};
     CompQueueTableAllocator::FreeList *local_compqueue_free_list{nullptr};
 

@@ -87,7 +87,8 @@ variables rather than as a node.
 | `watermark` | highest triggered generation |
 | `subSet` | the subscriber set, in the multicast codec's encodings |
 | `setVer` | version, bumped on **every** change to `subSet` |
-| `wantOut` | departure requests received but not yet applied |
+| `wantOut` | departure requests the owner **has received** and not yet applied |
+| `departing` | per node, LOCAL: it has sent a departure intent and has not consulted since. The owner cannot see it |
 
 Poison is not owner state in the model — it is derived from the `PoisonGens`
 constant. In the implementation the owner retains the poisoned-generation set
@@ -430,11 +431,33 @@ is ever touched, and the delivered message count is exactly `|set|`.
 
 ### 8.2 K, J, and the shrink policy are nondeterminism
 
-`Depart` (`:210`) may fire on any eligible node, and `Trigger` may apply any
-subset of pending requests. That is strictly more general than any tuning, so no
-choice of constants can be wrong — but it also means **§5 rule 8 is entirely
-unverified**. It is a performance mechanism whose failure modes are bandwidth,
-not correctness.
+`Depart` may fire on any eligible node, and `Trigger` may apply any subset of
+the requests the owner has received. That is strictly more general than any
+tuning, so no choice of constants can be wrong — but it also means **§5 rule 8
+is entirely unverified**. It is a performance mechanism whose failure modes are
+bandwidth, not correctness.
+
+### 8.2a Issuing a departure and the owner receiving it are SEPARATE steps
+
+`Depart` used to write `wantOut` directly, and `Consult` used to remove the
+consulting node from it. Between them that gave a purely local action — a node
+registering a waiter — an instantaneous effect on the owner, and it excluded
+exactly the ordering that matters:
+
+1. a subscribed node goes idle and its intent reaches the owner;
+2. it registers a future waiter **while still believing itself subscribed** —
+   `barrier_impl.cc:2894-2895` sends nothing at all in that case, so there is no
+   message for the owner to reconsider on;
+3. the owner applies the pending shrink;
+4. the removal notice reaches the node, which must re-subscribe because it still
+   needs the generation.
+
+The model now sends a `depart` message, `RecvDepart` is what puts the node into
+`wantOut`, and `Consult` clears only the node's own `departing` flag. The
+cancellation lives where the owner has evidence for it: `RecvSubscribe`, a
+message the owner actually received. `NoStranded` and the `resub` path in
+`RecvNotify` are what cover step 4, and `SmallLive.cfg` checks that the waiter
+is not merely coverable but actually woken.
 
 ### 8.3 The owner is variables, not a node
 

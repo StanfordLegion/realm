@@ -36,10 +36,18 @@ Where prose and spec disagree, **the spec wins** — it is what was model-checke
 ## The specifications
 
 - **`BarrierArrive.tla`** — the arrival protocol: learned plans, eager flush,
-  plan switching with deferral, `alter_arrival_count`, and the pinned-edge
-  rules (rule 10). Checked with six safety invariants plus deadlock detection.
+  plan switching with deferral, `alter_arrival_count` (both signs, both
+  predecessors, cross-node handles), and the pinned-edge rules (rule 10).
+  Checked with eight safety invariants plus deadlock detection.
 - **`BarrierNotify.tla`** — the notification protocol: subscriber set,
-  version-gated membership, delta notifications with gap-pull, departure.
+  version-gated membership, delta notifications with gap-pull, departure as a
+  message the owner has to receive.
+
+Each spec defines two specifications: `Spec` (safety, used by every `MC*.cfg`)
+and `FairSpec = Spec /\ Fairness` (used by the `*Live.cfg` configs). The
+fairness conditions are written per action family, because weak fairness on a
+disjunction is discharged by any one disjunct firing for ever — "the reports
+keep flowing and the alteration never lands" would satisfy `WF_vars(Next)`.
 
 ## Running
 
@@ -58,7 +66,18 @@ large runs spill tens of GB.
 
 **If you change a protocol rule, run the battery:**
 
-    python3 battery.py all        # ~15-30 min; suites: arrival, alter, notify
+    python3 battery.py all        # suites: arrival, gate, alter, notify
+
+The battery runs a **healthy control** — the unmutated spec against that
+scenario — before it believes anything a mutation of it reports, and prints the
+controls at the end. Without that, an already-broken canonical scenario makes
+every mutation of it "caught" and the battery reports a clean sweep while
+checking nothing. A catch by `TypeOK` is rejected outright (it shows the
+mutated spec stopped type-checking, not that the removed rule was protecting
+anything), and a row may name the invariants that are allowed to catch it. A
+run that produced neither verdict line is an `ERROR` carrying the exit status
+and the last line of stderr — it used to fall through to a string that the
+`startswith("caught")` test read as a pass.
 
 Every rule in both documents is paired with a mutation and a scenario chosen
 to catch exactly it. The battery fails loudly on a pattern that no longer
@@ -83,6 +102,9 @@ kills mutations — see the battery table in each document.
 | `MCDeviate` | 5 nodes | the outsider (case 3) |
 | `MCChain` | 5 nodes | a relay below a relay |
 | `MCAlter` | 4 nodes | `alter_arrival_count`, altering node is a relay |
+| `MCHandoff` | 3 nodes | the CROSS-NODE HANDOFF: B alters a handle A gave it and makes every arrival, A makes none. The only scenario in which the ancestry hold is load-bearing — nothing local gates the generation, because the ancestor's node never arrives |
+| `MCAncestor` | 4 nodes | a descendant chain across two nodes that both arrive: a positive scenario, NOT a bisection (the ancestor's own arrival floor already gates it, so the hold's removal is benign here) |
+| `MCNegative` | 4 nodes | negative and mixed-sign alterations: a TERMINAL NEGATIVE (a generation completed by a cancellation, with no arrival on the returned handle) plus two dependent alterations of opposite sign from one node across a plan switch |
 | `MCGateOver` | 4 nodes | quota gate: over/under pair straddling a gated relay (the value-exceeds valve) |
 | `MCGateAhead` | 4 nodes | quota gate: run-ahead mixed pins routing counts around the new relay (the non-kid valve) |
 | `MCGateMove` | 4 nodes | quota gate: a value accepted legally under plan k−1 made deviant by plan k (the switch audit) |
@@ -93,6 +115,30 @@ kills mutations — see the battery table in each document.
 | `MCDeepSwitch` | 5 nodes | three plans over a relay chain — found the `NoOverCount` violation that forced rule 10; **no longer completes** (bounded partial runs only, no violation) |
 | `MCNotify` | 3 nodes | notification baseline (83M states) |
 | `MCNotifySmall` | 2 nodes | small enough to *clear* a guard-removal mutation (negative controls) |
+
+## Liveness
+
+Safety plus deadlock detection does **not** establish progress: deadlock
+detection finds a state with no successor, and an execution that keeps taking
+steps for ever without ever triggering has a successor at every step. The
+`*Live.cfg` configs check that separately, under `FairSpec`:
+
+| Config | Model | Properties |
+|---|---|---|
+| `HandoffLive.cfg` | `MCHandoff` | `EventuallyTriggered`, `EventuallyDrained`, `EventuallyCollected` |
+| `AlterLive.cfg` | `MCAlter` | the same three |
+| `SmallLive.cfg` | `MCNotifySmall` | `EventuallyWoken`, `EventuallySettled` |
+
+**No `SYMMETRY` in a liveness config** — symmetry reduction is unsound for
+temporal properties and TLC will say so.
+
+These are not vacuous, and that matters: the previous design's
+`EventuallyTriggers` was later shown never to have fired at all. On first run
+`EventuallyDrained` produced a real counter-example — a stale `tsdirect`
+message whose gate test in `DropStale` checked only one of the gate's two
+components, so an ungated stale message stayed on the wire for ever. No safety
+invariant could see it; the whole gate now lives in one operator,
+`TsGateOpen`, used by both the receive and the stale drop.
 
 Historical, kept as records (do not extend): `MCSeven`, `MCLarge`
 — early scenarios that outgrew practical checking as the spec gained rules; `BarrierArrival.tla` + `MCPlanned.tla` +

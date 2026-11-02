@@ -50,9 +50,9 @@ the arrival pattern changes from one generation to the next, and
 
 The exclusions are recorded in the spec header at `BarrierArrive.tla:35-37`.
 
-Negative alterations and the terminal-negative case (`event.h:293-297`) are
-modelled only in so far as the delta is a constant in `AlterOps`; the scenario
-uses a positive delta. See §8.6.
+Negative alterations, mixed-sign chains and the terminal-negative case
+(`event.h:293-297`) are now modelled and checked — see §8.6, which records what
+that closed and what it did not.
 
 ---
 
@@ -335,6 +335,26 @@ single integer, which erases the timestamps.** Three rules follow.
    open generation. This one is easy to miss: a node that bypasses the tree can
    never satisfy its own plan quota via `localTotal`, so as a *relay* it would go
    silent and strand its children. Removing it is a caught mutation (deadlock).
+4. **A bypassing node must leave the plan, AND THE PLAN IT IS ALREADY IN MUST
+   GO.** Rule 3 covers the node itself; this covers its PARENT. A bypassed
+   arrival never reaches a `localTotal`, so the parent's subtree quota — which
+   still counts this node — becomes unreachable, the parent goes silent on
+   rule 1's child-wait, and the owner never sees that whole subtree.
+
+   Altering is not the only way onto the bypass path. A handle is a value and
+   the application may pass it to another node; `advance_barrier` preserves the
+   causal branch (`event.h:258-263`), so every arrival that node makes on it, or
+   on anything derived from it, bypasses too — and it has altered nothing, so it
+   has no arrival floor and rule 3 does not fire for it. **The owner is the only
+   node that can see this, and the bypassed arrival is the evidence.** It
+   records the sender as a non-member (so no future plan gives it a quota) and
+   RETIRES THE CURRENT PLAN (so the parent waiting on it right now is released).
+   Keeping only the first half leaves the hazard fully reachable: measured as a
+   hang on three of five recipients in the `handoff` phase of
+   `tests/barrier_scale_test.cc`.
+
+   At most one retirement per node per barrier lifetime — the non-member set is
+   monotone until `init()` — so the cost is bounded.
 
 The safety argument for why the owner cannot trigger on a stale count lives in
 the **API contract, not the protocol**: `event.h:290-292` requires the caller to
@@ -369,7 +389,45 @@ Two guards:
   "not yet known" sentinel for `base_arrival_count` (§3).
 - The terminal-negative case of `event.h:293-297` needs no arrival on the
   returned handle, so it is the one branch whose safety argument does *not* rest
-  on a reserved arrival. It has no coverage — see §8.6.
+  on a reserved arrival. That argument, in full: a negative delta moves
+  `expected` only DOWN, so a generation that becomes complete under it has
+  already accounted for every arrival the lowered count asks for — it cannot
+  trigger early. The mirror-image case, a generation completing before a
+  POSITIVE alteration raises the count, is the real hazard, and that is what the
+  reserved arrival and the rule 8.2 gate exist for. Checked by `MCNegative`.
+
+### Rule 9.1 — An alteration follows BOTH of its predecessors
+
+`prev_ts` orders one node's alterations against each other. It cannot order an
+alteration against one issued **somewhere else**, and it has to: a handle is a
+value, the application may pass it between nodes, and
+`alter_arrival_count` invoked on a handle produces an alteration that *descends*
+from the one that handle carries.
+
+So an alteration names two predecessors — `prev_ts`, the previous alteration the
+same node issued, and `anc_ts`, the alteration its handle came from — and the
+owner applies it only once **both** are in `applied_ts`.
+
+Why both are needed and neither suffices:
+
+- `prev_ts` alone: node B alters a handle node A gave it. Nothing in B's chain
+  mentions A. The owner applies B's first, `expected` moves to a value the
+  application was never in, and every arrival gated on B's timestamp is released
+  against it. `MCHandoff` is that scenario; it is the one in which deleting the
+  `anc_ts` conjunct violates `TriggerCorrect`.
+- `anc_ts` alone: a node issuing two independent alterations on the same handle
+  (siblings) has no ancestry relation between them, only issue order.
+
+The hold is what makes a single timestamp on an arrival a sound gate for an
+entire causal path: after it, "B's timestamp is applied" implies "A's is
+applied", so gating on B's transitively gates on A's. That is exactly what
+`event.h` promises when it says an arrival on a descendant witnesses the
+ancestors on its own causal path.
+
+A consequence worth stating plainly: because the ordering test can send an
+alteration back onto the held list, it lives INSIDE the worklist loop, not in
+front of it. An alteration released by one predecessor may still be waiting on
+the other.
 
 ### Rule 10 — Plan changes race with everything: the pinned-edge rules
 
@@ -710,13 +768,36 @@ Generalised: an over-constrained model does not fail loudly, it makes a real rul
 look unnecessary. If a mutation you expect to be caught is not, suspect the
 scenario before concluding the rule is redundant.
 
-### 8.6 Negative alterations are not exercised
+### 8.6 Negative alterations — what is now covered, and what is not
 
-`AlterOps` carries an arbitrary integer delta, but the scenario uses `+1`. The
-terminal-negative case of `event.h:293-297` — a negative alteration driving the
-remaining count to exactly zero, which needs no arrival on the returned handle —
-has **no coverage**. It is the one branch of the contract with a different safety
-argument, so it deserves its own scenario before that path is implemented.
+Was: "`AlterOps` carries an arbitrary integer delta, but the scenario uses `+1`
+… the terminal-negative case has **no coverage**."
+
+Now covered:
+
+- the message type admits negative deltas (`BarrierArrive.tla`, the `"alter"`
+  disjunct of `Msgs`);
+- `MCNegative` runs a terminal negative — node 2's `-1` cancels the only arrival
+  it owed for that generation, so the generation completes with no arrival on
+  the returned handle at all — together with two dependent alterations of
+  opposite sign from one node across a plan switch;
+- `ExpectedSane` changed from the bound `expected[g] <= Total(g)` to the
+  equality `expected[g] = BaseCount[g] + (deltas applied so far)`. The bound was
+  not merely weak, it was WRONG for a negative delta in flight: `Total(g)` drops
+  when the application issues the alteration, the owner's count only when the
+  message lands, so a legal run reported a mis-specified scenario. The equality
+  is also strictly stronger where the bound did hold — it catches an alteration
+  applied twice, or applied to the wrong generation.
+- `NoEarlyTrigger` (`triggered[g] => \A n : unissued[n][g] = 0`) states the
+  guarantee `event.h` actually makes, per node. `TriggerCorrect` is an aggregate
+  equality, and counting one node's arrival twice while another still owes one
+  produces the right sum.
+
+Still NOT covered: a negative alteration that crosses a node boundary on its
+handle (`MCNegative`'s chain is same-node, `MCHandoff`'s is positive); three or
+more alterations on one causal path; a negative delta large enough to interact
+with the "count reaches zero is an error" guard, which is a scenario-level guard
+in `Alter` rather than a protocol rule.
 
 ### 8.7 The plan is a given, not a computed thing — see §11
 
@@ -732,12 +813,82 @@ whatever plan the owner produces, the switch to it is safe. Construction itself
 needs no model — it is a local computation at the owner — but it does need the
 wire formats and the memory bound in §11.
 
-### 8.8 Retained state and cleanup
+### 8.8 Retained state and cleanup — and why the model cannot see B01
 
 `BoundedRetention` only checks the parked-plan slot. The broader constraint,
 agreed with the user: a node may forget retained per-generation state once every
 possible impacted generation has triggered, and `destroy_barrier` is an
 acceptable place to require full cleanup. Unbounded lifetime is not acceptable.
+
+This section is also the honest answer to B01 (arrival-only ranks retaining one
+`Generation` per completed generation for ever). **The arrival model cannot
+state that property, let alone check it**, and a green `BoundedRetention` is no
+evidence against it. Two reasons, both structural:
+
+- the arrival model has no per-generation records to retain. It has `localTotal`
+  and `childAcc`, which are total functions over `Gens` and exist from `Init`;
+  there is nothing to allocate and nothing to reclaim.
+- reclamation in the implementation is driven by the *notification* protocol —
+  a node reclaims when its trigger watermark advances, and its watermark advances
+  only if it is a subscriber. The arrival model decides what work is still open
+  from the GLOBAL `triggered[g]`, not from any per-node knowledge, so the very
+  distinction B01 turns on (a node that never learns a generation triggered) is
+  abstracted away.
+
+Closing it in the model means composing the two specs with a per-node known
+watermark, at least one arrival-only participant and observable retained
+records. That is a real piece of modelling work and it is NOT done here; what is
+done instead is a runtime reproducer (`retention` in the PR review's
+`barrier_review.cc`), which reads `generations.size()` directly and shows
+10,000 -> 0.
+
+### 8.9 Plan construction, and what "any plan is safe" is allowed to mean
+
+`Plans` and `PlanStart` are constants: the model checks that switching among
+SUPPLIED plans is safe (§8.7). It does not establish that the owner's
+construction produces a valid plan, that every shape the owner can build is
+among the supplied ones, that a no-plan startup matches an initialised-plan run,
+or that learning converges at all. B03 — a retired plan whose replacement hashed
+the same was never re-distributed, so the owner stayed eagerly flushing for the
+rest of the barrier's life — is an example of a defect that lives entirely
+outside that boundary, and it was found by a runtime counter, not by TLC.
+
+So the claim "any plan is safe" must stay qualified: safe *given* the plan
+well-formedness the model assumes — unique parents, acyclicity of the union of
+possible pinned edges (the implementation gets it from building trees in
+ascending node id with the owner at the root), and quotas no node can overshoot.
+Those assumptions are load-bearing and they are assumptions, not results.
+
+**One of them was attempted and withdrawn.** "Every child id exceeds its
+parent's" was added as an `ASSUME`, and three gate scenarios stopped running:
+`MCGateDemote`'s second plan makes node 3 the parent of node 1 — the demoted
+owner-child it is named for — and `MCGateMove` and `MCGatePark` do the same.
+Ascending ids are *sufficient* for rule 10 but not *necessary*; the union of
+`MCGateDemote`'s edges is acyclic despite the descending one. Checking the real
+property needs a transitive closure over the plan constants and is **not done**.
+
+That attempt also surfaced something worth recording on its own: those
+scenarios supply plans the implementation cannot build. Safe as an
+over-approximation, but a mutation they catch is not necessarily reachable in
+the code.
+
+The convergence half is checked at runtime instead, by counters that are an
+acceptance test rather than diagnostics: over a 1024-generation pipelined
+barrier the owner must show `flush_episodes` ~1, `gathering_declared` ~0 and
+`plan_rebuilds_declined` 0, and the `P_REALTER` phase of
+`tests/barrier_scale_test.cc` requires one rebuild per retirement.
+
+### 8.10 Messages are a SET, so identical records merge
+
+Both specs hold in-flight messages in a set, which explores reordering but
+merges two messages with identical fields. For the data messages this is
+harmless because they carry a cumulative count that differs. For repeated
+CONTROL messages with the same fields it is an assumption: that a repeated
+identical control message is idempotent across intervening epoch, membership
+and generation changes. Reliability of the transport does not establish that —
+two distinct sends can have identical bytes even where nothing duplicates them.
+It is believed for each control kind here (flush and invalidate are idempotent
+by rule, `newplan` is epoch-keyed), but it is believed, not checked.
 
 ---
 

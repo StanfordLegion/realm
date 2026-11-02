@@ -23,6 +23,7 @@
 #include "realm/event.h"
 #include "realm/event_impl.h"
 #include "realm/id.h"
+#include "realm/bgwork.h"
 #include "realm/multicast.h"
 #include "realm/nodeset.h"
 #include "realm/redop.h"
@@ -339,19 +340,28 @@ namespace Realm {
   //  what lets a single timestamp on an arrival stand for the whole chain
   //  behind it, and it is the answer to the "TODO: really need two timestamps
   //  to properly order increments" the old ordering code carried.
+  //
+  // 'anc_ts' is the cross-node predecessor: the causal timestamp of the HANDLE
+  //  this alteration was invoked on.  Handles may be passed between nodes, so
+  //  an alteration can descend from one it has no 'prev_ts' link to, and
+  //  applying the descendant first would give expected(g) a value the
+  //  application was never in.  Both predecessors are waited for; either may
+  //  be 0, meaning "no dependency on this axis".
   struct BarrierAlterMessage {
     ID::IDType barrier_id;
     EventImpl::gen_t gen;
     int delta;
     Barrier::timestamp_t ts;
     Barrier::timestamp_t prev_ts;
+    Barrier::timestamp_t anc_ts;
 
     static void handle_message(NodeID sender, const BarrierAlterMessage &msg,
                                const void *data, size_t datalen, TimeLimit work_until);
 
     static void send_request(NodeID target, ID::IDType barrier_id, EventImpl::gen_t gen,
                              int delta, Barrier::timestamp_t ts,
-                             Barrier::timestamp_t prev_ts);
+                             Barrier::timestamp_t prev_ts,
+                             Barrier::timestamp_t anc_ts);
   };
 
   // ARRIVAL_PROTOCOL rule 8.1 - AN ARRIVAL CARRYING A TIMESTAMP BYPASSES THE
@@ -410,6 +420,38 @@ namespace Realm {
     static void send_request(NodeID target, ID::IDType barrier_id, EventImpl::gen_t gen,
                              int64_t val, Barrier::timestamp_t ts,
                              Barrier::timestamp_t local_ts, bool poisoned);
+  };
+
+  class BarrierImpl;
+
+  // PROTOTYPE (fix 2) - LIVENESS BACKSTOP for the coalesced watermark
+  // publication: it guarantees a deferred notification still goes out when no
+  // later trigger carries it.  A queued pointer naming a recycled BarrierImpl is
+  // benign - publishing an already-triggered watermark is safe, deferring is not.
+  class BarrierNotifyFlusher : public BackgroundWorkItem {
+  public:
+    BarrierNotifyFlusher(void);
+
+    // at most one outstanding entry per impl, enforced by the caller through
+    //  BarrierImpl::notify_flush_queued
+    void enqueue(BarrierImpl *impl);
+
+    virtual bool do_work(TimeLimit work_until);
+
+    // PUBLISH ANYTHING STILL OWED, while the NETWORK IS STILL ATTACHED: a deferred
+    // publication has not been sent, so the shutdown quiescence protocol cannot
+    // see it.  Call it inside that loop, not after the detach.
+    void drain(void);
+
+    // move the item to STATE_SHUTDOWN.  Must run before destruction:
+    //  ~BackgroundWorkItem aborts otherwise.  Expects drain() to have already
+    //  emptied the queue and complains loudly if it has not.
+    void shutdown(void);
+
+  protected:
+    Mutex flusher_mutex;
+    std::vector<BarrierImpl *> queue;
+    bool shutting_down = false;
   };
 
   class BarrierImpl : public EventImpl {
@@ -471,7 +513,11 @@ namespace Realm {
     //  enters, and it is returned so the caller can put it on the new handle.
     //  (It used to be minted by Barrier::alter_arrival_count and consumed much
     //  later, in a different section - two halves of one spec action.)
-    Barrier::timestamp_t alter_arrival_count(gen_t barrier_gen, int delta);
+    //  'anc_ts' is the causal timestamp the invoking HANDLE carried, i.e. the
+    //  alteration this one descends from.  It may have been issued on another
+    //  node, so it is a predecessor that 'last_alter_ts' cannot express.
+    Barrier::timestamp_t alter_arrival_count(gen_t barrier_gen, int delta,
+                                             Barrier::timestamp_t anc_ts);
 
     // NOTIFICATION_PROTOCOL action S (rules 3 and 5), owner only for the
     //  scalable path.  'last_known' is the subscriber's own watermark - what
@@ -523,7 +569,7 @@ namespace Realm {
     //  for it, and let go of any alteration that was waiting for THIS one.
     void handle_remote_alter(NodeID from, gen_t alter_gen, int delta,
                              Barrier::timestamp_t ts, Barrier::timestamp_t prev_ts,
-                             TimeLimit work_until);
+                             Barrier::timestamp_t anc_ts, TimeLimit work_until);
 
     // OWNER ONLY - ARRIVAL_PROTOCOL rule 8.1 (action TS).  A cumulative count
     //  of arrivals that BYPASSED the tree because they carry a timestamp.
@@ -842,6 +888,31 @@ namespace Realm {
     // rule 2 - bumped on EVERY change to 'sub_set' and stamped onto every
     //  notification and every reply
     uint64_t set_ver = 0;
+    // ---- PROTOTYPE (fix 2) --------------------------------------------------
+    // COALESCED WATERMARK PUBLICATION.  BarrierNotifyMessage is already a
+    //  DELTA '(prev, wm]', but the owner published on every trigger, so in a
+    //  pipelined workload the coalescing never happened.
+    //
+    // A trigger DEFERS its publication when the next generation already has
+    //  arrivals in flight - never in a serial barrier, so the round trip is
+    //  untouched.  Bounded four ways: never with membership/poison to
+    //  publish, never over a gathering declaration (defer_notify_locked), at
+    //  most NOTIFY_MAX_DEFERRALS in a row, backstop always armed.
+    bool notify_deferred = false;      // a publication is owed
+    gen_t notify_deferred_prev = 0;    // 'prev' of the OLDEST deferred trigger
+    unsigned notify_deferrals = 0;     // consecutive, capped below
+    bool notify_flush_queued = false;  // one backstop entry outstanding
+    static const unsigned NOTIFY_MAX_DEFERRALS = 64;
+
+    // ---- B01 (PR467 review) -------------------------------------------------
+    // Records are reclaimed only in publish_watermark_locked, which needs a
+    //  trigger notification - and those reach only SUBSCRIBERS.  An
+    //  arrival-only rank thus retained one record per generation for ever
+    //  (measured: 10,000 -> 10,000).  Past this many it pulls a watermark
+    //  through the ordinary subscribe path; a threshold, not a per-arrival
+    //  subscribe, so the cost is one pull per THRESHOLD generations.
+    static const size_t RECLAIM_PULL_THRESHOLD = 64;
+
     // rule 8 - departure intents collected but not yet applied.  Normally
     //  empty.  Applied (or declined - removals are DISCRETIONARY, rule 3) at
     //  the next trigger, which is also where the shrink is published to the
@@ -980,14 +1051,31 @@ namespace Realm {
     //  alteration.
     std::set<NodeID> ts_bypass_nodes;
 
-    // alterations whose PREDECESSOR (BarrierAlterMessage::prev_ts) has not been
-    //  applied yet, keyed by the timestamp they are waiting for.  A multimap
-    //  because nothing stops two alterations naming the same predecessor.
-    //  Bounded by the alterations actually in flight.
+    // OWNER ONLY - nodes already seen bypassing the tree, so the plan is
+    //  retired at most once each.  "Have I already reacted", versus
+    //  'ts_bypass_nodes' = "must this node stay out of every future plan".
+    std::set<NodeID> ts_seen_bypassing;
+
+    // RULE 8.1 - how long a handle's timestamp keeps an arrival off the tree:
+    //  only through the first generation this node used it at, since later
+    //  generations are held behind that one anyway (ARRIVAL_PROTOCOL.md rule
+    //  8.5, checked by MCReadmit).  ABSENCE MEANS "GATE IT", so a released
+    //  timestamp is marked in place, never erased - erasing re-arms the gate
+    //  and the node never rejoins the tree.
+    static const gen_t RELEASED = 0; // no real generation is 0, so no alias
+    std::map<Barrier::timestamp_t, gen_t> handle_first_gen;
+
+    // alterations with an unapplied PREDECESSOR, keyed by the timestamp they
+    //  wait for.  Up to TWO predecessors - 'prev_ts' (same node's previous)
+    //  and 'anc_ts' (the handle's origin) - so the entry is filed under
+    //  whichever is unapplied and re-filed under the other when that lands.
+    //  Terminates: each re-filing follows an application, applied-once.
     struct HeldAlter {
       gen_t gen = 0;
       int delta = 0;
       Barrier::timestamp_t ts = 0;
+      Barrier::timestamp_t prev_ts = 0;
+      Barrier::timestamp_t anc_ts = 0;
     };
     std::multimap<Barrier::timestamp_t, HeldAlter> held_alters;
 
@@ -1075,6 +1163,7 @@ namespace Realm {
       int delta = 0;
       Barrier::timestamp_t ts = 0;
       Barrier::timestamp_t prev_ts = 0;
+      Barrier::timestamp_t anc_ts = 0;
     };
 
     // rule 8.1 - the bypassed arrival travelling to the owner
@@ -1122,6 +1211,10 @@ namespace Realm {
       //  because a trigger drains one contiguous run of generations and
       //  coalescing them into a single delta is explicitly supported.
       PendingNotify notify;
+
+      // PROTOTYPE (fix 2): this section deferred its notification, so the
+      //  backstop has to be armed once the lock is dropped
+      bool arm_notify_flush = false;
 
       // the pull (rule 5's 'subscribe'), always unicast to the owner.  At most
       //  one per section - rule 7.
@@ -1177,6 +1270,18 @@ namespace Realm {
       uint64_t identical_plans_skipped = 0; // section 11.5: a rebuild that
                                             //  reproduced the current plan was
                                             //  not installed (no broadcast)
+      uint64_t plan_reactivations = 0;      // a rebuild reproducing a RETIRED
+                                            //  plan, installed anyway - else
+                                            //  every node stays invalidated
+                                            //  and eager for life (P_REALTER)
+      uint64_t handle_gates_released = 0;   // rule 8.1: a timestamped arrival
+                                            //  took the TREE anyway, its gate
+                                            //  generation having passed.  Zero
+                                            //  = a recipient stuck off the tree
+      uint64_t bypass_retirements = 0;      // OWNER: plan retired because a
+                                            //  node that altered NOTHING began
+                                            //  bypassing, making its quota
+                                            //  unreachable (P_HANDOFF)
       uint64_t gathering_declared = 0;      // section 11.5: next generation
                                             //  declared fully eager so its
                                             //  evidence completes by
@@ -1212,6 +1317,10 @@ namespace Realm {
       //     what the A/B benchmark cross-checks its wall-clock numbers against.
       uint64_t reports_received = 0;  // planned/eager reports delivered here
       uint64_t notifies_received = 0; // trigger notifications delivered here
+      // OWNER: arrivals that bypassed the tree on a causal timestamp (rule
+      //  8.1).  Needed because 'reports_received' FALLS as nodes leave the
+      //  tree; real fan-in is reports_received + ts_arrivals_received.
+      uint64_t ts_arrivals_received = 0;
 
       // --- QUOTA-GATED FORWARDING (ARRIVAL_PROTOCOL section 13).  The gate's
       //     exercise proof: 'reports_gated' counts forwards the subtree quota
@@ -1221,6 +1330,17 @@ namespace Realm {
       //     mechanism that makes gating strand-free.
       uint64_t reports_gated = 0;
       uint64_t owner_valve_flushes = 0;
+
+      // --- PROTOTYPE (fix 2).  'notifies_coalesced': triggers whose
+      //     publication folded into a later one.  'notify_backstops': times
+      //     the background item had to publish because no later trigger did.
+      uint64_t notifies_coalesced = 0;
+      uint64_t notify_backstops = 0;
+
+      // --- B01 (PR467 review): pulls issued purely to obtain a watermark so
+      //     retained generation records can be reclaimed.  Zero on a node that
+      //     waits on the barrier; non-zero only on an arrival-only participant.
+      uint64_t reclaim_pulls = 0;
 
       // has anything at all happened worth reporting?
       bool any(void) const;
@@ -1337,7 +1457,18 @@ namespace Realm {
     // OWNER ONLY - action RA.  Apply one alteration persistently, open the
     //  gates it holds shut, and release any alteration held behind it.
     void apply_alter_locked(gen_t alter_gen, int delta, Barrier::timestamp_t ts,
-                            Barrier::timestamp_t prev_ts, PendingSends &sends);
+                            Barrier::timestamp_t prev_ts, Barrier::timestamp_t anc_ts,
+                            PendingSends &sends);
+
+    // B01 - an arrival-only node never subscribes, so never reclaims.  Past
+    //  RECLAIM_PULL_THRESHOLD records it pulls a watermark.  Call on EVERY
+    //  arrival route that mints a record, tree and bypass alike.
+    void maybe_reclaim_pull_locked(PendingSends &sends);
+
+    // RULE 8.1 - the timestamp an arrival's gate should carry for 'gen', which
+    //  is the handle's own only while this is still the first generation the
+    //  handle was used at.  Records that generation on first sight.
+    Barrier::timestamp_t handle_gate_locked(Barrier::timestamp_t ts, gen_t gen);
 
     // ARRIVAL_PROTOCOL section 8.8 - retention.  Fold the alteration steps at
     //  or below the watermark into the floor and drop the ts_floor breakpoints
@@ -1459,6 +1590,17 @@ namespace Realm {
     //  notification's 'prev' must be the pre-trigger watermark of the same
     //  contiguous chain.  Splitting them leaves a window in which the watermark
     //  has advanced but no notification describes it.
+    // PROTOTYPE (fix 2): compose the notification for the delta '(prev, wm]'.
+    //  Factored out of check_triggers_locked so the backstop publishes the
+    //  same way a trigger does.  Consumes 'poison'.
+    void compose_notify_locked(gen_t wm, gen_t prev, std::vector<gen_t> &poison,
+                               PendingSends &sends);
+    // PROTOTYPE (fix 2): may this trigger's publication wait for a later one?
+    bool defer_notify_locked(gen_t trigger_gen) const;
+    // PROTOTYPE (fix 2): the backstop's entry point - publishes whatever is
+    //  still owed.  Takes the lock itself.
+    void flush_deferred_notify(void);
+
     gen_t check_triggers_locked(EventWaiter::EventWaiterList &local_notifications,
                                 EventWaiter::EventWaiterList &poisoned_notifications,
                                 std::vector<RemoteNotification> &remote_notifications,

@@ -104,7 +104,29 @@ already holds the mutex):
 | `gap_pulls` (notification) | delta discarded, pull sent | notification rule 4 |
 | `plan_rebuilds_declined` | completeness gate said no | §11.5 — high ratio vs `plan_rebuilds` under P_STEP = cannot re-learn |
 | `gathering_declared` | owner declared a gathering generation | §11.5 convergence |
-| `identical_plans_skipped` | rebuild reproduced the current plan | §11.5; ≥1 per barrier at startup is the normal signature |
+| `identical_plans_skipped` | rebuild reproduced the current plan AND that plan is still live | §11.5; ≥1 per barrier at startup is the normal signature |
+| `plan_reactivations` | rebuild reproduced the current plan but it had been RETIRED, so it went out anyway | the `realter` phase: an owner that skips these stays eagerly flushing for the rest of the barrier's life |
+| `bypass_retirements` | owner retired the live plan because a node that had altered nothing began bypassing the tree | rule 8.4; the `handoff` phase, which HANGS without it |
+| `reclaim_pulls` | a non-member past the retention threshold pulled a watermark | §8.8: the only reclamation path an arrival-only rank has |
+| `notifies_coalesced` / `notify_backstops` | a trigger's publication was folded into a later one / had to be published by the background item | the small-scale notification coalescing |
+
+| `ts_arrivals_received` | owner: an arrival reached it DIRECTLY, having bypassed the tree | the other half of the owner's fan-in - see the warning below |
+
+**THE OWNER'S INBOUND LOAD IS `reports_received + ts_arrivals_received`, NEVER
+EITHER ALONE.** A bypassed arrival is not a report, so `reports_received` FALLS
+as nodes leave the tree. A cost curve drawn from it bends the wrong way: an
+earlier sweep here reported that handing an altered handle to all 15 ranks cost
+the owner 178 messages against 205 for no alteration at all - i.e. that leaving
+the tree entirely was cheaper than using it. The traffic had moved to a route
+that had no counter. Before reading any counter as a cost, ask what it stops
+counting when the thing you are measuring gets worse.
+
+A counter that reads 0 where the phase says it should not is a finding, and it
+is the kind of finding a green exit code hides: the `handoff` phase passed on a
+BROKEN build three times running before the recipient's own `flush_episodes`
+showed why — a rank already in eager flush reports regardless of quota and
+cannot be stranded, so the phase was exercising nothing. **The run artifact is
+the table, not the exit code**, and that is not a slogan.
 
 Add a per-rank end-of-run dump (aggregate across barriers) and a tiny reducer
 script that merges all ranks' dumps into one table with zero-counters

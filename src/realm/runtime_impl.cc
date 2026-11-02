@@ -1965,6 +1965,8 @@ namespace Realm {
 #endif
 
     event_triggerer.add_to_manager(&bgwork);
+    // PROTOTYPE (small-scale throughput fix 2)
+    barrier_notify_flusher.add_to_manager(&bgwork);
     copy_analyzer.add_to_manager(&bgwork);
 
     // initialize barrier timestamp
@@ -2912,11 +2914,19 @@ namespace Realm {
     //  hangs here it is a debuggable state (attach gdb).  A periodic
     //  warning is emitted from check_for_quiescence when counters stay
     //  frozen.
+    //
+    // A DEFERRED BARRIER NOTIFICATION IS INVISIBLE TO THIS CHECK: quiescence
+    //  counts messages on the wire, and a deferred publication was never sent.
+    //  So publish everything owed BEFORE each round; the round returning DONE
+    //  then also confirms delivery of what the previous drain released.  Here
+    //  and not after the detach, or the drain emits onto a dead transport.
+    barrier_notify_flusher.drain();
     if(Network::max_node_id > 0) {
       int tries = 0;
       while(Network::check_for_quiescence(message_manager) !=
             Network::QuiescenceStatus::DONE) {
         tries++;
+        barrier_notify_flusher.drain();
       }
       if(Network::my_node_id == 0)
         log_runtime.info() << "quiescent after " << (tries + 1) << " attempts";
@@ -2963,6 +2973,10 @@ namespace Realm {
         it != network_modules.end(); it++)
       (*it)->detach(this, network_segments);
 
+    // PROTOTYPE (fix 2): the queue was drained above, while the network was
+    //  still attached; this is the state transition only.  NOT inside the
+    //  DEBUG_REALM block - a leftover deferral here is a lost waiter.
+    barrier_notify_flusher.shutdown();
 #ifdef DEBUG_REALM
     event_triggerer.shutdown_work_item();
     copy_analyzer.shutdown_work_item();
