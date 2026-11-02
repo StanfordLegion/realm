@@ -34,6 +34,10 @@ public:
 #ifdef DEBUG_REALM
     event_triggerer.shutdown_work_item();
     copy_analyzer.shutdown_work_item();
+    // the mock never runs wait_for_shutdown(), which is where RuntimeImpl
+    //  retires its work items, so every item it owns has to be retired here or
+    //  ~BackgroundWorkItem aborts on a non-SHUTDOWN state (bgwork.cc:355-364).
+    barrier_notify_flusher.shutdown_work_item();
 #endif
   }
 
