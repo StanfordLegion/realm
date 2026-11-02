@@ -936,8 +936,7 @@ namespace Realm {
             retro_flushes_sent | stale_edge_forwards | report_edges_pinned |
             pin_conflicts_avoided | gap_pulls | reports_received | notifies_received |
             reports_gated | ts_arrivals_received | owner_valve_flushes |
-            notifies_coalesced |
-            notify_backstops | reclaim_pulls) != 0;
+            notifies_coalesced | notify_backstops | reclaim_pulls) != 0;
   }
 
   // IMPLEMENTATION_PLAN section 5 - the counters' way out.  Everything in
@@ -1671,9 +1670,9 @@ namespace Realm {
         }
         if(needs != 0) {
           held_alters.insert(std::make_pair(needs, cur));
-          log_barrier.info()
-              << "holding barrier alteration: " << me << "/" << cur.gen
-              << " delta=" << cur.delta << " ts=" << cur.ts << " needs=" << needs;
+          log_barrier.info() << "holding barrier alteration: " << me << "/" << cur.gen
+                             << " delta=" << cur.delta << " ts=" << cur.ts
+                             << " needs=" << needs;
           continue;
         }
       }
@@ -1834,8 +1833,7 @@ namespace Realm {
   // is certainly applied, because a generation cannot trigger while one naming
   // it is outstanding and generations trigger in watermark order.  Conservative
   // - the model cleared gating only a.gen, which this node cannot see.
-  Barrier::timestamp_t BarrierImpl::handle_gate_locked(Barrier::timestamp_t ts,
-                                                       gen_t gen)
+  Barrier::timestamp_t BarrierImpl::handle_gate_locked(Barrier::timestamp_t ts, gen_t gen)
   {
     REALM_BARRIER_ASSERT_LOCKED();
     if(ts == 0) {
@@ -3472,16 +3470,15 @@ namespace Realm {
   // PROTOTYPE (fix 2): action T's notification half, lifted out so the backstop
   // can publish the same thing a later trigger would have.
   void BarrierImpl::compose_notify_locked(gen_t wm, gen_t prev,
-                                          std::vector<gen_t> &poison,
-                                          PendingSends &sends)
+                                          std::vector<gen_t> &poison, PendingSends &sends)
   {
     REALM_BARRIER_ASSERT_LOCKED();
     // Step 1: choose the shrink.  RULE 3 - removals are DISCRETIONARY, so ANY
     //  subset of the collected intents is a legal choice and the model checks
     //  exactly that ("the owner may shrink by ANY subset").
     MulticastTargetSet departing;
-    for(MulticastTargetSet::const_iterator wit = want_out.begin();
-        wit != want_out.end(); ++wit) {
+    for(MulticastTargetSet::const_iterator wit = want_out.begin(); wit != want_out.end();
+        ++wit) {
       // only a node that is actually IN the set is being removed; anything
       //  else in 'want_out' is a stale intent and changes no version
       if(sub_set.contains(*wit)) {
@@ -3533,9 +3530,8 @@ namespace Realm {
       // the receiver marks it eager in the section that wakes its waiters.
       {
         std::map<gen_t, Generation *>::iterator git = generations.find(wm + 1);
-        sends.notify.gather_gen = ((git != generations.end()) && git->second->flushing)
-                                      ? (wm + 1)
-                                      : 0;
+        sends.notify.gather_gen =
+            ((git != generations.end()) && git->second->flushing) ? (wm + 1) : 0;
       }
       sends.notify.set_ver = set_ver;
       // rule 8's one-byte hint rides the notification that was going out
@@ -3696,8 +3692,7 @@ namespace Realm {
       // PROTOTYPE (fix 2): the publication may be DEFERRED so a burst of generations
       // shares one delta.  defer_notify_locked owns the conditions - nothing that
       // must go out promptly, and the next generation already has arrivals in flight.
-      if(want_out.empty() && newly_poisoned.empty() &&
-         defer_notify_locked(trigger_gen)) {
+      if(want_out.empty() && newly_poisoned.empty() && defer_notify_locked(trigger_gen)) {
         if(!notify_deferred) {
           notify_deferred = true;
           notify_deferred_prev = old_watermark;
@@ -4794,8 +4789,7 @@ namespace Realm {
   void BarrierImpl::handle_remote_alter(NodeID from, gen_t alter_gen, int delta,
                                         Barrier::timestamp_t ts,
                                         Barrier::timestamp_t prev_ts,
-                                        Barrier::timestamp_t anc_ts,
-                                        TimeLimit work_until)
+                                        Barrier::timestamp_t anc_ts, TimeLimit work_until)
   {
     gen_t trigger_gen = 0;
     EventWaiter::EventWaiterList local_notifications, poisoned_notifications;

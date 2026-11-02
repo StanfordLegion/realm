@@ -115,10 +115,9 @@ enum Phase
   P_NUM_PHASES
 };
 
-static const char *phase_names[P_NUM_PHASES] = {"steady", "over",  "outsider", "runahead",
-                                                "churn",  "alter", "split",    "poison",
-                                                "chaos",  "step",  "depart",   "realter",
-                                                "handoff"};
+static const char *phase_names[P_NUM_PHASES] = {
+    "steady", "over",  "outsider", "runahead", "churn",   "alter",  "split",
+    "poison", "chaos", "step",     "depart",   "realter", "handoff"};
 
 namespace TestConfig {
   int gens = 32;       // generations per phase
@@ -339,11 +338,10 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
   //  passes on the BROKEN build (in flush 95 of 96 generations); the sweep
   //  {2,5,10,11,15} at 16 ranks hangs pre-fix on 5, 10 and 11 only.
   const int def_to = (N >= 6) ? (N - 5) : (N - 1);
-  const int handoff_to =
-      ((TestConfig::handoff_to >= 0) && (TestConfig::handoff_to < N) &&
-       (TestConfig::handoff_to != handoff_from))
-          ? TestConfig::handoff_to
-          : def_to;
+  const int handoff_to = ((TestConfig::handoff_to >= 0) && (TestConfig::handoff_to < N) &&
+                          (TestConfig::handoff_to != handoff_from))
+                             ? TestConfig::handoff_to
+                             : def_to;
   // With n > 1 the single named recipient is ignored and the top n ranks get
   //  the branch instead - the alterer excluded, since it is already on the
   //  bypass path by its own arrival floor.
@@ -351,8 +349,8 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
       (TestConfig::handoff_n > 1)
           ? ((TestConfig::handoff_n > (N - 2)) ? (N - 2) : TestConfig::handoff_n)
           : 1;
-  const bool i_receive =
-      (handoff_n > 1) ? ((R != handoff_from) && (R >= (N - handoff_n))) : (R == handoff_to);
+  const bool i_receive = (handoff_n > 1) ? ((R != handoff_from) && (R >= (N - handoff_n)))
+                                         : (R == handoff_to);
 
   // arrivals first walk
   std::vector<Barrier> wait_handles;
@@ -420,8 +418,8 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
       }
       assert(!handed.empty());
       Event::merge_events(handed).wait();
-      log_app.print() << "handoff: rank " << R << " altered at gen " << g
-                      << " ts=" << ts << " -> " << told.size() << " rank(s)";
+      log_app.print() << "handoff: rank " << R << " altered at gen " << g << " ts=" << ts
+                      << " -> " << told.size() << " rank(s)";
     }
     if(i_hand && (g >= handoff_at)) {
       count += 1; // persistent, exactly as in P_ALTER

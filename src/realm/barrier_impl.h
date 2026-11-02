@@ -360,8 +360,7 @@ namespace Realm {
 
     static void send_request(NodeID target, ID::IDType barrier_id, EventImpl::gen_t gen,
                              int delta, Barrier::timestamp_t ts,
-                             Barrier::timestamp_t prev_ts,
-                             Barrier::timestamp_t anc_ts);
+                             Barrier::timestamp_t prev_ts, Barrier::timestamp_t anc_ts);
   };
 
   // ARRIVAL_PROTOCOL rule 8.1 - AN ARRIVAL CARRYING A TIMESTAMP BYPASSES THE
@@ -898,10 +897,10 @@ namespace Realm {
     //  untouched.  Bounded four ways: never with membership/poison to
     //  publish, never over a gathering declaration (defer_notify_locked), at
     //  most NOTIFY_MAX_DEFERRALS in a row, backstop always armed.
-    bool notify_deferred = false;      // a publication is owed
-    gen_t notify_deferred_prev = 0;    // 'prev' of the OLDEST deferred trigger
-    unsigned notify_deferrals = 0;     // consecutive, capped below
-    bool notify_flush_queued = false;  // one backstop entry outstanding
+    bool notify_deferred = false;     // a publication is owed
+    gen_t notify_deferred_prev = 0;   // 'prev' of the OLDEST deferred trigger
+    unsigned notify_deferrals = 0;    // consecutive, capped below
+    bool notify_flush_queued = false; // one backstop entry outstanding
     static const unsigned NOTIFY_MAX_DEFERRALS = 64;
 
     // ---- B01 (PR467 review) -------------------------------------------------
