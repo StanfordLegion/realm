@@ -53,6 +53,7 @@
 #include <stdio.h>
 
 #include <algorithm>
+#include <numeric>
 #include <vector>
 
 #include "realm.h"
@@ -176,6 +177,15 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
   //  it, so the measured span begins with all ranks released together.
   std::vector<Barrier> handles;
   handles.reserve(G);
+  // WAKE LATENCY, measured where cross-invocation coalescing actually engages.
+  //  gens_per_sec says nothing about how long a waiter blocked: with a deep
+  //  window the pipeline is rate-limited and every wait returns at once.  With
+  //  a SHALLOW window the waiter sits just behind the head, which is the case
+  //  a deferred notification would penalise.
+  std::vector<double> lag_us;
+  if(timer) {
+    lag_us.reserve(G);
+  }
   long long t_start = 0, t_warm = 0, t_end = 0;
   const int W = TestConfig::window;
   const int warm = std::min(TestConfig::warmup, G - 1);
@@ -192,7 +202,14 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
         b.arrive(count);
       }
       if(g >= W) {
+        const long long w0 = timer ? Clock::current_time_in_nanoseconds() : 0;
         handles[g - W].wait();
+        if(timer) {
+          const long long w1 = Clock::current_time_in_nanoseconds();
+          if((g - W) > warm) {
+            lag_us.push_back((double)(w1 - w0) * 1e-3);
+          }
+        }
         if((g - W) == warm) {
           t_warm = Clock::current_time_in_nanoseconds();
         }
@@ -203,7 +220,14 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
   }
   // drain the windowed waits
   for(int wg = std::max(1, G - W); wg < G; wg++) {
+    const long long w0 = timer ? Clock::current_time_in_nanoseconds() : 0;
     handles[wg].wait();
+    if(timer) {
+      const long long w1 = Clock::current_time_in_nanoseconds();
+      if(wg > warm) {
+        lag_us.push_back((double)(w1 - w0) * 1e-3);
+      }
+    }
     if(wg == warm) {
       t_warm = Clock::current_time_in_nanoseconds();
     }
@@ -218,6 +242,15 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
     printf("pipe: pattern=%s rep=%d gens=%d window=%d gens_per_sec=%.0f "
            "total_gens_per_sec=%.0f\n",
            pattern_names[wa.pattern], wa.rep, G, W, steady, total);
+    if(!lag_us.empty()) {
+      std::sort(lag_us.begin(), lag_us.end());
+      const size_t n = lag_us.size();
+      printf("pipelag: pattern=%s rep=%d window=%d n=%zu p50_us=%.2f p99_us=%.2f "
+             "max_us=%.2f mean_us=%.2f\n",
+             pattern_names[wa.pattern], wa.rep, W, n, lag_us[n / 2],
+             lag_us[(size_t)(0.99 * (n - 1))], lag_us[n - 1],
+             std::accumulate(lag_us.begin(), lag_us.end(), 0.0) / (double)n);
+    }
     fflush(stdout);
   }
 }
