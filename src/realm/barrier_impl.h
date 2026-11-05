@@ -423,36 +423,6 @@ namespace Realm {
 
   class BarrierImpl;
 
-  // PROTOTYPE (fix 2) - LIVENESS BACKSTOP for the coalesced watermark
-  // publication: it guarantees a deferred notification still goes out when no
-  // later trigger carries it.  A queued pointer naming a recycled BarrierImpl is
-  // benign - publishing an already-triggered watermark is safe, deferring is not.
-  class BarrierNotifyFlusher : public BackgroundWorkItem {
-  public:
-    BarrierNotifyFlusher(void);
-
-    // at most one outstanding entry per impl, enforced by the caller through
-    //  BarrierImpl::notify_flush_queued
-    void enqueue(BarrierImpl *impl);
-
-    virtual bool do_work(TimeLimit work_until);
-
-    // PUBLISH ANYTHING STILL OWED, while the NETWORK IS STILL ATTACHED: a deferred
-    // publication has not been sent, so the shutdown quiescence protocol cannot
-    // see it.  Call it inside that loop, not after the detach.
-    void drain(void);
-
-    // move the item to STATE_SHUTDOWN.  Must run before destruction:
-    //  ~BackgroundWorkItem aborts otherwise.  Expects drain() to have already
-    //  emptied the queue and complains loudly if it has not.
-    void shutdown(void);
-
-  protected:
-    Mutex flusher_mutex;
-    std::vector<BarrierImpl *> queue;
-    bool shutting_down = false;
-  };
-
   class BarrierImpl : public EventImpl {
   public:
     static const ID::ID_Types ID_TYPE = ID::ID_BARRIER;
@@ -887,22 +857,6 @@ namespace Realm {
     // rule 2 - bumped on EVERY change to 'sub_set' and stamped onto every
     //  notification and every reply
     uint64_t set_ver = 0;
-    // ---- PROTOTYPE (fix 2) --------------------------------------------------
-    // COALESCED WATERMARK PUBLICATION.  BarrierNotifyMessage is already a
-    //  DELTA '(prev, wm]', but the owner published on every trigger, so in a
-    //  pipelined workload the coalescing never happened.
-    //
-    // A trigger DEFERS its publication when the next generation already has
-    //  arrivals in flight - never in a serial barrier, so the round trip is
-    //  untouched.  Bounded four ways: never with membership/poison to
-    //  publish, never over a gathering declaration (defer_notify_locked), at
-    //  most NOTIFY_MAX_DEFERRALS in a row, backstop always armed.
-    bool notify_deferred = false;     // a publication is owed
-    gen_t notify_deferred_prev = 0;   // 'prev' of the OLDEST deferred trigger
-    unsigned notify_deferrals = 0;    // consecutive, capped below
-    bool notify_flush_queued = false; // one backstop entry outstanding
-    static const unsigned NOTIFY_MAX_DEFERRALS = 64;
-
     // ---- B01 (PR467 review) -------------------------------------------------
     // Records are reclaimed only in publish_watermark_locked, which needs a
     //  trigger notification - and those reach only SUBSCRIBERS.  An
@@ -1211,10 +1165,6 @@ namespace Realm {
       //  coalescing them into a single delta is explicitly supported.
       PendingNotify notify;
 
-      // PROTOTYPE (fix 2): this section deferred its notification, so the
-      //  backstop has to be armed once the lock is dropped
-      bool arm_notify_flush = false;
-
       // the pull (rule 5's 'subscribe'), always unicast to the owner.  At most
       //  one per section - rule 7.
       bool has_subscribe = false;
@@ -1329,12 +1279,6 @@ namespace Realm {
       //     mechanism that makes gating strand-free.
       uint64_t reports_gated = 0;
       uint64_t owner_valve_flushes = 0;
-
-      // --- PROTOTYPE (fix 2).  'notifies_coalesced': triggers whose
-      //     publication folded into a later one.  'notify_backstops': times
-      //     the background item had to publish because no later trigger did.
-      uint64_t notifies_coalesced = 0;
-      uint64_t notify_backstops = 0;
 
       // --- B01 (PR467 review): pulls issued purely to obtain a watermark so
       //     retained generation records can be reclaimed.  Zero on a node that
@@ -1589,16 +1533,9 @@ namespace Realm {
     //  notification's 'prev' must be the pre-trigger watermark of the same
     //  contiguous chain.  Splitting them leaves a window in which the watermark
     //  has advanced but no notification describes it.
-    // PROTOTYPE (fix 2): compose the notification for the delta '(prev, wm]'.
-    //  Factored out of check_triggers_locked so the backstop publishes the
-    //  same way a trigger does.  Consumes 'poison'.
+    // compose the notification for the delta '(prev, wm]'.  Consumes 'poison'.
     void compose_notify_locked(gen_t wm, gen_t prev, std::vector<gen_t> &poison,
                                PendingSends &sends);
-    // PROTOTYPE (fix 2): may this trigger's publication wait for a later one?
-    bool defer_notify_locked(gen_t trigger_gen) const;
-    // PROTOTYPE (fix 2): the backstop's entry point - publishes whatever is
-    //  still owed.  Takes the lock itself.
-    void flush_deferred_notify(void);
 
     gen_t check_triggers_locked(EventWaiter::EventWaiterList &local_notifications,
                                 EventWaiter::EventWaiterList &poisoned_notifications,

@@ -815,116 +815,6 @@ namespace Realm {
     delete[] poisoned_generations;
   }
 
-  ////////////////////////////////////////////////////////////////////////
-  //
-  // class BarrierNotifyFlusher   [PROTOTYPE, small-scale throughput fix 2]
-  //
-
-  BarrierNotifyFlusher::BarrierNotifyFlusher(void)
-    : BackgroundWorkItem("barrier notify flush")
-  {}
-
-  void BarrierNotifyFlusher::enqueue(BarrierImpl *impl)
-  {
-    bool inline_flush = false;
-    {
-      AutoLock<> al(flusher_mutex);
-      if(shutting_down) {
-        // the item is on its way to STATE_SHUTDOWN, and make_active() on a
-        //  shut-down item aborts; publish inline instead so nothing is lost
-        inline_flush = true;
-      } else {
-        const bool was_empty = queue.empty();
-        queue.push_back(impl);
-        if(was_empty) {
-          // ADVERTISED UNDER THE MUTEX: outside it, shutdown() can run in the gap and
-          // make_active() then aborts on a shut-down item.  bgwork permits duplicate
-          // activations (bgwork.h:155-161), so holding the lock costs nothing.
-          make_active();
-        }
-      }
-    }
-    if(inline_flush) {
-      // safe to call without the flusher mutex, and emit_pending_sends (our
-      //  only caller) does not hold the barrier mutex either
-      impl->flush_deferred_notify();
-    }
-  }
-
-  // PUBLISH EVERYTHING OWED - unconditional, in release builds too: a deferred
-  // publication that never goes out is a waiter that never wakes.  Does NOT set
-  // 'shutting_down'; the shutdown quiescence loop still expects more.
-  void BarrierNotifyFlusher::drain(void)
-  {
-    for(;;) {
-      std::vector<BarrierImpl *> todo;
-      {
-        AutoLock<> al(flusher_mutex);
-        todo.swap(queue);
-      }
-      if(todo.empty()) {
-        return;
-      }
-      for(size_t i = 0; i < todo.size(); i++) {
-        todo[i]->flush_deferred_notify();
-      }
-    }
-  }
-
-  void BarrierNotifyFlusher::shutdown(void)
-  {
-    {
-      AutoLock<> al(flusher_mutex);
-      shutting_down = true;
-    }
-    // By here the network is detached, so anything still queued cannot go out.
-    // runtime_impl drains inside the quiescence loop, so this should be empty -
-    // say so loudly rather than emitting onto a dead transport.
-    bool leftover = false;
-    {
-      AutoLock<> al(flusher_mutex);
-      leftover = !queue.empty();
-      queue.clear();
-    }
-    if(leftover) {
-      log_barrier.fatal() << "barrier notification deferred past network detach"
-                          << " - a waiter has been lost";
-    }
-#ifdef DEBUG_REALM
-    // shutdown_work_item() requires STATE_IDLE and draining does not touch
-    // 'state': an item advertised but never claimed is still STATE_ACTIVE, which
-    // aborts.  make_inactive() is the one transition that puts it back.
-    make_inactive();
-    shutdown_work_item();
-#endif
-  }
-
-  bool BarrierNotifyFlusher::do_work(TimeLimit work_until)
-  {
-    std::vector<BarrierImpl *> todo;
-    {
-      AutoLock<> al(flusher_mutex);
-      todo.swap(queue);
-    }
-    size_t i = 0;
-    for(; i < todo.size(); i++) {
-      todo[i]->flush_deferred_notify();
-      // RESPECT THE QUANTUM (bgwork.h:138-141).  The remainder goes back at the
-      // FRONT so the oldest deferral is still published first.
-      if(((i + 1) < todo.size()) && work_until.is_expired()) {
-        AutoLock<> al(flusher_mutex);
-        queue.insert(queue.begin(), todo.begin() + (i + 1), todo.end());
-        return true;
-      }
-    }
-    bool more;
-    {
-      AutoLock<> al(flusher_mutex);
-      more = !queue.empty();
-    }
-    return more; // requeue if work arrived while we were draining
-  }
-
   bool BarrierImpl::BarrierCounters::any(void) const
   {
     return (departs_sent | departs_suppressed | leave_rejoin_cycles | churn_backoffs |
@@ -936,7 +826,7 @@ namespace Realm {
             retro_flushes_sent | stale_edge_forwards | report_edges_pinned |
             pin_conflicts_avoided | gap_pulls | reports_received | notifies_received |
             reports_gated | ts_arrivals_received | owner_valve_flushes |
-            notifies_coalesced | notify_backstops | reclaim_pulls) != 0;
+            reclaim_pulls) != 0;
   }
 
   // IMPLEMENTATION_PLAN section 5 - the counters' way out.  Everything in
@@ -985,8 +875,6 @@ namespace Realm {
                        << " reports_gated=" << counters.reports_gated
                        << " ts_arrivals_received=" << counters.ts_arrivals_received
                        << " owner_valve_flushes=" << counters.owner_valve_flushes
-                       << " notifies_coalesced=" << counters.notifies_coalesced
-                       << " notify_backstops=" << counters.notify_backstops
                        << " reclaim_pulls=" << counters.reclaim_pulls;
   }
 
@@ -1086,13 +974,6 @@ namespace Realm {
     ts_bypass_nodes.clear();
     ts_seen_bypassing.clear();
     handle_first_gen.clear();
-    // PROTOTYPE (fix 2) - per-lifetime, and not optional: a surviving
-    // 'notify_deferred_prev' names a generation of the PREVIOUS barrier, so the
-    // first notification of the new one is a permanent gap-pull storm.
-    notify_deferred = false;
-    notify_deferred_prev = 0;
-    notify_deferrals = 0;
-    notify_flush_queued = false;
     generation.store_release(0);
   }
 
@@ -2887,12 +2768,6 @@ namespace Realm {
       BarrierDepartMessage::send_request(owner, me.id, Network::my_node_id);
     }
 
-    // PROTOTYPE (fix 2): this section deferred its publication, so arm the
-    //  backstop that will carry it out if no later trigger does.
-    if(sends.arm_notify_flush) {
-      get_runtime()->barrier_notify_flusher.enqueue(this);
-    }
-
     // NOTIFICATION_PROTOCOL rule 5 - the pull.  'owner' is write-once, so
     //  reading it here honours S3.
     if(sends.has_subscribe) {
@@ -3417,58 +3292,7 @@ namespace Realm {
     return (g.local_total + g.child_sum + g.ts_acc) == expected_locked(gen);
   }
 
-  bool BarrierImpl::defer_notify_locked(gen_t trigger_gen) const
-  {
-    REALM_BARRIER_ASSERT_LOCKED();
-    // an unbounded run would let the delta - and the recipients' wait - grow
-    //  without limit, and keep one barrier's publication permanently behind
-    //  the backstop
-    if(notify_deferrals >= NOTIFY_MAX_DEFERRALS) {
-      return false;
-    }
-    std::map<gen_t, Generation *>::const_iterator it = generations.find(trigger_gen + 1);
-    if(it == generations.end()) {
-      return false;
-    }
-    // section 11.5 - THE ONE THING THAT MUST NOT BE DEFERRED.  A gathering
-    // declaration RIDES this notification: the receiver must mark the generation
-    // eager in the same critical section that wakes its waiters, or the plan never
-    // re-converges (measured: flush_episodes 1 -> 1024 with every test green).
-    if(it->second->flushing) {
-      return false;
-    }
-    // THE REGIME TEST: a serial barrier has nobody arrived on the next generation,
-    // so this is false and the round trip is unaffected.
-    return (it->second->subtree_known() > 0);
-  }
-
-  void BarrierImpl::flush_deferred_notify(void)
-  {
-    PendingSends sends;
-    {
-      AutoLock<> a(mutex);
-      notify_flush_queued = false;
-      if(!notify_deferred) {
-        return; // a later trigger already published it
-      }
-      const gen_t wm = generation.load();
-      const gen_t prev = notify_deferred_prev;
-      notify_deferred = false;
-      notify_deferrals = 0;
-      if(wm <= prev) {
-        return;
-      }
-      counters.notify_backstops++;
-      // by construction the deferred run carries no poison: a trigger with
-      //  poison to publish is never deferred
-      std::vector<gen_t> no_poison;
-      compose_notify_locked(wm, prev, no_poison, sends);
-    }
-    emit_pending_sends(sends);
-  }
-
-  // PROTOTYPE (fix 2): action T's notification half, lifted out so the backstop
-  // can publish the same thing a later trigger would have.
+  // NOTIFICATION_PROTOCOL action T, the notification half.
   void BarrierImpl::compose_notify_locked(gen_t wm, gen_t prev,
                                           std::vector<gen_t> &poison, PendingSends &sends)
   {
@@ -3689,30 +3513,9 @@ namespace Realm {
     } else {
       // ---- NOTIFICATION_PROTOCOL action T, the notification half -----------
       //
-      // PROTOTYPE (fix 2): the publication may be DEFERRED so a burst of generations
-      // shares one delta.  defer_notify_locked owns the conditions - nothing that
-      // must go out promptly, and the next generation already has arrivals in flight.
-      if(want_out.empty() && newly_poisoned.empty() && defer_notify_locked(trigger_gen)) {
-        if(!notify_deferred) {
-          notify_deferred = true;
-          notify_deferred_prev = old_watermark;
-        }
-        notify_deferrals++;
-        counters.notifies_coalesced++;
-        // the backstop is what makes the deferral safe: if no later trigger
-        //  carries this publication out, it publishes it
-        if(!notify_flush_queued) {
-          notify_flush_queued = true;
-          sends.arm_notify_flush = true;
-        }
-      } else {
-        // 'prev' has to reach back to the watermark before the OLDEST deferred
-        //  trigger, or the recipients see a gap and pull
-        const gen_t notify_prev = notify_deferred ? notify_deferred_prev : old_watermark;
-        notify_deferred = false;
-        notify_deferrals = 0;
-        compose_notify_locked(trigger_gen, notify_prev, newly_poisoned, sends);
-      }
+      // 'prev' is the watermark before this whole contiguous chain, so one
+      //  delta covers every generation the drain above triggered.
+      compose_notify_locked(trigger_gen, old_watermark, newly_poisoned, sends);
     }
 
     // external waiters need to be signalled inside the lock
