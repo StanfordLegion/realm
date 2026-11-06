@@ -825,8 +825,8 @@ namespace Realm {
             plans_parked | parked_plans_applied | dead_plans_discarded |
             retro_flushes_sent | stale_edge_forwards | report_edges_pinned |
             pin_conflicts_avoided | gap_pulls | reports_received | notifies_received |
-            reports_gated | ts_arrivals_received | owner_valve_flushes |
-            reclaim_pulls) != 0;
+            reports_gated | ts_arrivals_received | owner_valve_flushes | reclaim_pulls) !=
+           0;
   }
 
   // IMPLEMENTATION_PLAN section 5 - the counters' way out.  Everything in
