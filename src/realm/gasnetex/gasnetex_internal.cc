@@ -3865,26 +3865,6 @@ namespace Realm {
     }
   }
 
-  size_t GASNetEXInternal::recommended_max_payload(bool with_congestion,
-                                                   size_t header_size)
-  {
-    // TODO: ideally make this a per-target counter?
-    if(with_congestion && compmgr.over_pending_completion_soft_limit())
-      return 0;
-
-    size_t limit = gex_wrapper_handle.AM_LUBRequestMedium;
-
-    // message goes inline into pktbuf, so limit to that size as well
-    size_t pad_hdr_bytes = roundup_pow2(header_size + 2 * sizeof(gex_am_arg_t), 16);
-    limit = std::min(limit, module->cfg_outbuf_size - pad_hdr_bytes);
-
-    // also use a hard limit from the command line, if present
-    if(module->cfg_max_medium)
-      limit = std::min(limit, module->cfg_max_medium);
-
-    return limit;
-  }
-
   PreparedMessage *
   GASNetEXInternal::prepare_message(gex_rank_t target, gex_ep_index_t target_ep_index,
                                     unsigned short msgid, void *&header_base,

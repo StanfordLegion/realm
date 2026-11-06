@@ -364,6 +364,25 @@ set_property(
                                      $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}>
 )
 list(APPEND _integ_list actmsg_large_payload)
+# Two ranks never relay: a multicast with a single remote target goes to it directly.
+#  Six is the smallest rank count at which the default radix (4) sends part of the
+#  target set through a relay, which reassembles the chunked envelope and fragments it
+#  again for its own subtree.  That is the path an over-budget header or a wire-format
+#  regression would break, and the unit tests' simulated network cannot see it, so run
+#  the same test once more at that size wherever there is a launcher.
+if(MPIEXEC_EXECUTABLE)
+  add_test(
+    NAME actmsg_large_payload_relay
+    COMMAND
+      ${CMAKE_TEST_LAUNCHER} ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 6 ${MPIEXEC_PREFLAGS}
+      $<TARGET_FILE:actmsg_large_payload> ${MPIEXEC_POSTFLAGS} ${actmsg_large_payload_ARGS}
+  )
+  set_property(
+    TEST actmsg_large_payload_relay PROPERTY RESOURCE_LOCK
+                                             $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}>
+  )
+  list(APPEND _integ_list actmsg_large_payload_relay)
+endif()
 add_integration_test(realm_reinit "${REALM_TEST_DIR}/realm_reinit.cc")
 # Large and fragmented active message payloads between real ranks.  Uses the internals
 #  (activemsg.h), so it links realm_obj the way the unit tests do rather than the public
@@ -634,6 +653,20 @@ else()
     PROPERTIES
       ENVIRONMENT_MODIFICATION
       "REALM_DEFAULT_ARGS=string_prepend:${TEST_ARGS} ;LD_LIBRARY_PATH=path_list_append:${TEST_LIB_PATH}"
+  )
+endif()
+
+if(TEST actmsg_large_payload_relay)
+  # 6 ranks rather than TEST_PROCESSORS.  A single CI host has fewer cores than that, so
+  #  let Open MPI oversubscribe its slots (the 4.x and the 5.x spelling); other launchers
+  #  ignore both variables.
+  set_tests_properties(actmsg_large_payload_relay PROPERTIES PROCESSORS 6 TIMEOUT 240)
+  set_property(
+    TEST actmsg_large_payload_relay
+    APPEND
+    PROPERTY ENVIRONMENT_MODIFICATION "REALM_TEST_EXPECTED_RANKS=set:6"
+             "OMPI_MCA_rmaps_base_oversubscribe=set:1"
+             "PRTE_MCA_rmaps_default_mapping_policy=set::oversubscribe"
   )
 endif()
 

@@ -711,7 +711,6 @@ namespace Realm {
                                    const void *data, size_t bytes_per_line, size_t lines,
                                    size_t line_stride, bool with_congestion,
                                    size_t header_size, uintptr_t dest_payload_addr);
-    size_t recommended_max_payload(bool with_congestion, size_t header_size);
 
     PreparedMessage *prepare_message(gex_rank_t target, gex_ep_index_t target_ep_index,
                                      unsigned short msgid, void *&header_base,
