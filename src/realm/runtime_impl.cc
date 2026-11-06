@@ -768,6 +768,7 @@ namespace Realm {
     config_map.insert({"ib_regmem", &reg_ib_mem_size});
     config_map.insert({"report_sparsity_leaks", &report_sparsity_leaks});
     config_map.insert({"barrier_broadcast_radix", &barrier_broadcast_radix});
+    config_map.insert({"barrier_plan_radix", &barrier_plan_radix});
     config_map.insert({"diskmem", &disk_mem_size});
     config_map.insert({"dma_multi_field", &dma_multi_field});
 
@@ -807,7 +808,8 @@ namespace Realm {
         .add_option_int("-ll:util_bgwork", util_bgwork_timeslice)
         .add_option_int("-ll:ext_sysmem", use_ext_sysmem)
         .add_option_bool("-ll:report_sparsity_leaks", report_sparsity_leaks)
-        .add_option_int("-ll:barrier_radix", barrier_broadcast_radix);
+        .add_option_int("-ll:barrier_radix", barrier_broadcast_radix)
+        .add_option_int("-ll:barrier_plan_radix", barrier_plan_radix);
 
     // config for RuntimeImpl
     // low-level runtime parameters
@@ -2910,6 +2912,7 @@ namespace Realm {
     //  hangs here it is a debuggable state (attach gdb).  A periodic
     //  warning is emitted from check_for_quiescence when counters stay
     //  frozen.
+    //
     if(Network::max_node_id > 0) {
       int tries = 0;
       while(Network::check_for_quiescence(message_manager) !=
