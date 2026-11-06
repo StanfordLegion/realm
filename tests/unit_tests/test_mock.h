@@ -59,6 +59,9 @@ public:
 
   void finalize(void)
   {
+    // as the real runtime does at shutdown: the shared query snapshots built
+    //  against this machine model go away with it
+    cleanup_query_caches();
     delete[] nodes;
     Realm::Network::max_node_id = 0;
     Realm::Network::my_node_id = 0;

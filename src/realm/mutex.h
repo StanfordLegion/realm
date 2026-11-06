@@ -459,6 +459,103 @@ namespace Realm {
     alignas(8) uint64_t placeholder[8]; // 64 bytes, at least 8 byte aligned
 #endif
   };
+
+  // a reader/writer lock for state that is read constantly and written
+  //  rarely (e.g. the machine model). Readers do not share a cache line:
+  //  each thread counts itself in one of several padded slots, chosen by a
+  //  per-thread id, so a read acquire costs the same whether one thread or
+  //  many are reading. A writer announces itself, waits for every slot to
+  //  drain and holds the lock until it unlocks; once a writer is announced,
+  //  new readers wait for it, so a steady stream of readers can not starve
+  //  a writer (unlike a default pthread rwlock).
+  // Not recursive: a thread must not acquire the read lock while it holds
+  //  it (or the write lock) - with a writer announced, the inner acquire
+  //  would wait for the writer, who is waiting for the outer one.
+  class REALM_INTERNAL_API_EXTERNAL_LINKAGE StripedRWLock {
+  public:
+    StripedRWLock();
+    ~StripedRWLock();
+
+    // should never be copied (or moved)
+    StripedRWLock(const StripedRWLock &) = delete;
+    StripedRWLock(StripedRWLock &&) = delete;
+    StripedRWLock &operator=(const StripedRWLock &) = delete;
+    StripedRWLock &operator=(StripedRWLock &&) = delete;
+
+    // a read acquire returns the slot the reader counted itself in, which
+    //  must be handed back to the release (the AutoReaderLock below does so)
+    unsigned rdlock();
+    void rdunlock(unsigned slot);
+
+    void wrlock();
+    void wrunlock();
+
+    class AutoReaderLock {
+    public:
+      AutoReaderLock(StripedRWLock &_lock)
+        : lock(_lock)
+        , slot(_lock.rdlock())
+      {}
+      ~AutoReaderLock() { lock.rdunlock(slot); }
+      AutoReaderLock(const AutoReaderLock &) = delete;
+      AutoReaderLock &operator=(const AutoReaderLock &) = delete;
+
+    protected:
+      StripedRWLock &lock;
+      unsigned slot;
+    };
+
+    class AutoWriterLock {
+    public:
+      AutoWriterLock(StripedRWLock &_lock)
+        : lock(_lock)
+      {
+        lock.wrlock();
+      }
+      ~AutoWriterLock() { lock.wrunlock(); }
+      AutoWriterLock(const AutoWriterLock &) = delete;
+      AutoWriterLock &operator=(const AutoWriterLock &) = delete;
+
+    protected:
+      StripedRWLock &lock;
+    };
+
+    static const unsigned NUM_SLOTS = 128;
+
+  protected:
+    // the per-thread slot index (a thread uses the same slot for every
+    //  StripedRWLock - ids are handed out sequentially, so concurrently live
+    //  threads rarely share a slot, and sharing one only costs performance)
+    static unsigned my_slot();
+
+    void wait_for_writer();
+
+    // one cache line per slot: the slots are laid out a line apart, so the
+    //  counters of different slots never share a line whatever the alignment
+    //  of the array (no alignas - an over-aligned member would make every
+    //  class that holds a lock over-aligned too)
+    struct Slot {
+      Slot()
+        : readers(0)
+      {}
+      std::atomic<int> readers;
+      char pad[64 - sizeof(std::atomic<int>)];
+    };
+    Slot slots[NUM_SLOTS];
+    // keeps the writer's fields a line away from the last slot's counter
+    char slots_pad[64];
+
+    // nonzero while a writer is waiting for readers to drain or holds the lock
+    std::atomic<int> writer_active;
+    // readers that backed off for a writer and have not got in yet: the next
+    //  writer lets them in first, so back-to-back writers can not starve them
+    std::atomic<int> waiting_readers;
+    // serializes writers
+    Mutex writer_mutex;
+    // readers that found a writer active sleep here until it is done
+    Mutex wait_mutex;
+    Mutex::CondVar writer_done;
+  };
 }; // namespace Realm
 
 #include "realm/mutex.inl"

@@ -28,6 +28,7 @@
 #include <vector>
 #include <set>
 #include <optional>
+#include <memory>
 
 namespace Realm {
 
@@ -146,13 +147,33 @@ namespace Realm {
     void add_process_info(int node_id, const Machine::ProcessInfo &process_info,
                           bool lock_held = false);
 
-    mutable Mutex mutex;
+    // guards nodeinfos and everything reachable from it. Readers: the
+    //  accessors above and every machine walk in the query implementations
+    //  below (which may not call the locking accessors while they hold it -
+    //  the lock is not recursive - and use the *_unlocked variants instead).
+    //  Writers: node announcements, affinity updates and the kind map
+    //  rebuild. Reads vastly outnumber writes (which in practice all happen
+    //  at startup), so this is a striped lock: readers never touch a shared
+    //  cache line, and a writer is not starved by a steady stream of them.
+    mutable StripedRWLock mutex;
     std::vector<Machine::ProcessorMemoryAffinity> proc_mem_affinities;
     std::set<Machine::MachineUpdateSubscriber *> subscribers;
 
     std::map<int, MachineNodeInfo *> nodeinfos;
 
   protected:
+    friend class ProcessorQueryImpl;
+    friend class MemoryQueryImpl;
+
+    // the bodies of the public accessors, for callers already holding 'mutex'
+    int
+    get_proc_mem_affinity_unlocked(std::vector<Machine::ProcessorMemoryAffinity> &result,
+                                   Processor restrict_proc, Memory restrict_memory,
+                                   bool local_only) const;
+    int get_mem_mem_affinity_unlocked(std::vector<Machine::MemoryMemoryAffinity> &result,
+                                      Memory restrict_mem1, Memory restrict_mem2,
+                                      bool local_only) const;
+
     MachineNodeInfo *get_nodeinfo(int node) const;
     MachineNodeInfo *get_nodeinfo(Processor p) const;
     MachineNodeInfo *get_nodeinfo(Memory m) const;
@@ -201,16 +222,98 @@ namespace Realm {
     QUERY_RANDOM,
   };
 
+  // the number of values of Processor::Kind and Memory::Kind, for the arrays
+  //  indexed by kind below
+#define REALM_COUNT_KIND(name, desc) +1
+  static constexpr unsigned NUM_PROCESSOR_KINDS =
+      0 REALM_PROCESSOR_KINDS(REALM_COUNT_KIND);
+  static constexpr unsigned NUM_MEMORY_KINDS = 0 REALM_MEMORY_KINDS(REALM_COUNT_KIND);
+#undef REALM_COUNT_KIND
+
+  // The machine query cache.
+  //
+  // A query result is an immutable, sorted list stamped with the generation
+  //  of the cache it was built for (the generation is bumped by every machine
+  //  update). Lists live in snapshots: a snapshot holds the lists for one
+  //  generation and is itself immutable once published. Readers take the
+  //  current snapshot with one atomic load, so a query that the cache can
+  //  serve writes no shared memory at all; this is what lets concurrent
+  //  queries scale. A query remembers the list it last used (see
+  //  ProcessorQueryImpl::attached), which is still valid while its generation
+  //  is current, so iterating a cached list costs a binary search per step.
+  //
+  // A replaced snapshot is not freed until cleanup_query_caches(), because a
+  //  query may still hold a pointer into it; the number of replaced snapshots
+  //  is bounded by the number of machine updates that happened while queries
+  //  were being made, which is small since updates happen at startup.
+  template <typename T>
+  struct QueryResultList {
+    unsigned generation = 0;
+    std::vector<T> items; // sorted by id
+  };
+
+  // the lists of all things of each kind
+  template <typename T, unsigned NUM_KINDS>
+  struct QueryKindCache {
+    unsigned generation = 0;
+    QueryResultList<T> by_kind[NUM_KINDS];
+  };
+
+  // the publication slot for one kind of snapshot
+  template <typename S>
+  class QueryCacheSlot {
+  public:
+    QueryCacheSlot(void)
+      : current(nullptr)
+    {}
+    // whatever is left at exit (a runtime that was never shut down) goes
+    //  here, so that it is not reported as leaked
+    ~QueryCacheSlot(void) { cleanup(); }
+
+    // the published snapshot if it is for 'generation', else null
+    const S *get(unsigned generation) const
+    {
+      const S *s = current.load_acquire();
+      return (s && (s->generation == generation)) ? s : nullptr;
+    }
+
+    // publishes 'built' (taking ownership) and returns it - unless a snapshot
+    //  for the same generation got there first, which is returned instead, or
+    //  the cache generation has moved on from 'built', in which case null is
+    //  returned (and the caller walks the machine)
+    const S *install(S *built, unsigned live_generation);
+
+    // frees every snapshot ever published
+    void cleanup(void);
+
+  protected:
+    atomic<const S *> current;
+    Mutex mutex; // serializes install and cleanup
+    std::vector<const S *> retired;
+  };
+
   class ProcessorQueryImpl {
   public:
     ProcessorQueryImpl(const Machine &_machine);
     ProcessorQueryImpl(const MachineImpl *_machine_impl);
 
-    static unsigned int init, cache_invalid_count;
-    static bool global_valid_cache;
-    static std::map<Processor::Kind, std::vector<Processor>> _proc_cache;
-    static std::map<Processor::Kind, std::map<Memory, std::vector<Processor>>>
-        _proc_cache_affinity;
+    typedef QueryResultList<Processor> CachedList;
+    typedef QueryKindCache<Processor, NUM_PROCESSOR_KINDS> KindCache;
+
+    // the processors of each kind with an affinity to each memory - any
+    //  affinity in the model, local or not, exactly as the walk sees them. A
+    //  kind and memory that are not in the map have no such processors (and
+    //  are served the empty list), so a miss costs no more than a hit.
+    struct AffinityCache {
+      unsigned generation = 0;
+      std::map<Memory, CachedList> by_kind_and_mem[NUM_PROCESSOR_KINDS];
+      CachedList none;
+    };
+
+    // the shared query cache, rebuilt lazily after the machine changes
+    static atomic<unsigned int> cache_invalid_count;
+    static QueryCacheSlot<KindCache> kind_cache;
+    static QueryCacheSlot<AffinityCache> affinity_cache;
 
   protected:
     // these things are refcounted and copied-on-write
@@ -274,19 +377,40 @@ namespace Realm {
 
     Memory cached_mem;
     bool is_cached_mem;
-    mutable bool shared_cached_list, valid_cache;
-    mutable std::vector<Processor> *cur_cached_list;
-    mutable unsigned int invalid_count;
-    unsigned int cur_index;
-    // cached list of processors
-    std::vector<Processor> *cached_list() const;
+
+    // the list this query last used: one in a shared snapshot, or one of
+    //  the best-affinity lists it built itself. It is current while its
+    //  generation matches cache_invalid_count. Copies of a query share this
+    //  object and may read concurrently, so this is an atomic; the lists it
+    //  points to are immutable and outlive it (see QueryCacheSlot)
+    mutable atomic<const CachedList *> attached;
+    // best-affinity results depend on the query's cost function, so they are
+    //  built per query. Every list this query built is kept until the query
+    //  is destroyed, because another copy of it may still be reading an older
+    //  one; a query builds one list per machine update it observes
+    mutable UnfairMutex build_mutex;
+    mutable std::vector<std::unique_ptr<CachedList>> own_lists;
+
+    // the shared list that serves this query (attaching to it as a side
+    //  effect), or null if the shared cache does not cover this query
+    const CachedList *cached_list() const;
+    // builders of the shared snapshots for 'generation'; null if the machine
+    //  changed meanwhile (the caller then walks it)
+    const KindCache *build_kind_cache(unsigned generation) const;
+    const AffinityCache *build_affinity_cache(unsigned generation) const;
+    // the list of this query's best-affinity results, building it if needed
+    const CachedList *best_affinity_list() const;
+    // builds the best-affinity results of this query into 'result'
+    void build_best_affinity_list(std::vector<Processor> &result) const;
+    // remembers 'list' as this query's current result
+    const CachedList *attach(const CachedList *list) const;
+    // this query's attached list if it is still current, else null
+    const CachedList *attached_list() const;
+    // drops the attached list - every change to the query's constraints does this
+    void reset_cached_list();
     bool cached_query(Processor p, Processor &pval);
     bool cached_query(Processor &pval, QueryType q) const;
     bool cached_query(size_t &count) const;
-    Processor mutated_cached_query(Processor p);
-    Processor next(Processor after);
-    // helper to compute best affinity filtered results and store in cur_cached_list
-    Processor build_best_affinity_cache() const;
   };
 
   typedef QueryPredicate<Memory, MachineMemInfo> MemoryQueryPredicate;
@@ -328,9 +452,13 @@ namespace Realm {
     MemoryQueryImpl(const Machine &_machine);
     MemoryQueryImpl(const MachineImpl *_machine_impl);
 
-    static unsigned int init, cache_invalid_count;
-    static bool global_valid_cache;
-    static std::map<Memory::Kind, std::vector<Memory>> _mem_cache;
+    // see ProcessorQueryImpl
+    typedef QueryResultList<Memory> CachedList;
+    typedef QueryKindCache<Memory, NUM_MEMORY_KINDS> KindCache;
+
+    // the shared query cache: memories by kind (see ProcessorQueryImpl)
+    static atomic<unsigned int> cache_invalid_count;
+    static QueryCacheSlot<KindCache> kind_cache;
 
   protected:
     // these things are refcounted and copied-on-write
@@ -347,6 +475,10 @@ namespace Realm {
     void restrict_to_kind(Memory::Kind new_kind);
     void restrict_by_capacity(size_t new_min_bytes);
     void add_predicate(MemoryQueryPredicate *pred);
+    // records the processor of a has_affinity_to(Processor) predicate when it
+    // is the query's only predicate, so matches can be enumerated from that
+    // processor's affinity map instead of every memory in the machine
+    void set_affinity_proc(Processor p);
 
     Memory first_match(void) const;
     Memory next_match(Memory after) const;
@@ -356,7 +488,6 @@ namespace Realm {
     bool cached_query(Memory p, Memory &pval);
     bool cached_query(Memory &pval, QueryType q) const;
     bool cached_query(size_t &count) const;
-    Memory mutated_cached_query(Memory p);
 
   public:
     // Best affinity cost function structures
@@ -387,20 +518,30 @@ namespace Realm {
     bool is_restricted_kind;
     Memory::Kind restricted_kind;
     size_t restricted_min_capacity;
-    mutable bool shared_cached_list, valid_cache;
-    mutable std::vector<Memory> *cur_cached_list;
-    mutable unsigned int invalid_count;
-    unsigned int cur_index;
+    // see ProcessorQueryImpl
+    mutable atomic<const CachedList *> attached;
+    mutable UnfairMutex build_mutex;
+    mutable std::vector<std::unique_ptr<CachedList>> own_lists;
     std::vector<MemoryQueryPredicate *> predicates;
+    Processor affinity_proc; // see set_affinity_proc
 
     // Best affinity cost functions (not predicates)
     std::optional<BestProcAffinityCostFn> best_proc_affinity_cost;
     std::optional<BestMemAffinityCostFn> best_mem_affinity_cost;
 
-    std::vector<Memory> *cached_list() const;
-    Memory next(Memory after);
-    // helper to compute best affinity filtered results and store in cur_cached_list
-    Memory build_best_affinity_cache() const;
+    // see ProcessorQueryImpl
+    const CachedList *cached_list() const;
+    const KindCache *build_kind_cache(unsigned generation) const;
+    const CachedList *best_affinity_list() const;
+    void build_best_affinity_list(std::vector<Memory> &result) const;
+    const CachedList *attach(const CachedList *list) const;
+    const CachedList *attached_list() const;
+    void reset_cached_list();
+    // the affinity map of a processor the query is anchored to, or NULL
+    const std::map<Memory, Machine::ProcessorMemoryAffinity *> *
+    anchor_affinities(Processor p, bool local_only) const;
+    // applies the node, kind, capacity and predicate restrictions to one memory
+    bool candidate_matches(Memory m) const;
   };
 
   extern MachineImpl *machine_singleton;

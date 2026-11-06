@@ -104,6 +104,7 @@ endif()
 list(
   APPEND
   REALM_UNIT_TESTS
+  striped_rwlock_test.cc
   actmsg_fragmentation_test.cc
   actmsg_chunked_send_test.cc
   fragmented_message_test.cc
@@ -169,6 +170,7 @@ list(
   c_runtime_attr.cc
   c_affinity.cc
   best_affinity_test.cc
+  machine_query_cache_test.cc
 )
 list(TRANSFORM REALM_C_UNIT_TESTS PREPEND "${REALM_TEST_DIR}/unit_tests/")
 add_executable(realm_c_unit_tests ${REALM_C_UNIT_TESTS})
@@ -377,6 +379,19 @@ add_integration_test(extres_alias "${REALM_TEST_DIR}/extres_alias.cc")
 add_integration_test(reservations "${REALM_TEST_DIR}/reservations.cc")
 set(machine_queries_ARGS -ll:cpu 4 -ll:util 2)
 add_integration_test(machine_queries "${REALM_TEST_DIR}/machine_queries.cc")
+# the same checks with the shared query cache disabled, so the uncached query
+# paths are exercised too (they only differ from the cached ones on multi-node runs)
+add_test(NAME machine_queries_nocache
+         COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:machine_queries> ${MPIEXEC_POSTFLAGS}
+                 ${machine_queries_ARGS} -ll:machine_query_cache 0
+)
+set_property(
+  TEST machine_queries_nocache
+  PROPERTY RESOURCE_LOCK $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK} ${machine_queries_RESOURCE_LOCK}>
+)
+# a test without an executable of its own: gets the test properties below, but
+# must not appear in the dependency list of the check target
+list(APPEND _integ_extra_tests machine_queries_nocache)
 set(machine_config_test_ARGS
     -test_args
     1
@@ -589,7 +604,7 @@ if(REALM_USE_CUDA)
 endif()
 
 set_tests_properties(
-  ${_integ_list}
+  ${_integ_list} ${_integ_extra_tests}
   PROPERTIES PROCESSORS
              ${TEST_PROCESSORS}
              ENVIRONMENT
@@ -602,14 +617,14 @@ string(REPLACE ";" " " TEST_ARGS "${TEST_ARGS}")
 
 if(MSVC)
   set_tests_properties(
-    ${_integ_list}
+    ${_integ_list} ${_integ_extra_tests}
     PROPERTIES
       ENVIRONMENT_MODIFICATION
       "REALM_DEFAULT_ARGS=string_prepend:${TEST_ARGS} ;PATH=path_list_append:${TEST_LIB_PATH}"
   )
 else()
   set_tests_properties(
-    ${_integ_list}
+    ${_integ_list} ${_integ_extra_tests}
     PROPERTIES
       ENVIRONMENT_MODIFICATION
       "REALM_DEFAULT_ARGS=string_prepend:${TEST_ARGS} ;LD_LIBRARY_PATH=path_list_append:${TEST_LIB_PATH}"

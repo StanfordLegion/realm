@@ -195,8 +195,14 @@ TEST_F(BestAffinityTest, MemoryBestAffinityToBoth)
   mq.best_affinity_to(cpu);
   mq.best_affinity_to(target_mem);
 
-  size_t count = mq.count();
-  EXPECT_GT(count, 0) << "No memories with combined best affinity found";
+  // cpu is proc 0 and target_mem is mem 0 (the lowest ids). A candidate needs
+  //  both affinities: mem 0 has no memory affinity from itself, so the only
+  //  candidate is mem 1, with score 80 (proc 0 -> mem 1) + 60 (mem 0 -> mem 1)
+  Memory other_mem = ID::make_memory(0, 1).convert<Memory>();
+  EXPECT_EQ(mq.count(), 1u);
+  EXPECT_EQ(mq.first(), other_mem);
+  EXPECT_FALSE(mq.next(other_mem).exists());
+  EXPECT_EQ(mq.random(), other_mem);
 }
 
 // Test that ties return multiple results

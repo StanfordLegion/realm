@@ -572,6 +572,7 @@ void test_memory_best_affinity_multiple_targets(Machine machine, int &errors)
   Machine::MemoryQuery all_sysmem_mq(machine);
   all_sysmem_mq.only_kind(Memory::SYSTEM_MEM);
   int best_combined_score = INT_MIN;
+  std::map<Memory, int> expected_scores;
 
   for(Memory m = all_sysmem_mq.first(); m.exists(); m = all_sysmem_mq.next(m)) {
     int proc_score = INT_MIN;
@@ -596,7 +597,31 @@ void test_memory_best_affinity_multiple_targets(Machine machine, int &errors)
       if(best_combined_score == INT_MIN || combined_score > best_combined_score) {
         best_combined_score = combined_score;
       }
+      expected_scores[m] = combined_score;
     }
+  }
+
+  // the query must return exactly the memories with the best combined score
+  std::set<Memory> expected_mems;
+  for(std::map<Memory, int>::const_iterator it = expected_scores.begin();
+      it != expected_scores.end(); ++it)
+    if(it->second == best_combined_score)
+      expected_mems.insert(it->first);
+  std::set<Memory> result_set(result_mems.begin(), result_mems.end());
+  if(result_set.size() != result_mems.size()) {
+    log_app.error() << "ERROR: combined best_affinity returned a memory twice";
+    errors++;
+  }
+  if(result_set != expected_mems) {
+    log_app.error() << "ERROR: combined best_affinity returned " << result_set.size()
+                    << " memories, expected " << expected_mems.size() << " with score "
+                    << best_combined_score;
+    errors++;
+  }
+  if(combined_count != result_mems.size()) {
+    log_app.error() << "ERROR: combined best_affinity count " << combined_count
+                    << " differs from iteration " << result_mems.size();
+    errors++;
   }
 
   log_app.print() << "  Combined best_affinity tests: "
