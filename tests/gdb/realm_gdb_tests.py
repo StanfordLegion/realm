@@ -40,6 +40,7 @@ Output protocol (parsed by the driver): lines starting with "RGT: ".
 """
 
 import atexit
+import collections
 import json
 import os
 import re
@@ -200,6 +201,16 @@ class _Patched(object):
         return False
 
 
+_PYTHON_ERRORS = ("Traceback (most recent call last)", "Python Exception",
+                  "Error occurred in Python")
+
+
+def _python_error_lines(text):
+    """The lines of `text` that show a Python error."""
+    return [line.strip() for line in text.splitlines()
+            if any(bad in line for bad in _PYTHON_ERRORS)]
+
+
 class Context(object):
     """Everything a test needs: gdb helpers plus facts about the program."""
 
@@ -299,11 +310,46 @@ class Context(object):
                               .format(cmd, msg))
 
     def check_no_python_error(self, cmd, output):
-        for bad in ("Traceback (most recent call last)", "Python Exception",
-                    "Error occurred in Python"):
-            if bad in output:
-                raise TestFailure("command {!r} hit a Python error:\n{}"
-                                  .format(cmd, output))
+        if _python_error_lines(output):
+            raise TestFailure("command {!r} hit a Python error:\n{}"
+                              .format(cmd, output))
+
+    def gdbs_own_python_errors(self, command):
+        """The Python errors that gdb's own `thread apply` prints running
+        `command` on every thread, as realm-gdb's `thread apply all COMMAND`
+        has it do before the parked threads.  Those come from pretty-printers
+        (libstdc++'s, say) that can't print a value partly optimized out in
+        a frame a thread is stopped in; and in a live process, the program's
+        other threads stop wherever they happen to be, in frames that may
+        have one or not."""
+        threads = sorted(((inf.num, th.num) for inf in gdb.inferiors()
+                          for th in inf.threads()), reverse=True)
+        ok, out = self.try_run("thread apply {} {}".format(
+            " ".join("{}.{}".format(*th) for th in threads), command))
+        return _python_error_lines(out) if ok else []
+
+    def check_thread_apply_all_python_errors(self, command, output):
+        """check_no_python_error for `output` of `thread apply all COMMAND`,
+        but for those Python errors in gdb's own part of it, before the
+        parked threads, that gdb's own `thread apply` prints as well (see
+        gdbs_own_python_errors).  realm-gdb's part may have none."""
+        m = re.search(r"^=== Parked Realm user threads", output, re.M)
+        own = output[:m.start()] if m else ""
+        extra = (collections.Counter(_python_error_lines(own))
+                 - collections.Counter(self.gdbs_own_python_errors(command)))
+        if extra or _python_error_lines(output[len(own):]):
+            raise TestFailure("command {!r} hit a Python error:\n{}".format(
+                "thread apply all " + command, output))
+
+    def allow_gdbs_own_python_errors(self, command):
+        """allow_output for the Python errors that gdb's own `thread apply`
+        prints running `command` on every thread (see
+        gdbs_own_python_errors), before a test types `thread apply all
+        COMMAND`.  (The driver can't tell which part printed them.)"""
+        for line in self.gdbs_own_python_errors(command):
+            m = re.search(r"Python Exception <[^>]*>: .*", line)
+            if m:
+                self.allow_output(m.group(0))
 
     def run_capturing(self, cmd, quits=False):
         """Run a command, returning (its error message, or None if it
@@ -1419,7 +1465,7 @@ def test_thread_apply_all_bt(t):
     before = t.regs()
     yield
     out = t.run("thread apply all bt")
-    t.check_no_python_error("thread apply all bt", out)
+    t.check_thread_apply_all_python_errors("bt", out)
     _check_parked_section(t, out)
     host = out[:out.index("Parked Realm user threads")]
     if t.scenario in ("live", "core"):
@@ -1446,7 +1492,7 @@ def test_thread_apply_all_bt_forms(t):
     if probe and not t.supports(probe):
         raise TestSkip("this gdb does not support '{}'".format(v))
     out = t.run("thread apply all " + v)
-    t.check_no_python_error(v, out)
+    t.check_thread_apply_all_python_errors(v, out)
     if v == "-q bt":
         # (As `thread apply`'s -q leaves out the "Thread N" lines: no "User
         # thread PTR" lines, but every parked thread's stack.)
@@ -4283,7 +4329,7 @@ def test_no_stray_events(t):
                                t.chain_marker(0) + 1, "add()")
             t.within(role, inside)
             yield
-        t.run_clean("thread apply all bt full")
+        t.check_thread_apply_all_python_errors("bt full", t.run("thread apply all bt full"))
         t.run("realm-thread")
         if t.is_core:
             t.show("chain0")
@@ -7587,6 +7633,7 @@ def test_leave_batch(t):
 def test_mi_leave(t):
     """MI detach/exit after showing parked threads, as an IDE's 'stop
     debugging' does: the attached program carries on cleanly."""
+    t.allow_gdbs_own_python_errors("bt full")
     yield typed('-interpreter-exec console "thread apply all bt full"')
     t.check_mi_result("done")
     t.within("hot", lambda: t.check_eq(t.eval_int("realm_gdb_test_add(2, 3)"), 5, "add()"))
@@ -7602,6 +7649,7 @@ def test_quit_in_user_command(t):
     for later were still waiting)."""
     if t.variant == "dump":
         body = "thread apply all bt full"
+        t.allow_gdbs_own_python_errors("bt full")
     else:
         body = "realm-thread apply {:#x} print realm_gdb_test_nap(1000)".format(
             t.ut("chain0"))
@@ -7646,6 +7694,7 @@ def test_mi_console(t):
     thread's registers are as they were afterwards."""
     before = t.regs()
     if t.variant == "dump":
+        t.allow_gdbs_own_python_errors("bt full")
         yield typed('-interpreter-exec console "thread apply all bt full"')
     else:
         yield typed('-interpreter-exec console "realm-thread apply {:#x} print '
