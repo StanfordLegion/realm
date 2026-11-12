@@ -235,6 +235,97 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
+  // class ProfilingMeasurementSet
+  //
+
+  inline size_t ProfilingMeasurementSet::size(void) const
+  {
+    size_t count = high_ids.size();
+    for(unsigned long long bits = low_bits; bits != 0; bits &= bits - 1)
+      count++;
+    return count;
+  }
+
+  inline bool ProfilingMeasurementSet::contains(ProfilingMeasurementID id) const
+  {
+    if((id >= 0) && (id < LOW_LIMIT))
+      return ((low_bits >> id) & 1ULL) != 0;
+    return std::binary_search(high_ids.begin(), high_ids.end(), id);
+  }
+
+  inline void ProfilingMeasurementSet::insert(ProfilingMeasurementID id)
+  {
+    if((id >= 0) && (id < LOW_LIMIT)) {
+      low_bits |= (1ULL << id);
+      return;
+    }
+    std::vector<ProfilingMeasurementID>::iterator it =
+        std::lower_bound(high_ids.begin(), high_ids.end(), id);
+    if((it == high_ids.end()) || (*it != id))
+      high_ids.insert(it, id);
+  }
+
+  inline void ProfilingMeasurementSet::insert_all(const ProfilingMeasurementSet &other)
+  {
+    low_bits |= other.low_bits;
+    for(ProfilingMeasurementID id : other.high_ids)
+      insert(id);
+  }
+
+  inline void ProfilingMeasurementSet::clear(void)
+  {
+    low_bits = 0;
+    high_ids.clear();
+  }
+
+  template <typename F>
+  inline void ProfilingMeasurementSet::for_each(F f) const
+  {
+    // (any negative IDs sort before the bitmask's)
+    std::vector<ProfilingMeasurementID>::const_iterator it = high_ids.begin();
+    for(; (it != high_ids.end()) && (*it < 0); ++it)
+      f(*it);
+    int id = 0;
+    for(unsigned long long bits = low_bits; bits != 0; bits >>= 1, id++)
+      if((bits & 1ULL) != 0)
+        f(static_cast<ProfilingMeasurementID>(id));
+    for(; it != high_ids.end(); ++it)
+      f(*it);
+  }
+
+  // same wire format as a std::set of the IDs
+  template <typename S>
+  bool serialize(S &s, const ProfilingMeasurementSet &ms)
+  {
+    size_t len = ms.size();
+    if(!(s << len))
+      return false;
+    bool ok = true;
+    ms.for_each([&](ProfilingMeasurementID id) {
+      if(ok && !(s << id))
+        ok = false;
+    });
+    return ok;
+  }
+
+  template <typename S>
+  bool deserialize(S &s, ProfilingMeasurementSet &ms)
+  {
+    size_t len;
+    if(!(s >> len))
+      return false;
+    ms.clear();
+    for(size_t i = 0; i < len; i++) {
+      ProfilingMeasurementID id;
+      if(!(s >> id))
+        return false;
+      ms.insert(id);
+    }
+    return true;
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
   // class ProfilingRequest
   //
 
@@ -256,7 +347,8 @@ namespace Realm {
   inline ProfilingRequest &ProfilingRequest::add_measurements(
       const std::set<ProfilingMeasurementID> &measurement_ids)
   {
-    requested_measurements.insert(measurement_ids.begin(), measurement_ids.end());
+    for(ProfilingMeasurementID id : measurement_ids)
+      requested_measurements.insert(id);
     return *this;
   }
 
@@ -265,7 +357,7 @@ namespace Realm {
   {
     return ((s << pr.response_proc) && (s << pr.response_task_id) && (s << pr.priority) &&
             (s << pr.report_if_empty) && (s << pr.user_data) &&
-            (s << pr.requested_measurements));
+            (s << pr.requested_measurements) && (s << pr.batched_delivery));
   }
 
   template <typename S>
@@ -285,7 +377,8 @@ namespace Realm {
     if(!(s >> report_if_empty))
       return 0;
     ProfilingRequest *pr = new ProfilingRequest(p, fid, priority, report_if_empty);
-    if(!(s >> pr->user_data) || !(s >> pr->requested_measurements)) {
+    if(!(s >> pr->user_data) || !(s >> pr->requested_measurements) ||
+       !(s >> pr->batched_delivery)) {
       delete pr;
       return 0;
     }
@@ -300,7 +393,7 @@ namespace Realm {
   template <typename T>
   bool ProfilingMeasurementCollection::wants_measurement(void) const
   {
-    return requested_measurements.count(static_cast<ProfilingMeasurementID>(T::ID));
+    return wanted.contains(static_cast<ProfilingMeasurementID>(T::ID));
   }
 
   template <typename T>
@@ -308,44 +401,47 @@ namespace Realm {
   ProfilingMeasurementCollection::add_measurement(const T &data,
                                                   bool send_complete_responses /*= true*/)
   {
-    std::map<ProfilingMeasurementID,
-             std::vector<const ProfilingRequest *>>::const_iterator it =
-        requested_measurements.find(static_cast<ProfilingMeasurementID>(T::ID));
-    if(it == requested_measurements.end()) {
+    const ProfilingMeasurementID id = static_cast<ProfilingMeasurementID>(T::ID);
+    if(!wanted.contains(id)) {
       // caller probably should have asked if we wanted this before measuring it...
       return;
     }
 
     // no duplicates for now
-    assert(measurements.count(static_cast<ProfilingMeasurementID>(T::ID)) == 0);
+    assert(find_measurement(id) == nullptr);
 
-    // serialize the data
-    Serialization::DynamicBufferSerializer dbs(128);
+    // serialize the data onto the end of our buffer
+    Serialization::ByteCountSerializer bcs;
 #ifndef NDEBUG
     bool ok =
 #endif
-        dbs << data;
+        bcs << data;
     assert(ok);
-
-    // measurement data is stored in a ByteArray
-    ByteArray &md = measurements[static_cast<ProfilingMeasurementID>(T::ID)];
-    ByteArray b = dbs.detach_bytearray(-1); // no trimming
-    md.swap(b);                             // avoids a copy
+    const size_t size = bcs.bytes_used();
+    const size_t offset = this->data.size();
+    if(this->data.capacity() == 0)
+      this->data.reserve(256);
+    this->data.resize(offset + size);
+    Serialization::FixedBufferSerializer fbs(this->data.data() + offset, size);
+#ifndef NDEBUG
+    ok =
+#endif
+        fbs << data;
+    assert(ok);
+    measurements.push_back(Measurement{id, offset, size});
+    // (were there a duplicate, the first one recorded would be sent)
 
     // update the number of remaining measurements for each profiling request that wanted
-    // this
-    //  if the count hits zero, we can either send the request immediately or mark that we
-    //  want to later
-    for(std::vector<const ProfilingRequest *>::const_iterator it2 = it->second.begin();
-        it2 != it->second.end(); it2++) {
-      std::map<const ProfilingRequest *, int>::iterator it3 =
-          measurements_left.find(*it2);
-      assert(it3 != measurements_left.end());
-      it3->second--;
-      if(it3->second == 0) {
+    //  this - if the count hits zero, we can either send the request immediately or mark
+    //  that we want to later
+    for(PendingRequest &pr : requests) {
+      if(!pr.pending || !pr.request->requested_measurements.contains(id))
+        continue;
+      assert(pr.measurements_left > 0);
+      if(--pr.measurements_left == 0) {
         if(send_complete_responses) {
-          measurements_left.erase(it3);
-          send_response(**it2);
+          pr.pending = false;
+          send_response(*pr.request);
         } else {
           completed_requests_present = true;
         }
@@ -355,20 +451,12 @@ namespace Realm {
     // while we're here, if we're allowed to send responses, see if there are any deferred
     // ones
     if(send_complete_responses && completed_requests_present) {
-      std::map<const ProfilingRequest *, int>::iterator it = measurements_left.begin();
-      while(it != measurements_left.end()) {
-        if(it->second > 0) {
-          it++;
-          continue;
+      for(PendingRequest &pr : requests) {
+        if(pr.pending && (pr.measurements_left == 0)) {
+          pr.pending = false;
+          send_response(*pr.request);
         }
-
-        // make a copy of the iterator so we can increment it
-        std::map<const ProfilingRequest *, int>::iterator old = it;
-        it++;
-        send_response(*(old->first));
-        measurements_left.erase(old);
       }
-
       completed_requests_present = false;
     }
   }

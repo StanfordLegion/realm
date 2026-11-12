@@ -21,6 +21,7 @@
 
 #include "realm/runtime_impl.h"
 #include "realm/proc_impl.h"
+#include "realm/profiling_batch.h"
 
 #if defined(REALM_USE_CACHING_ALLOCATOR)
 #include "realm/caching_allocator.h"
@@ -44,6 +45,7 @@ namespace Realm {
     , func_id(_func_id)
     , before_event(_before_event)
     , priority(_priority)
+    , profiling_delivery_queue(nullptr)
     , executing_thread(0)
     , marked_ready(false)
     , pending_head(0)
@@ -318,7 +320,7 @@ namespace Realm {
           thread->start_perf_counters();
           ProcessorImpl *proc_impl = get_runtime()->get_processor_impl(p);
           assert(proc_impl != nullptr && "invalid processor handle");
-          proc_impl->execute_task(func_id, ByteArrayRef(argdata, arglen));
+          execute_body(proc_impl);
           thread->stop_perf_counters();
           thread->stop_operation(this);
           thread->record_perf_counters(measurements);
@@ -337,7 +339,7 @@ namespace Realm {
         thread->start_perf_counters();
         ProcessorImpl *proc_impl = get_runtime()->get_processor_impl(p);
         assert(proc_impl != nullptr && "invalid processor handle");
-        proc_impl->execute_task(func_id, ByteArrayRef(argdata, arglen));
+        execute_body(proc_impl);
         thread->stop_perf_counters();
         thread->stop_operation(this);
         thread->record_perf_counters(measurements);
@@ -352,6 +354,34 @@ namespace Realm {
       thread->stop_operation(this);
       mark_finished(false /*!successful*/);
     }
+  }
+
+  void Task::execute_body(ProcessorImpl *proc_impl)
+  {
+    if(profiling_delivery_queue != nullptr)
+      ProfilingBatch::deliver(
+          profiling_delivery_queue,
+          [](void *ctx, Processor::TaskFuncID f, const void *a, size_t l) {
+            static_cast<ProcessorImpl *>(ctx)->execute_task(f, ByteArrayRef(a, l));
+          },
+          proc_impl);
+    else
+      proc_impl->execute_task(func_id, ByteArrayRef(argdata, arglen));
+  }
+
+  /*static*/ void Task::spawn_profiling_delivery(Processor p, void *queue, int priority)
+  {
+    // like ProcessorImpl::spawn_task for a local processor or group, but the
+    //  task is marked as a delivery task rather than named by a function ID
+    //  (it shows up as the NOP task)
+    ProcessorImpl *impl = get_runtime()->get_processor_impl(p);
+    assert(impl != nullptr);
+    GenEventImpl *finish_event = GenEventImpl::create_genevent();
+    Task *task = new Task(p, Processor::TASK_ID_PROCESSOR_NOP, nullptr, 0,
+                          ProfilingRequestSet(), Event::NO_EVENT, finish_event,
+                          ID(finish_event->current_event()).event_generation(), priority);
+    task->profiling_delivery_queue = queue;
+    impl->enqueue_or_defer_task(task, Event::NO_EVENT, nullptr);
   }
 
   ////////////////////////////////////////////////////////////////////////

@@ -18,6 +18,7 @@
 // Runtime implementation for Realm
 
 #include "realm/runtime_impl.h"
+#include "realm/profiling_batch.h"
 
 #include "realm/proc_impl.h"
 #include "realm/mem_impl.h"
@@ -2958,6 +2959,9 @@ namespace Realm {
     copy_analyzer.shutdown_work_item();
 #endif
     bgwork.stop_dedicated_workers();
+
+    // nothing can form or deliver batched profiling responses any more
+    ProfilingBatch::cleanup();
 
     // tear down the active message manager
     message_manager->shutdown();

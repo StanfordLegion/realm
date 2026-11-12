@@ -21,6 +21,7 @@
 #define REALM_PROFILING_H
 
 #include <limits.h>
+#include <algorithm>
 #include <vector>
 #include <set>
 #include <map>
@@ -323,6 +324,32 @@ namespace Realm {
     };
   }; // namespace ProfilingMeasurements
 
+  // a set of measurement IDs: a bitmask for Realm's own IDs (0 to 63) and a
+  //  sorted vector for any others, so that the common case never allocates
+  class REALM_PUBLIC_API ProfilingMeasurementSet {
+  public:
+    bool empty(void) const { return (low_bits == 0) && high_ids.empty(); }
+    size_t size(void) const;
+    bool contains(ProfilingMeasurementID id) const;
+    void insert(ProfilingMeasurementID id);
+    void insert_all(const ProfilingMeasurementSet &other);
+    void clear(void);
+
+    // calls f(id) for each member in increasing order
+    template <typename F>
+    void for_each(F f) const;
+
+    template <typename S>
+    friend bool serialize(S &s, const ProfilingMeasurementSet &ms);
+    template <typename S>
+    friend bool deserialize(S &s, ProfilingMeasurementSet &ms);
+
+  protected:
+    static const int LOW_LIMIT = 64;
+    unsigned long long low_bits = 0;
+    std::vector<ProfilingMeasurementID> high_ids; // sorted, ids outside the bitmask
+  };
+
   class REALM_PUBLIC_API ProfilingRequest {
   public:
     ProfilingRequest(Processor _response_proc, Processor::TaskFuncID _response_task_id,
@@ -334,6 +361,17 @@ namespace Realm {
     ProfilingRequest &operator=(const ProfilingRequest &rhs);
 
     ProfilingRequest &add_user_data(const void *payload, size_t payload_size);
+
+    // Allows Realm to deliver this request's response together with other
+    //  responses for the same response processor, task and priority: Realm may
+    //  then run the response task's function for several responses, one after
+    //  another, inside a single task on that processor (or on one member of
+    //  that processor group). Such responses share that task's finish event,
+    //  priority and context, and do not run concurrently with each other, so a
+    //  response task that blocks holds up the rest and response tasks must not
+    //  wait on each other. Responses for processors on other nodes are always
+    //  sent as separate tasks.
+    ProfilingRequest &set_batched_delivery(bool batched = true);
 
     template <typename T>
     ProfilingRequest &add_measurement(void);
@@ -355,8 +393,9 @@ namespace Realm {
     Processor::TaskFuncID response_task_id;
     int priority;
     bool report_if_empty;
+    bool batched_delivery;
     ByteArray user_data;
-    std::set<ProfilingMeasurementID> requested_measurements;
+    ProfilingMeasurementSet requested_measurements;
   };
 
   // manages a set of profiling requests attached to a Realm operation
@@ -411,17 +450,28 @@ namespace Realm {
   protected:
     void send_response(const ProfilingRequest &pr) const;
 
+    // a recorded measurement: its serialized data is data[offset, offset + size)
+    struct Measurement {
+      ProfilingMeasurementID id;
+      size_t offset, size;
+    };
+    const Measurement *find_measurement(ProfilingMeasurementID id) const;
+
     // in order to efficiently send responses as soon as we have all the requested
-    // measurements, we
-    //  need to know which profiling requests are needed by a given measurement and how
-    //  many more measurements each request wants
-    std::map<ProfilingMeasurementID, std::vector<const ProfilingRequest *>>
-        requested_measurements;
-    std::map<const ProfilingRequest *, int> measurements_left;
+    //  measurements, we need to know how many more measurements each request wants
+    //  (requests are few, so a flat list is fastest)
+    struct PendingRequest {
+      const ProfilingRequest *request;
+      int measurements_left;
+      bool pending; // false once sent eagerly on completion
+    };
+    std::vector<PendingRequest> requests;
+    ProfilingMeasurementSet wanted; // union over the requests
     bool completed_requests_present; // set if a request is completed but could not be
                                      // sent right away
 
-    std::map<ProfilingMeasurementID, ByteArray> measurements;
+    std::vector<Measurement> measurements;
+    std::vector<char> data;
   };
 
   class REALM_PUBLIC_API ProfilingResponse {
