@@ -240,7 +240,9 @@ namespace Realm {
   //  serve writes no shared memory at all; this is what lets concurrent
   //  queries scale. A query remembers the list it last used (see
   //  ProcessorQueryImpl::attached), which is still valid while its generation
-  //  is current, so iterating a cached list costs a binary search per step.
+  //  is current, and each thread remembers where its last step through a list
+  //  stopped, so iterating a cached list in order costs a few comparisons per
+  //  step.
   //
   // A replaced snapshot is retired, not freed, until cleanup_query_caches()
   //  at runtime shutdown, because a query may still hold a pointer into it

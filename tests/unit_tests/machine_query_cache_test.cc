@@ -598,6 +598,78 @@ TEST_F(MachineQueryCacheTest, CopiesDroppedAndRefinedConcurrently)
   }
 }
 
+// next(after) remembers, per thread, which list the previous call stepped
+//  through and where, and checks the hint against the live list before using
+//  it; so it must be right whatever the previous call on this thread was:
+//  a step through another query's list, another position, a query whose
+//  list has since been freed, or the list from before a machine update
+TEST_F(MachineQueryCacheTest, NextIsRightWhateverThePreviousCallWas)
+{
+  Machine::ProcessorQuery cpus(machine());
+  cpus.only_kind(Processor::LOC_PROC); // shared list: p0..p3
+  Machine::MemoryQuery sys(machine());
+  sys.only_kind(Memory::SYSTEM_MEM); // shared list: m0, m1
+  Machine::ProcessorQuery best(machine());
+  best.only_kind(Processor::LOC_PROC).best_affinity_to(mems[1]); // own list: p2, p3
+
+  // three iterations interleaved on one thread
+  EXPECT_EQ(cpus.first(), procs[0]);
+  EXPECT_EQ(sys.first(), mems[0]);
+  EXPECT_EQ(best.first(), procs[2]);
+  EXPECT_EQ(cpus.next(procs[0]), procs[1]);
+  EXPECT_EQ(sys.next(mems[0]), mems[1]);
+  EXPECT_EQ(best.next(procs[2]), procs[3]);
+  EXPECT_EQ(cpus.next(procs[1]), procs[2]);
+  EXPECT_EQ(sys.next(mems[1]), Memory::NO_MEMORY);
+  EXPECT_EQ(best.next(procs[3]), Processor::NO_PROC);
+  EXPECT_EQ(cpus.next(procs[2]), procs[3]);
+  EXPECT_EQ(cpus.next(procs[3]), Processor::NO_PROC);
+
+  // out of order, repeated, backwards, and from values that are not results
+  EXPECT_EQ(cpus.next(procs[0]), procs[1]);
+  EXPECT_EQ(cpus.next(procs[3]), Processor::NO_PROC);
+  EXPECT_EQ(cpus.next(procs[2]), procs[3]);
+  EXPECT_EQ(cpus.next(procs[2]), procs[3]);
+  EXPECT_EQ(cpus.next(procs[1]), procs[2]);
+  EXPECT_EQ(cpus.next(procs[0]), procs[1]);
+  EXPECT_EQ(cpus.next(Processor::NO_PROC), Processor::NO_PROC);
+  EXPECT_EQ(sys.next(Memory::NO_MEMORY), Memory::NO_MEMORY);
+  EXPECT_EQ(best.next(Processor::NO_PROC), Processor::NO_PROC);
+  EXPECT_EQ(cpus.next(ID::make_processor(0, 9).convert<Processor>()), Processor::NO_PROC);
+  EXPECT_EQ(best.next(procs[0]), procs[2]);
+  EXPECT_EQ(best.next(procs[1]), procs[2]);
+  EXPECT_EQ(sys.next(mems[2]), Memory::NO_MEMORY);
+
+  // a query's own list dies with the query, and the next query's list can be
+  //  allocated at the same address with other entries at the same positions:
+  //  a hint left by the old list must not be trusted
+  for(int i = 0; i < 64; i++) {
+    const bool to_m1 = (i % 2) == 1;
+    Machine::ProcessorQuery q(machine());
+    q.only_kind(Processor::LOC_PROC).best_affinity_to(to_m1 ? mems[1] : mems[0]);
+    const Processor first = to_m1 ? procs[2] : procs[0];
+    const Processor second = to_m1 ? procs[3] : procs[1];
+    if((i % 4) < 2)
+      EXPECT_EQ(q.first(), first);
+    EXPECT_EQ(q.next(first), second) << i;
+    EXPECT_EQ(q.next(second), Processor::NO_PROC) << i;
+  }
+
+  // across a machine update the shared list is rebuilt elsewhere, and the
+  //  iteration goes on from the same place in the new one
+  EXPECT_EQ(cpus.first(), procs[0]);
+  EXPECT_EQ(cpus.next(procs[0]), procs[1]);
+  invalidate_caches();
+  EXPECT_EQ(cpus.next(procs[1]), procs[2]);
+  EXPECT_EQ(cpus.next(procs[2]), procs[3]);
+  EXPECT_EQ(sys.first(), mems[0]);
+  invalidate_caches();
+  EXPECT_EQ(sys.next(mems[0]), mems[1]);
+  EXPECT_EQ(best.first(), procs[2]);
+  invalidate_caches();
+  EXPECT_EQ(best.next(procs[2]), procs[3]);
+}
+
 // after a machine update, the first thread whose query misses the shared
 //  snapshot builds it and the others wait for that build instead of each
 //  building their own (QueryCacheSlot::get_or_build). Generations only move

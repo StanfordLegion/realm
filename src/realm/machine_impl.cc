@@ -1772,10 +1772,67 @@ namespace Realm {
       return run_end(items, b, unsigned(node)) - b;
     }
 
+    // Iteration hint: next(after) is nearly always called with what the
+    //  previous first() or next() on this thread returned, so each thread
+    //  remembers which list it last stepped through and where. The hint is
+    //  only compared, never dereferenced: a hit is confirmed by reading the
+    //  live list at the remembered index, which is right even if the
+    //  remembered list has since been freed and its address reused, because
+    //  ids are unique and a sorted list holds 'after' at one position at most.
+    //  So an in-order step costs a few comparisons, any other step the binary
+    //  search, and no shared memory is written either way
+    struct IterationHint {
+      const void *list;
+      size_t index;
+    };
+    thread_local IterationHint iteration_hint = {nullptr, 0};
+
+    template <typename T>
+    inline void hint_position(const std::vector<T> &items, size_t index)
+    {
+      iteration_hint.list = &items;
+      iteration_hint.index = index;
+    }
+
+    // the binary search behind a hint miss, kept out of line so that the hit
+    //  path inlines into every next()
+    template <typename T>
+    REALM_ATTR_NOINLINE(size_t search_index(const std::vector<T> &items, T after));
+
+    template <typename T>
+    size_t search_index(const std::vector<T> &items, T after)
+    {
+      return std::upper_bound(items.begin(), items.end(), after) - items.begin();
+    }
+
+    // the index of the first entry of 'items' greater than 'after'
+    template <typename T>
+    inline size_t successor_index(const std::vector<T> &items, T after)
+    {
+      const void *hint_list = iteration_hint.list;
+      const size_t hint_index = iteration_hint.index;
+      size_t i;
+      if((hint_list == &items) && (hint_index < items.size()) &&
+         (items[hint_index] == after))
+        i = hint_index + 1;
+      else
+        i = search_index(items, after);
+      hint_position(items, i);
+      return i;
+    }
+
+    template <typename T>
+    inline T successor(const std::vector<T> &items, T after, T none)
+    {
+      const size_t i = successor_index(items, after);
+      return (i < items.size()) ? items[i] : none;
+    }
+
     template <typename T>
     T first_in_run(const std::vector<T> &items, int node, T none)
     {
       typename std::vector<T>::const_iterator it = run_begin(items, unsigned(node));
+      hint_position(items, it - items.begin());
       return ((it != items.end()) && (owner_node(*it) == unsigned(node))) ? *it : none;
     }
 
@@ -1790,13 +1847,13 @@ namespace Realm {
     // the successor of 'after' within the run; like the walk, an 'after' on
     //  another node has no successor
     template <typename T>
-    T next_in_run(const std::vector<T> &items, T after, int node, T none)
+    inline T next_in_run(const std::vector<T> &items, T after, int node, T none)
     {
       if(owner_node(after) != unsigned(node))
         return none;
-      typename std::vector<T>::const_iterator it =
-          std::upper_bound(items.begin(), items.end(), after);
-      return ((it != items.end()) && (owner_node(*it) == unsigned(node))) ? *it : none;
+      const size_t i = successor_index(items, after);
+      return ((i < items.size()) && (owner_node(items[i]) == unsigned(node))) ? items[i]
+                                                                              : none;
     }
   } // namespace
 
@@ -1967,9 +2024,10 @@ namespace Realm {
     const std::vector<Processor> &items = clist->items;
     switch(q) {
     case QUERY_FIRST:
-      if(!is_restricted_node)
+      if(!is_restricted_node) {
         pval = items.empty() ? Processor::NO_PROC : items.front();
-      else
+        hint_position(items, 0);
+      } else
         pval = first_in_run(items, restricted_node_id, Processor::NO_PROC);
       break;
     case QUERY_RANDOM:
@@ -1999,12 +2057,9 @@ namespace Realm {
     if(!clist)
       return false;
     const std::vector<Processor> &items = clist->items;
-    if(!is_restricted_node) {
-      // the list is sorted by id, so the successor is a binary search
-      std::vector<Processor>::const_iterator it =
-          std::upper_bound(items.begin(), items.end(), p);
-      pval = (it != items.end()) ? *it : Processor::NO_PROC;
-    } else
+    if(!is_restricted_node)
+      pval = successor(items, p, Processor::NO_PROC);
+    else
       pval = next_in_run(items, p, restricted_node_id, Processor::NO_PROC);
     return true;
 #else
@@ -2067,9 +2122,7 @@ namespace Realm {
     const std::vector<Processor> &items = best_affinity_list()->items;
     if(is_restricted_node)
       return next_in_run(items, after, restricted_node_id, Processor::NO_PROC);
-    std::vector<Processor>::const_iterator it =
-        std::upper_bound(items.begin(), items.end(), after);
-    return (it != items.end()) ? *it : Processor::NO_PROC;
+    return successor(items, after, Processor::NO_PROC);
   }
 
   void ProcessorQueryImpl::build_best_affinity_list(std::vector<Processor> &result) const
@@ -2176,6 +2229,7 @@ namespace Realm {
     // and filter by best affinity cost
     if(best_affinity_cost.has_value()) {
       const std::vector<Processor> &best = best_affinity_list()->items;
+      hint_position(best, 0);
       return best.empty() ? Processor::NO_PROC : best.front();
     }
 
@@ -2875,9 +2929,10 @@ namespace Realm {
     const std::vector<Memory> &items = clist->items;
     switch(q) {
     case QUERY_FIRST:
-      if(!is_restricted_node)
+      if(!is_restricted_node) {
         mval = items.empty() ? Memory::NO_MEMORY : items.front();
-      else
+        hint_position(items, 0);
+      } else
         mval = first_in_run(items, restricted_node_id, Memory::NO_MEMORY);
       break;
     case QUERY_RANDOM:
@@ -2905,12 +2960,9 @@ namespace Realm {
     if(!clist)
       return false;
     const std::vector<Memory> &items = clist->items;
-    if(!is_restricted_node) {
-      // the list is sorted by id, so the successor is a binary search
-      std::vector<Memory>::const_iterator it =
-          std::upper_bound(items.begin(), items.end(), m);
-      mval = (it != items.end()) ? *it : Memory::NO_MEMORY;
-    } else
+    if(!is_restricted_node)
+      mval = successor(items, m, Memory::NO_MEMORY);
+    else
       mval = next_in_run(items, m, restricted_node_id, Memory::NO_MEMORY);
     return true;
 #else
@@ -2965,9 +3017,7 @@ namespace Realm {
     const std::vector<Memory> &items = best_affinity_list()->items;
     if(is_restricted_node)
       return next_in_run(items, after, restricted_node_id, Memory::NO_MEMORY);
-    std::vector<Memory>::const_iterator it =
-        std::upper_bound(items.begin(), items.end(), after);
-    return (it != items.end()) ? *it : Memory::NO_MEMORY;
+    return successor(items, after, Memory::NO_MEMORY);
   }
 
   void MemoryQueryImpl::build_best_affinity_list(std::vector<Memory> &result) const
@@ -3105,6 +3155,7 @@ namespace Realm {
     // and filter by best affinity cost
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
       const std::vector<Memory> &best = best_affinity_list()->items;
+      hint_position(best, 0);
       return best.empty() ? Memory::NO_MEMORY : best.front();
     }
 
