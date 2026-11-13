@@ -29,6 +29,7 @@
 #include <gtest/gtest.h>
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <set>
 #include <thread>
 #include <vector>
@@ -672,6 +673,338 @@ TEST_F(MachineQueryCacheTest, OneSnapshotBuildPerUpdate)
             (unsigned long)num_updates / 2);
   EXPECT_GE(MemoryQueryImpl::kind_cache.build_count() - mem_before,
             (unsigned long)num_updates / 2);
+}
+
+// best-affinity queries are built from the target memory's own affinity map:
+//  only a processor or memory with a same-node affinity to the target can
+//  score, so that map holds every possible result. The answers must be
+//  exactly those of a brute-force walk over every candidate through the
+//  public API, on a machine with a second processor kind, cross-node
+//  affinities (which never score), a memory nothing reaches and a second node
+
+namespace {
+  int affinity_score(unsigned bandwidth, unsigned latency, int bandwidth_weight,
+                     int latency_weight)
+  {
+    return int(bandwidth) * bandwidth_weight + int(latency) * latency_weight;
+  }
+
+  // what ProcessorQuery::best_affinity_to(m) must return: of the processors
+  //  that pass the other restrictions, those with the highest score over a
+  //  same-node affinity to m (a processor without one is not a candidate)
+  std::set<Processor> reference_best_procs(const Machine &machine,
+                                           std::optional<Processor::Kind> kind,
+                                           std::optional<AddressSpace> node,
+                                           std::optional<Memory> must_reach, Memory m,
+                                           int bandwidth_weight, int latency_weight)
+  {
+    std::set<Processor> all;
+    machine.get_all_processors(all);
+    std::optional<int> best;
+    std::set<Processor> result;
+    for(Processor p : all) {
+      if(kind && (p.kind() != *kind))
+        continue;
+      if(node && (p.address_space() != *node))
+        continue;
+      if(must_reach && !machine.has_affinity(p, *must_reach))
+        continue;
+      std::vector<Machine::ProcessorMemoryAffinity> pmas;
+      machine.get_proc_mem_affinity(pmas, p, m, true /*local_only*/);
+      if(pmas.empty())
+        continue;
+      int score = affinity_score(pmas[0].bandwidth, pmas[0].latency, bandwidth_weight,
+                                 latency_weight);
+      if(!best || (score > *best)) {
+        best = score;
+        result.clear();
+        result.insert(p);
+      } else if(score == *best)
+        result.insert(p);
+    }
+    return result;
+  }
+
+  // what MemoryQuery::best_affinity_to(m) (with no processor target) must
+  //  return: of the memories that pass the other restrictions, those with the
+  //  highest score over a same-node affinity from m
+  std::set<Memory> reference_best_mems(const Machine &machine,
+                                       std::optional<Memory::Kind> kind,
+                                       std::optional<AddressSpace> node,
+                                       size_t min_capacity,
+                                       std::optional<Processor> must_reach, Memory m,
+                                       int bandwidth_weight, int latency_weight)
+  {
+    std::set<Memory> all;
+    machine.get_all_memories(all);
+    std::optional<int> best;
+    std::set<Memory> result;
+    for(Memory c : all) {
+      if(kind && (c.kind() != *kind))
+        continue;
+      if(node && (c.address_space() != *node))
+        continue;
+      if((min_capacity > 0) && (c.capacity() < min_capacity))
+        continue;
+      if(must_reach && !machine.has_affinity(*must_reach, c))
+        continue;
+      std::vector<Machine::MemoryMemoryAffinity> mmas;
+      machine.get_mem_mem_affinity(mmas, m, c, true /*local_only*/);
+      if(mmas.empty())
+        continue;
+      int score = affinity_score(mmas[0].bandwidth, mmas[0].latency, bandwidth_weight,
+                                 latency_weight);
+      if(!best || (score > *best)) {
+        best = score;
+        result.clear();
+        result.insert(c);
+      } else if(score == *best)
+        result.insert(c);
+    }
+    return result;
+  }
+} // namespace
+
+class BestAffinityAnchorTest : public ::testing::Test {
+protected:
+  // node 0: CPUs p0 and p1, GPU g0; memories m0 (system), f0 (framebuffer,
+  //  256 KB) and o0 (zero-copy, nothing reaches it). node 1: CPU p2 and
+  //  system memory m1.
+  //   p0 -> m0 100/10    p1 -> m0 100/10    g0 -> m0 200/5
+  //   p0 -> f0  50/20                       g0 -> f0 500/1
+  //   p2 -> m1 100/10
+  //   cross-node, so never scored: p2 -> m0 1000/1 and p1 -> m1 300/1
+  //   m0 -> f0 50/20, f0 -> m0 40/30; cross-node: m0 -> m1 and m1 -> m0 900/1
+  void SetUp() override
+  {
+    Realm::enable_unit_tests = true;
+    runtime_impl_ = std::make_unique<MockRuntimeImplMachineModel>();
+    Realm::runtime_singleton = runtime_impl_.get();
+    runtime_impl_->init(2);
+
+    MockRuntimeImplMachineModel::ProcessorMemoriesToBeAdded pm;
+    pm.proc_infos.push_back({0, Processor::LOC_PROC, 0});                    // p0
+    pm.proc_infos.push_back({1, Processor::LOC_PROC, 0});                    // p1
+    pm.proc_infos.push_back({2, Processor::TOC_PROC, 0});                    // g0
+    pm.proc_infos.push_back({0, Processor::LOC_PROC, 1});                    // p2
+    pm.mem_infos.push_back({0, Memory::SYSTEM_MEM, size_t(1024) * 1024, 0}); // m0
+    pm.mem_infos.push_back({1, Memory::GPU_FB_MEM, size_t(256) * 1024, 0});  // f0
+    pm.mem_infos.push_back({2, Memory::Z_COPY_MEM, size_t(1024) * 1024, 0}); // o0
+    pm.mem_infos.push_back({0, Memory::SYSTEM_MEM, size_t(1024) * 1024, 1}); // m1
+    pm.proc_mem_affinities.push_back({0, 0, 100, 10});
+    pm.proc_mem_affinities.push_back({1, 0, 100, 10});
+    pm.proc_mem_affinities.push_back({2, 0, 200, 5});
+    pm.proc_mem_affinities.push_back({0, 1, 50, 20});
+    pm.proc_mem_affinities.push_back({2, 1, 500, 1});
+    pm.proc_mem_affinities.push_back({3, 3, 100, 10});
+    pm.proc_mem_affinities.push_back({3, 0, 1000, 1});
+    pm.proc_mem_affinities.push_back({1, 3, 300, 1});
+    pm.mem_mem_affinities.push_back({0, 1, 50, 20});
+    pm.mem_mem_affinities.push_back({1, 0, 40, 30});
+    pm.mem_mem_affinities.push_back({0, 3, 900, 1});
+    pm.mem_mem_affinities.push_back({3, 0, 900, 1});
+    runtime_impl_->setup_mock_proc_mems(pm);
+
+    p0 = ID::make_processor(0, 0).convert<Processor>();
+    p1 = ID::make_processor(0, 1).convert<Processor>();
+    g0 = ID::make_processor(0, 2).convert<Processor>();
+    p2 = ID::make_processor(1, 0).convert<Processor>();
+    m0 = ID::make_memory(0, 0).convert<Memory>();
+    f0 = ID::make_memory(0, 1).convert<Memory>();
+    o0 = ID::make_memory(0, 2).convert<Memory>();
+    m1 = ID::make_memory(1, 0).convert<Memory>();
+    // o0 has no affinities, so nothing above put it into the machine model
+    runtime_impl_->machine->nodeinfos[0]->add_memory(o0);
+    runtime_impl_->machine->update_kind_maps();
+  }
+
+  void TearDown() override
+  {
+    runtime_impl_->finalize();
+    runtime_impl_.reset();
+    Realm::runtime_singleton = nullptr;
+  }
+
+  std::unique_ptr<MockRuntimeImplMachineModel> runtime_impl_;
+  Processor p0, p1, g0, p2;
+  Memory m0, f0, o0, m1;
+};
+
+TEST_F(BestAffinityAnchorTest, ProcessorSpotChecks)
+{
+  Machine machine = Machine::get_machine();
+  typedef std::set<Processor> PSet;
+  // g0 scores higher but is not a CPU; p2 reaches m0 at 1000 but from node 1
+  EXPECT_EQ(MachineQueryCacheTest::results(Machine::ProcessorQuery(machine)
+                                               .only_kind(Processor::LOC_PROC)
+                                               .best_affinity_to(m0)),
+            (PSet{p0, p1}));
+  EXPECT_EQ(MachineQueryCacheTest::results(
+                Machine::ProcessorQuery(machine).best_affinity_to(m0)),
+            (PSet{g0}));
+  // restricted to the other node: nothing there has a same-node affinity to m0
+  EXPECT_TRUE(MachineQueryCacheTest::results(Machine::ProcessorQuery(machine)
+                                                 .only_kind(Processor::LOC_PROC)
+                                                 .same_address_space_as(p2)
+                                                 .best_affinity_to(m0))
+                  .empty());
+  EXPECT_EQ(MachineQueryCacheTest::results(Machine::ProcessorQuery(machine)
+                                               .only_kind(Processor::LOC_PROC)
+                                               .same_address_space_as(p0)
+                                               .best_affinity_to(m0)),
+            (PSet{p0, p1}));
+  // a predicate on top: only p0 also reaches f0
+  EXPECT_EQ(MachineQueryCacheTest::results(Machine::ProcessorQuery(machine)
+                                               .only_kind(Processor::LOC_PROC)
+                                               .has_affinity_to(f0)
+                                               .best_affinity_to(m0)),
+            (PSet{p0}));
+  // nothing reaches o0; p1 -> m1 at 300 is cross-node, so p2 wins m1
+  EXPECT_TRUE(MachineQueryCacheTest::results(
+                  Machine::ProcessorQuery(machine).best_affinity_to(o0))
+                  .empty());
+  EXPECT_EQ(MachineQueryCacheTest::results(Machine::ProcessorQuery(machine)
+                                               .only_kind(Processor::LOC_PROC)
+                                               .best_affinity_to(m1)),
+            (PSet{p2}));
+  EXPECT_TRUE(MachineQueryCacheTest::results(Machine::ProcessorQuery(machine)
+                                                 .only_kind(Processor::TOC_PROC)
+                                                 .best_affinity_to(m1))
+                  .empty());
+  // weights: the highest weighted sum wins, so a positive latency weight
+  //  prefers the larger latency (20 over 1) - the existing semantics
+  EXPECT_EQ(MachineQueryCacheTest::results(
+                Machine::ProcessorQuery(machine).best_affinity_to(f0, 0, 1)),
+            (PSet{p0}));
+  EXPECT_EQ(MachineQueryCacheTest::results(
+                Machine::ProcessorQuery(machine).best_affinity_to(f0, 1, -1)),
+            (PSet{g0}));
+}
+
+TEST_F(BestAffinityAnchorTest, ProcessorsMatchReference)
+{
+  Machine machine = Machine::get_machine();
+  const std::optional<Processor::Kind> kinds[] = {
+      std::nullopt, Processor::LOC_PROC, Processor::TOC_PROC, Processor::IO_PROC};
+  const std::optional<AddressSpace> nodes[] = {std::nullopt, 0, 1};
+  const std::optional<Memory> reach[] = {std::nullopt, f0, m0, m1};
+  const Memory targets[] = {m0, f0, o0, m1};
+  const int weights[][2] = {{1, 0}, {0, 1}, {1, -1}, {2, 3}};
+  int checked = 0;
+  for(const std::optional<Processor::Kind> &kind : kinds)
+    for(const std::optional<AddressSpace> &node : nodes)
+      for(const std::optional<Memory> &must_reach : reach)
+        for(Memory target : targets)
+          for(const int *w : weights) {
+            Machine::ProcessorQuery q(machine);
+            if(kind)
+              q.only_kind(*kind);
+            if(node)
+              q.same_address_space_as((*node == 0) ? p0 : p2);
+            if(must_reach)
+              q.has_affinity_to(*must_reach);
+            q.best_affinity_to(target, w[0], w[1]);
+            std::set<Processor> expected =
+                reference_best_procs(machine, kind, node, must_reach, target, w[0], w[1]);
+            EXPECT_EQ(MachineQueryCacheTest::results(q), expected)
+                << "kind " << (kind ? int(*kind) : -1) << " node "
+                << (node ? int(*node) : -1) << " reach "
+                << (must_reach ? must_reach->id : 0) << " target " << target.id
+                << " weights " << w[0] << "," << w[1];
+            checked++;
+          }
+  EXPECT_EQ(checked, 4 * 3 * 4 * 4 * 4);
+}
+
+TEST_F(BestAffinityAnchorTest, MemorySpotChecks)
+{
+  Machine machine = Machine::get_machine();
+  typedef std::set<Memory> MSet;
+  // m1 at 900 is cross-node, so f0 is m0's best
+  EXPECT_EQ(
+      MachineQueryCacheTest::results(Machine::MemoryQuery(machine).best_affinity_to(m0)),
+      (MSet{f0}));
+  EXPECT_TRUE(MachineQueryCacheTest::results(Machine::MemoryQuery(machine)
+                                                 .only_kind(Memory::SYSTEM_MEM)
+                                                 .best_affinity_to(m0))
+                  .empty());
+  EXPECT_TRUE(
+      MachineQueryCacheTest::results(
+          Machine::MemoryQuery(machine).same_address_space_as(p2).best_affinity_to(m0))
+          .empty());
+  EXPECT_EQ(
+      MachineQueryCacheTest::results(
+          Machine::MemoryQuery(machine).same_address_space_as(p0).best_affinity_to(m0)),
+      (MSet{f0}));
+  // f0 is 256 KB
+  EXPECT_TRUE(MachineQueryCacheTest::results(Machine::MemoryQuery(machine)
+                                                 .has_capacity(size_t(512) * 1024)
+                                                 .best_affinity_to(m0))
+                  .empty());
+  // predicates on top: g0 reaches f0, p1 does not
+  EXPECT_EQ(MachineQueryCacheTest::results(
+                Machine::MemoryQuery(machine).has_affinity_to(g0).best_affinity_to(m0)),
+            (MSet{f0}));
+  EXPECT_TRUE(MachineQueryCacheTest::results(
+                  Machine::MemoryQuery(machine).has_affinity_to(p1).best_affinity_to(m0))
+                  .empty());
+  EXPECT_EQ(
+      MachineQueryCacheTest::results(Machine::MemoryQuery(machine).best_affinity_to(f0)),
+      (MSet{m0}));
+  EXPECT_TRUE(
+      MachineQueryCacheTest::results(Machine::MemoryQuery(machine).best_affinity_to(o0))
+          .empty());
+  // m1's only outgoing affinity is cross-node
+  EXPECT_TRUE(
+      MachineQueryCacheTest::results(Machine::MemoryQuery(machine).best_affinity_to(m1))
+          .empty());
+  // with a processor target too (the processor-anchored path): p0 reaches m0
+  //  and f0, and only f0 has an affinity from m0
+  EXPECT_EQ(MachineQueryCacheTest::results(
+                Machine::MemoryQuery(machine).best_affinity_to(p0).best_affinity_to(m0)),
+            (MSet{f0}));
+  EXPECT_EQ(
+      MachineQueryCacheTest::results(Machine::MemoryQuery(machine).best_affinity_to(g0)),
+      (MSet{f0}));
+}
+
+TEST_F(BestAffinityAnchorTest, MemoriesMatchReference)
+{
+  Machine machine = Machine::get_machine();
+  const std::optional<Memory::Kind> kinds[] = {std::nullopt, Memory::SYSTEM_MEM,
+                                               Memory::GPU_FB_MEM, Memory::Z_COPY_MEM};
+  const std::optional<AddressSpace> nodes[] = {std::nullopt, 0, 1};
+  const size_t capacities[] = {0, size_t(512) * 1024};
+  const std::optional<Processor> reach[] = {std::nullopt, g0, p1, p2};
+  const Memory targets[] = {m0, f0, o0, m1};
+  const int weights[][2] = {{1, 0}, {0, 1}, {1, -1}, {2, 3}};
+  int checked = 0;
+  for(const std::optional<Memory::Kind> &kind : kinds)
+    for(const std::optional<AddressSpace> &node : nodes)
+      for(size_t capacity : capacities)
+        for(const std::optional<Processor> &must_reach : reach)
+          for(Memory target : targets)
+            for(const int *w : weights) {
+              Machine::MemoryQuery q(machine);
+              if(kind)
+                q.only_kind(*kind);
+              if(node)
+                q.same_address_space_as((*node == 0) ? p0 : p2);
+              if(capacity)
+                q.has_capacity(capacity);
+              if(must_reach)
+                q.has_affinity_to(*must_reach);
+              q.best_affinity_to(target, w[0], w[1]);
+              std::set<Memory> expected = reference_best_mems(
+                  machine, kind, node, capacity, must_reach, target, w[0], w[1]);
+              EXPECT_EQ(MachineQueryCacheTest::results(q), expected)
+                  << "kind " << (kind ? int(*kind) : -1) << " node "
+                  << (node ? int(*node) : -1) << " capacity " << capacity << " reach "
+                  << (must_reach ? must_reach->id : 0) << " target " << target.id
+                  << " weights " << w[0] << "," << w[1];
+              checked++;
+            }
+  EXPECT_EQ(checked, 4 * 3 * 2 * 4 * 4 * 4);
 }
 
 // an affinity from a processor on one node to a memory on another must be

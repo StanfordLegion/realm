@@ -440,8 +440,12 @@ namespace Realm {
     // best-affinity results depend on the query's cost function, so they are
     //  built per query. Every list this query built is kept until the query
     //  is destroyed, because another copy of it may still be reading an older
-    //  one; a query builds one list per machine update it observes
+    //  one; a query builds one list per machine update it observes. The first
+    //  list lives in the query itself (a fresh query builds exactly one), the
+    //  rest on the heap; the optional is constructed only when a list is
+    //  built, so a query that never needs one pays nothing for it
     mutable UnfairMutex build_mutex;
+    mutable std::optional<CachedList> first_own;
     mutable std::vector<std::unique_ptr<CachedList>> own_lists;
 
     // the shared list that serves this query (attaching to it as a side
@@ -582,6 +586,7 @@ namespace Realm {
     // see ProcessorQueryImpl
     mutable atomic<const CachedList *> attached;
     mutable UnfairMutex build_mutex;
+    mutable std::optional<CachedList> first_own;
     mutable std::vector<std::unique_ptr<CachedList>> own_lists;
     std::vector<MemoryQueryPredicate *> predicates;
     Processor affinity_proc; // see set_affinity_proc
