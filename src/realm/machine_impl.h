@@ -242,10 +242,25 @@ namespace Realm {
   //  ProcessorQueryImpl::attached), which is still valid while its generation
   //  is current, so iterating a cached list costs a binary search per step.
   //
-  // A replaced snapshot is not freed until cleanup_query_caches(), because a
-  //  query may still hold a pointer into it; the number of replaced snapshots
-  //  is bounded by the number of machine updates that happened while queries
-  //  were being made, which is small since updates happen at startup.
+  // A replaced snapshot is retired, not freed, until cleanup_query_caches()
+  //  at runtime shutdown, because a query may still hold a pointer into it
+  //  (attached_list() dereferences the pointer to compare generations). So
+  //  every machine update that is followed by a query retains one snapshot of
+  //  each kind, each a copy of the machine's lists. That is bounded today
+  //  because the machine model only changes at startup. Snapshot builds are
+  //  single-flight (QueryCacheSlot::get_or_build): an update costs one build
+  //  per snapshot kind, not one per querying thread.
+  //
+  // Before the machine model may change at run time (elasticity), retired
+  //  snapshots need reclaiming. What would have to change: a query would keep
+  //  the generation of its attached list beside the pointer (one 64-bit atomic
+  //  holding the generation and an index into a table of per-generation
+  //  snapshot headers, say), so that staleness is decided without touching
+  //  the snapshot; then only a call in progress can be inside a retired
+  //  snapshot, and since calls are short and never block while reading one,
+  //  an epoch or quiescent-state scheme (readers announce the generation they
+  //  entered; a snapshot is freed once every reader has moved past it) can
+  //  free retired snapshots safely. Until then the retention is by design.
   template <typename T>
   struct QueryResultList {
     unsigned generation = 0;
@@ -265,10 +280,15 @@ namespace Realm {
   public:
     QueryCacheSlot(void)
       : current(nullptr)
+      , builds(0)
     {}
-    // whatever is left at exit (a runtime that was never shut down) goes
-    //  here, so that it is not reported as leaked
-    ~QueryCacheSlot(void) { cleanup(); }
+    // the snapshots are freed by cleanup_query_caches() at runtime shutdown,
+    //  not by this object's destructor: a process that exits without shutting
+    //  Realm down may still have threads querying, and a hit on a leaked
+    //  snapshot is harmless where a freed one is not. (The slot's own members
+    //  are destroyed with the other statics at exit, like every Realm static;
+    //  a thread still building a snapshot at that point is an application
+    //  bug, as it was before.)
 
     // the published snapshot if it is for 'generation', else null
     const S *get(unsigned generation) const
@@ -277,19 +297,52 @@ namespace Realm {
       return (s && (s->generation == generation)) ? s : nullptr;
     }
 
+    // the snapshot for 'generation', built by 'build(generation)' if it is
+    //  missing. Builders are serialized: after a machine update the first
+    //  thread to miss builds, and the others wait for its snapshot instead of
+    //  each building their own, so an update costs one build however many
+    //  threads query. Returns null if the live generation has moved on from
+    //  'generation' (the caller then walks the machine), whether before the
+    //  build started or while it ran. A build is attempted only for the live
+    //  generation and generations only move forward, so each generation is
+    //  built at most once. Lock order: build_mutex, then the machine's reader
+    //  lock inside 'build', then 'mutex' in install(); machine writers take
+    //  neither of this class's locks
+    template <typename BuildFn>
+    const S *get_or_build(unsigned generation, const atomic<unsigned int> &live,
+                          BuildFn &&build)
+    {
+      AutoLock<UnfairMutex> al(build_mutex);
+      const S *s = get(generation);
+      if(s)
+        return s; // built while we waited
+      if(live.load() != generation)
+        return nullptr;
+      builds.fetch_add(1);
+      S *built = build(generation);
+      // the live generation is read after the build (call arguments are not
+      //  sequenced), so a change during the build is seen by install()
+      return install(built, live.load());
+    }
+
     // publishes 'built' (taking ownership) and returns it - unless a snapshot
     //  for the same generation got there first, which is returned instead, or
     //  the cache generation has moved on from 'built', in which case null is
     //  returned (and the caller walks the machine)
     const S *install(S *built, unsigned live_generation);
 
-    // frees every snapshot ever published
+    // frees every snapshot ever published (runtime shutdown)
     void cleanup(void);
+
+    // how many snapshots have been built (for tests)
+    unsigned long build_count(void) const { return builds.load(); }
 
   protected:
     atomic<const S *> current;
     Mutex mutex; // serializes install and cleanup
     std::vector<const S *> retired;
+    UnfairMutex build_mutex; // serializes builders (see get_or_build)
+    atomic<unsigned long> builds;
   };
 
   class ProcessorQueryImpl {
@@ -394,10 +447,16 @@ namespace Realm {
     // the shared list that serves this query (attaching to it as a side
     //  effect), or null if the shared cache does not cover this query
     const CachedList *cached_list() const;
-    // builders of the shared snapshots for 'generation'; null if the machine
-    //  changed meanwhile (the caller then walks it)
-    const KindCache *build_kind_cache(unsigned generation) const;
-    const AffinityCache *build_affinity_cache(unsigned generation) const;
+    // the miss path of cached_list(): the snapshot for 'generation' is built
+    //  (or waited for) and the query attached to its list; out of line so the
+    //  hit path, which every cached call takes, stays small enough to inline
+    REALM_ATTR_NOINLINE(const CachedList *cached_list_miss(unsigned generation) const);
+    // the list for this query's kind and memory in an affinity snapshot
+    const CachedList *list_in(const AffinityCache *ac) const;
+    // builders of the shared snapshots for 'generation', run one at a time
+    //  by QueryCacheSlot::get_or_build
+    KindCache *build_kind_cache(unsigned generation) const;
+    AffinityCache *build_affinity_cache(unsigned generation) const;
     // the list of this query's best-affinity results, building it if needed
     const CachedList *best_affinity_list() const;
     // next() over that list (see the definition)
@@ -533,7 +592,8 @@ namespace Realm {
 
     // see ProcessorQueryImpl
     const CachedList *cached_list() const;
-    const KindCache *build_kind_cache(unsigned generation) const;
+    REALM_ATTR_NOINLINE(const CachedList *cached_list_miss(unsigned generation) const);
+    KindCache *build_kind_cache(unsigned generation) const;
     const CachedList *best_affinity_list() const;
     REALM_ATTR_NOINLINE(Memory best_affinity_next(Memory after) const);
     void build_best_affinity_list(std::vector<Memory> &result) const;

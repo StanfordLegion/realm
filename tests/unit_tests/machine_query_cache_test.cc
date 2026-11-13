@@ -597,6 +597,83 @@ TEST_F(MachineQueryCacheTest, CopiesDroppedAndRefinedConcurrently)
   }
 }
 
+// after a machine update, the first thread whose query misses the shared
+//  snapshot builds it and the others wait for that build instead of each
+//  building their own (QueryCacheSlot::get_or_build). Generations only move
+//  forward and a build is attempted only for the live generation, so each
+//  snapshot kind is built at most once per update, however many threads
+//  query. The readers are made to query after every update, so without
+//  single-flight builds the count would approach one build per reader per
+//  update
+TEST_F(MachineQueryCacheTest, OneSnapshotBuildPerUpdate)
+{
+  const int num_readers = 8;
+  const int num_updates = 100;
+  auto query_all = [&]() -> int {
+    int wrong = 0;
+    if(Machine::ProcessorQuery(machine()).only_kind(Processor::LOC_PROC).count() != 4)
+      wrong++;
+    if(Machine::ProcessorQuery(machine())
+           .only_kind(Processor::LOC_PROC)
+           .has_affinity_to(mems[0])
+           .count() != 4)
+      wrong++;
+    if(Machine::MemoryQuery(machine()).only_kind(Memory::SYSTEM_MEM).count() != 2)
+      wrong++;
+    return wrong;
+  };
+  // the snapshots for the current generation exist before counting starts
+  ASSERT_EQ(query_all(), 0);
+  const unsigned long kind_before = ProcessorQueryImpl::kind_cache.build_count();
+  const unsigned long affinity_before = ProcessorQueryImpl::affinity_cache.build_count();
+  const unsigned long mem_before = MemoryQueryImpl::kind_cache.build_count();
+
+  std::atomic<bool> stop(false);
+  std::atomic<int> failures(0);
+  std::unique_ptr<std::atomic<unsigned long>[]> completed(
+      new std::atomic<unsigned long>[num_readers]);
+  for(int r = 0; r < num_readers; r++)
+    completed[r].store(0);
+  std::vector<std::thread> readers;
+  for(int r = 0; r < num_readers; r++)
+    readers.emplace_back([&, r] {
+      while(!stop.load()) {
+        failures.fetch_add(query_all());
+        completed[r].fetch_add(1);
+      }
+    });
+  for(int u = 0; u < num_updates; u++) {
+    unsigned long seen[num_readers];
+    for(int r = 0; r < num_readers; r++)
+      seen[r] = completed[r].load();
+    invalidate_caches();
+    // every reader finishes a round that started after the update (the round
+    //  in flight at the update may have used the old snapshot; the next one
+    //  cannot), so every reader misses on every update
+    for(int r = 0; r < num_readers; r++)
+      while(completed[r].load() < seen[r] + 2)
+        std::this_thread::yield();
+  }
+  stop.store(true);
+  for(std::thread &t : readers)
+    t.join();
+  EXPECT_EQ(failures.load(), 0);
+  EXPECT_LE(ProcessorQueryImpl::kind_cache.build_count() - kind_before,
+            (unsigned long)num_updates);
+  EXPECT_LE(ProcessorQueryImpl::affinity_cache.build_count() - affinity_before,
+            (unsigned long)num_updates);
+  EXPECT_LE(MemoryQueryImpl::kind_cache.build_count() - mem_before,
+            (unsigned long)num_updates);
+  // and the readers did make every snapshot kind get rebuilt (so none of the
+  //  bounds above holds because the cache stopped being used)
+  EXPECT_GE(ProcessorQueryImpl::kind_cache.build_count() - kind_before,
+            (unsigned long)num_updates / 2);
+  EXPECT_GE(ProcessorQueryImpl::affinity_cache.build_count() - affinity_before,
+            (unsigned long)num_updates / 2);
+  EXPECT_GE(MemoryQueryImpl::kind_cache.build_count() - mem_before,
+            (unsigned long)num_updates / 2);
+}
+
 // an affinity from a processor on one node to a memory on another must be
 //  seen the same way by the shared cache and by a walk of the machine
 

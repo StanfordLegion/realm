@@ -1845,24 +1845,45 @@ namespace Realm {
     const unsigned generation = cache_invalid_count.load();
     if(!is_cached_mem) {
       const KindCache *kc = kind_cache.get(generation);
-      if(!kc)
-        kc = build_kind_cache(generation);
+      if(kc)
+        return attach(&kc->by_kind[restricted_kind]);
+    } else {
+      const AffinityCache *ac = affinity_cache.get(generation);
+      if(ac)
+        return attach(list_in(ac));
+    }
+    return cached_list_miss(generation);
+  }
+
+  const ProcessorQueryImpl::CachedList *
+  ProcessorQueryImpl::list_in(const AffinityCache *ac) const
+  {
+    const std::map<Memory, CachedList> &by_mem = ac->by_kind_and_mem[restricted_kind];
+    std::map<Memory, CachedList>::const_iterator it = by_mem.find(cached_mem);
+    return (it != by_mem.end()) ? &it->second : &ac->none;
+  }
+
+  const ProcessorQueryImpl::CachedList *
+  ProcessorQueryImpl::cached_list_miss(unsigned generation) const
+  {
+    if(!is_cached_mem) {
+      const KindCache *kc =
+          kind_cache.get_or_build(generation, cache_invalid_count,
+                                  [this](unsigned g) { return build_kind_cache(g); });
       if(!kc)
         return nullptr; // the machine changed underneath us; walk it instead
       return attach(&kc->by_kind[restricted_kind]);
-    } else {
-      const AffinityCache *ac = affinity_cache.get(generation);
-      if(!ac)
-        ac = build_affinity_cache(generation);
-      if(!ac)
-        return nullptr;
-      const std::map<Memory, CachedList> &by_mem = ac->by_kind_and_mem[restricted_kind];
-      std::map<Memory, CachedList>::const_iterator it = by_mem.find(cached_mem);
-      return attach((it != by_mem.end()) ? &it->second : &ac->none);
     }
+    const AffinityCache *ac =
+        affinity_cache.get_or_build(generation, cache_invalid_count, [this](unsigned g) {
+          return build_affinity_cache(g);
+        });
+    if(!ac)
+      return nullptr;
+    return attach(list_in(ac));
   }
 
-  const ProcessorQueryImpl::KindCache *
+  ProcessorQueryImpl::KindCache *
   ProcessorQueryImpl::build_kind_cache(unsigned generation) const
   {
     KindCache *kc = new KindCache;
@@ -1891,10 +1912,10 @@ namespace Realm {
     //  ids sort by node first, so the lists are sorted - next() relies on it
     for(unsigned k = 0; k < NUM_PROCESSOR_KINDS; k++)
       std::sort(kc->by_kind[k].items.begin(), kc->by_kind[k].items.end());
-    return kind_cache.install(kc, cache_invalid_count.load());
+    return kc;
   }
 
-  const ProcessorQueryImpl::AffinityCache *
+  ProcessorQueryImpl::AffinityCache *
   ProcessorQueryImpl::build_affinity_cache(unsigned generation) const
   {
     AffinityCache *ac = new AffinityCache;
@@ -1932,7 +1953,7 @@ namespace Realm {
         it->second.generation = generation;
         std::sort(it->second.items.begin(), it->second.items.end());
       }
-    return affinity_cache.install(ac, cache_invalid_count.load());
+    return ac;
   }
 
   bool ProcessorQueryImpl::cached_query(Processor &pval, QueryType q) const
@@ -2798,15 +2819,23 @@ namespace Realm {
 
     const unsigned generation = cache_invalid_count.load();
     const KindCache *kc = kind_cache.get(generation);
-    if(!kc)
-      kc = build_kind_cache(generation);
+    if(kc)
+      return attach(&kc->by_kind[restricted_kind]);
+    return cached_list_miss(generation);
+  }
+
+  const MemoryQueryImpl::CachedList *
+  MemoryQueryImpl::cached_list_miss(unsigned generation) const
+  {
+    const KindCache *kc =
+        kind_cache.get_or_build(generation, cache_invalid_count,
+                                [this](unsigned g) { return build_kind_cache(g); });
     if(!kc)
       return nullptr; // the machine changed underneath us; walk it instead
     return attach(&kc->by_kind[restricted_kind]);
   }
 
-  const MemoryQueryImpl::KindCache *
-  MemoryQueryImpl::build_kind_cache(unsigned generation) const
+  MemoryQueryImpl::KindCache *MemoryQueryImpl::build_kind_cache(unsigned generation) const
   {
     KindCache *kc = new KindCache;
     kc->generation = generation;
@@ -2831,7 +2860,7 @@ namespace Realm {
     }
     for(unsigned k = 0; k < NUM_MEMORY_KINDS; k++)
       std::sort(kc->by_kind[k].items.begin(), kc->by_kind[k].items.end());
-    return kind_cache.install(kc, cache_invalid_count.load());
+    return kc;
   }
 
   bool MemoryQueryImpl::cached_query(Memory &mval, QueryType q) const
