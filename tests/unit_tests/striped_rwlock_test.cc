@@ -20,8 +20,9 @@
 //  readers are not starved by back-to-back writers, and threads that share a
 //  reader slot (more threads than slots) still get mutual exclusion.
 // Sized for a small machine (a CI runner has four cpus and runs several tests
-//  at once): few threads, short runs, and no bound on wall-clock time that a
-//  slow or loaded machine could miss.
+//  at once): few threads, short runs, and the only wall-clock limits are
+//  generous ones (5 s for one write acquire, 5 s and 10 s caps on loops that
+//  take milliseconds) that only a hung lock misses.
 
 #include "realm/mutex.h"
 #include "realm/timers.h"

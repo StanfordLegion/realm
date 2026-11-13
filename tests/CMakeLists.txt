@@ -380,7 +380,7 @@ add_integration_test(reservations "${REALM_TEST_DIR}/reservations.cc")
 set(machine_queries_ARGS -ll:cpu 4 -ll:util 2)
 add_integration_test(machine_queries "${REALM_TEST_DIR}/machine_queries.cc")
 # the same checks with the shared query cache disabled, so the uncached query
-# paths are exercised too (they only differ from the cached ones on multi-node runs)
+# paths (walks of the machine model) are exercised too; the two must agree everywhere
 add_test(NAME machine_queries_nocache
          COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:machine_queries> ${MPIEXEC_POSTFLAGS}
                  ${machine_queries_ARGS} -ll:machine_query_cache 0

@@ -372,7 +372,8 @@ TEST_F(MachineQueryCacheTest, InvalidationUnderReaders)
   go.store(true);
   for(int i = 0; i < 2000; i++) {
     invalidate_caches();
-    // rebuild the shared lists so the readers' old ones are released
+    // rebuild the shared lists, so the readers keep moving to new ones while
+    //  the old ones stay valid (nothing is freed before shutdown)
     Machine::ProcessorQuery(machine()).only_kind(Processor::LOC_PROC).count();
     Machine::MemoryQuery(machine()).only_kind(Memory::SYSTEM_MEM).count();
   }
@@ -386,9 +387,11 @@ TEST_F(MachineQueryCacheTest, InvalidationUnderReaders)
 //  affinity, processor-anchored memory queries) must hold the machine's
 //  reader lock, so an affinity update can not race with them. The writer
 //  flips p0 -> m0 between bw 100 and bw 30, which changes the answers, so
-//  every answer must be the one for one of the two machine states (a torn
-//  read would be caught by ThreadSanitizer; a missing lock also shows up
-//  here as an answer for neither state)
+//  every answer must be the one for one of the two machine states. A missing
+//  lock is a data race that ThreadSanitizer reports, and CI runs this test
+//  under it; a plain build only checks the answers, and since the writer
+//  rewrites one field in place and both values are acceptable, a plain build
+//  cannot tell a missing lock from a present one
 TEST_F(MachineQueryCacheTest, MachineUpdatesUnderWalkingReaders)
 {
   std::atomic<bool> go(false), done(false);
