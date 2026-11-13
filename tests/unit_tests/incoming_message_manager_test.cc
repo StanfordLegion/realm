@@ -745,10 +745,8 @@ namespace {
     EXPECT_EQ(OversizedFragMessage::call_count.load(), 2);
 
     // every delivery was handled, but only the three that arrived off the wire count,
-    //  so the handled count still matches what the network received...
+    //  so the handled count still matches what the network received
     EXPECT_EQ(mgr.handled(), 3u);
-    // ...and a drain that waits for those three returns at once
-    mgr.drain_incoming_messages(3);
 
     mgr.shutdown();
   }

@@ -1620,7 +1620,6 @@ namespace Realm {
       const void *payload, size_t payload_size, TimeLimit work_until,
       MulticastMetricsSink *metrics, MulticastCompletionCallback *on_remote_complete)
   {
-    // the envelope's length fields are 16/32 bits wide
     // the envelope's header-length field is 16 bits wide; the payload length is 64,
     //  so it needs no check.  REALM_ASSERT rather than assert: silently truncating
     //  in a release build would make the origin and the targets disagree about the
