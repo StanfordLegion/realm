@@ -400,6 +400,8 @@ namespace Realm {
     const AffinityCache *build_affinity_cache(unsigned generation) const;
     // the list of this query's best-affinity results, building it if needed
     const CachedList *best_affinity_list() const;
+    // next() over that list (see the definition)
+    REALM_ATTR_NOINLINE(Processor best_affinity_next(Processor after) const);
     // builds the best-affinity results of this query into 'result'
     void build_best_affinity_list(std::vector<Processor> &result) const;
     // remembers 'list' as this query's current result
@@ -533,6 +535,7 @@ namespace Realm {
     const CachedList *cached_list() const;
     const KindCache *build_kind_cache(unsigned generation) const;
     const CachedList *best_affinity_list() const;
+    REALM_ATTR_NOINLINE(Memory best_affinity_next(Memory after) const);
     void build_best_affinity_list(std::vector<Memory> &result) const;
     const CachedList *attach(const CachedList *list) const;
     const CachedList *attached_list() const;

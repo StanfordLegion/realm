@@ -638,6 +638,9 @@ realm_processor_query_restrict_to_address_space(realm_processor_query_t query,
 realm_processor_query_next(Realm::ProcessorQueryImpl *query_impl, Realm::Processor after)
 {
   Realm::Processor proc;
+  if(!after.exists()) {
+    return Realm::Processor::NO_PROC; // nothing follows "no processor" on either path
+  }
   if(Realm::Config::use_machine_query_cache) {
     proc = query_impl->cache_next(after);
   } else {
@@ -789,6 +792,9 @@ realm_status_t realm_memory_query_restrict_by_capacity(realm_memory_query_t quer
 realm_memory_query_next(Realm::MemoryQueryImpl *query_impl, Realm::Memory after)
 {
   Realm::Memory m;
+  if(!after.exists()) {
+    return Realm::Memory::NO_MEMORY; // see realm_processor_query_next
+  }
   if(Realm::Config::use_machine_query_cache) {
     m = query_impl->cache_next(after);
   } else {

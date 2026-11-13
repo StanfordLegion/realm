@@ -750,7 +750,45 @@ TEST_F(MachineQueryCacheMultiNodeTest, NodeRestrictedQueries)
       EXPECT_EQ(sharing1.next(procs[0]), Processor::NO_PROC);
       EXPECT_EQ(mnode1.next(mems[0]), Memory::NO_MEMORY);
       EXPECT_EQ(mlocal.next(mems[0]), Memory::NO_MEMORY);
+      // and nothing follows "no processor" / "no memory"
+      EXPECT_EQ(node1.next(Processor::NO_PROC), Processor::NO_PROC);
+      EXPECT_EQ(local.next(Processor::NO_PROC), Processor::NO_PROC);
+      EXPECT_EQ(mnode1.next(Memory::NO_MEMORY), Memory::NO_MEMORY);
     }
+    Config::use_machine_query_cache = saved;
+  }
+
+  // the same for node-restricted best-affinity queries, whose lists are built
+  //  per query: next() must answer the same before the query has run (the
+  //  list is built for the call) and after it (the list is attached). Both
+  //  CPUs of node 1 tie for m1, and only m1 is on p2's node
+  {
+    const bool saved = Config::use_machine_query_cache;
+    for(bool cache : {true, false})
+      for(int executed = 0; executed < 2; executed++) {
+        Config::use_machine_query_cache = cache;
+        Machine::ProcessorQuery best1(machine);
+        best1.only_kind(Processor::LOC_PROC)
+            .same_address_space_as(procs[2])
+            .best_affinity_to(mems[1]);
+        Machine::MemoryQuery mbest1(machine);
+        mbest1.same_address_space_as(procs[2]).best_affinity_to(procs[2]);
+        if(executed) {
+          EXPECT_EQ(best1.first(), procs[2]);
+          EXPECT_EQ(mbest1.first(), mems[1]);
+        }
+        EXPECT_EQ(best1.next(procs[0]), Processor::NO_PROC)
+            << "cache " << cache << " executed " << executed;
+        EXPECT_EQ(best1.next(procs[2]), procs[3]);
+        EXPECT_EQ(best1.next(procs[3]), Processor::NO_PROC);
+        EXPECT_EQ(mbest1.next(mems[0]), Memory::NO_MEMORY)
+            << "cache " << cache << " executed " << executed;
+        EXPECT_EQ(mbest1.next(mems[1]), Memory::NO_MEMORY);
+        EXPECT_EQ(best1.next(Processor::NO_PROC), Processor::NO_PROC);
+        EXPECT_EQ(mbest1.next(Memory::NO_MEMORY), Memory::NO_MEMORY);
+        EXPECT_EQ(MachineQueryCacheTest::results(best1), (PSet{procs[2], procs[3]}));
+        EXPECT_EQ(MachineQueryCacheTest::results(mbest1), (MSet{mems[1]}));
+      }
     Config::use_machine_query_cache = saved;
   }
 

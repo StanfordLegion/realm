@@ -1408,6 +1408,10 @@ namespace Realm {
 
   Processor Machine::ProcessorQuery::next(Processor after) const
   {
+    // nothing follows "no processor" on either path (next_match() checks too,
+    //  so the cache and a walk agree)
+    if(!after.exists())
+      return Processor::NO_PROC;
     if(Config::use_machine_query_cache)
       return ((ProcessorQueryImpl *)impl)->cache_next(after);
     return ((ProcessorQueryImpl *)impl)->next_match(after);
@@ -1563,6 +1567,8 @@ namespace Realm {
 
   Memory Machine::MemoryQuery::next(Memory after) const
   {
+    if(!after.exists())
+      return Memory::NO_MEMORY; // see ProcessorQuery::next
     if(Config::use_machine_query_cache)
       return ((MemoryQueryImpl *)impl)->cache_next(after);
     return ((MemoryQueryImpl *)impl)->next_match(after);
@@ -1735,8 +1741,9 @@ namespace Realm {
   // Cached result lists are sorted by id, and ids order by owning node
   //  before anything else, so the entries one node owns form a contiguous
   //  run. These answer a node-restricted query from such a list the way a
-  //  walk of the machine would ('node' is never -1 here; an unrestricted
-  //  query reads the list directly).
+  //  walk of the machine would (a 'node' of -1, a query restricted to two
+  //  different nodes, owns nothing; an unrestricted query reads the list
+  //  directly).
   namespace {
     inline unsigned owner_node(Processor p) { return ID(p).proc_owner_node(); }
     inline unsigned owner_node(Memory m) { return ID(m).memory_owner_node(); }
@@ -2021,6 +2028,20 @@ namespace Realm {
     return attach(list);
   }
 
+  // the successor of 'after' in the best-affinity list; for a query restricted
+  //  to one node, an 'after' on another node has no successor, as in the walk
+  //  and in cached_query(). Out of line, so that next_match()'s walk, which
+  //  does not take this branch, keeps its size
+  Processor ProcessorQueryImpl::best_affinity_next(Processor after) const
+  {
+    const std::vector<Processor> &items = best_affinity_list()->items;
+    if(is_restricted_node)
+      return next_in_run(items, after, restricted_node_id, Processor::NO_PROC);
+    std::vector<Processor>::const_iterator it =
+        std::upper_bound(items.begin(), items.end(), after);
+    return (it != items.end()) ? *it : Processor::NO_PROC;
+  }
+
   void ProcessorQueryImpl::build_best_affinity_list(std::vector<Processor> &result) const
   {
     std::optional<int> best_score;
@@ -2225,15 +2246,9 @@ namespace Realm {
     }
     return lowest;
 #else
-    // If best affinity is specified, the results should already be in the Level 2 cache
-    // from first_match(). Just iterate through the cached list.
-    if(best_affinity_cost.has_value()) {
-      // Find the next processor in the (sorted) results after the given one
-      const std::vector<Processor> &items = best_affinity_list()->items;
-      std::vector<Processor>::const_iterator it =
-          std::upper_bound(items.begin(), items.end(), after);
-      return (it != items.end()) ? *it : Processor::NO_PROC;
-    }
+    // best affinity: the successor of 'after' in the query's own list
+    if(best_affinity_cost.has_value())
+      return best_affinity_next(after);
 
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
@@ -2907,6 +2922,17 @@ namespace Realm {
     return attach(list);
   }
 
+  // see ProcessorQueryImpl::best_affinity_next
+  Memory MemoryQueryImpl::best_affinity_next(Memory after) const
+  {
+    const std::vector<Memory> &items = best_affinity_list()->items;
+    if(is_restricted_node)
+      return next_in_run(items, after, restricted_node_id, Memory::NO_MEMORY);
+    std::vector<Memory>::const_iterator it =
+        std::upper_bound(items.begin(), items.end(), after);
+    return (it != items.end()) ? *it : Memory::NO_MEMORY;
+  }
+
   void MemoryQueryImpl::build_best_affinity_list(std::vector<Memory> &result) const
   {
     // the whole walk reads the machine model
@@ -3224,15 +3250,9 @@ namespace Realm {
     }
     return lowest;
 #else
-    // If best affinity is specified, the results should already be in the Level 2 cache
-    // from first_match(). Just iterate through the cached list.
-    if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
-      // Find the next memory in the (sorted) results after the given one
-      const std::vector<Memory> &items = best_affinity_list()->items;
-      std::vector<Memory>::const_iterator it =
-          std::upper_bound(items.begin(), items.end(), after);
-      return (it != items.end()) ? *it : Memory::NO_MEMORY;
-    }
+    // best affinity: see ProcessorQueryImpl::next_match
+    if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value())
+      return best_affinity_next(after);
 
     StripedRWLock::AutoReaderLock al(machine->mutex);
     if(affinity_proc.exists()) {

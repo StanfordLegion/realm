@@ -137,6 +137,14 @@
 #define REALM_ATTR_NORETURN(thing) thing __attribute__((noreturn))
 #endif
 
+// REALM_ATTR_NOINLINE(thing) - keeps `thing` out of line, so that the hot path
+//  of its callers stays small enough to be inlined
+#ifdef _MSC_VER
+#define REALM_ATTR_NOINLINE(thing) __declspec(noinline) thing
+#else
+#define REALM_ATTR_NOINLINE(thing) thing __attribute__((noinline))
+#endif
+
 // REALM_ATTR_DEPRECATED(msg, thing) - indicates `thing` is deprecated, printing
 //                                     `msg` at compile time if possible
 // REALM_ATTR_DEPRECATED2(msg, thing1, thing2) - above when `thing` has commas in it
