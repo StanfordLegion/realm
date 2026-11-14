@@ -40,6 +40,10 @@ namespace Realm {
   public:
     // true once the module has successfully discovered its resources
     bool resources_discovered(void) const { return resource_discover_finished; }
+    // the discovered resources, read-only: the module records them during
+    //  discovery, and get_resource() reaches the same values by name
+    int get_num_cpus(void) const { return res_num_cpus; }
+    size_t get_sysmem_size(void) const { return res_sysmem_size; }
 
   protected:
     CoreModuleResources(void) = default;

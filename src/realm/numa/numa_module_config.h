@@ -40,6 +40,9 @@ namespace Realm {
     public:
       // true once the module has successfully discovered its resources
       bool resources_discovered(void) const { return resource_discover_finished; }
+      // the discovered resources, read-only: the module records them during
+      //  discovery, and get_resource() reaches the same values by name
+      const std::vector<size_t> &get_numa_mems(void) const { return res_numa_mems; }
 
     protected:
       NumaModuleResources(void) = default;
