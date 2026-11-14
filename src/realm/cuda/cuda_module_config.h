@@ -41,6 +41,11 @@ namespace Realm {
     public:
       // true once the module has successfully discovered its resources
       bool resources_discovered(void) const { return resource_discover_finished; }
+      // the discovered resources, read-only: the module records them during
+      //  discovery, and get_resource() reaches the same values by name
+      int get_num_gpus(void) const { return res_num_gpus; }
+      size_t get_min_fbmem_size(void) const { return res_min_fbmem_size; }
+      const std::vector<size_t> &get_fbmem_sizes(void) const { return res_fbmem_sizes; }
 
     protected:
       CudaModuleResources(void) = default;

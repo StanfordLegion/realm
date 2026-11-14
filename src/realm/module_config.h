@@ -62,6 +62,11 @@ namespace Realm {
   //  configuration types at compile time.  It works on any object of a
   //  configuration class whose module is present in the current runtime.
   //
+  // Settings are public data members of the configuration class (cfg_... in
+  //  most modules); the resources a module discovered are protected res_...
+  //  members of its *ModuleResources base, read through that base's const
+  //  get_...() accessors, or by name through get_resource().
+  //
   // NOTE for module authors: this class, and therefore every subclass, has
   //  no virtual functions - a class with no non-inline virtual functions has
   //  no "key function", so the compiler emits whatever vtable and typeinfo it

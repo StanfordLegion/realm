@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+#include <algorithm>
 #include "realm.h"
 #include "realm/cmdline.h"
 #include "realm/network.h"
@@ -788,6 +789,9 @@ int main(int argc, char **argv)
       ASSERT_REALM(core->get_resource("cpu", ncores));
       ASSERT_REALM(core->get_resource("sysmem", sysmem));
       log_app.print("Discover number of CPU cores %d, sysmem %zu", ncores, sysmem);
+      // the typed read-only accessors agree with the string interface
+      assert(core->resources_discovered());
+      assert((core->get_num_cpus() == ncores) && (core->get_sysmem_size() == sysmem));
 
       // a configuration can be prepared by value (starting from Realm's
       //  defaults, or as a copy of the runtime's object) and then assigned to
@@ -811,6 +815,7 @@ int main(int argc, char **argv)
       ASSERT_REALM(core->get_resource("cpu", ncores_after));
       ASSERT_REALM(core->get_resource("sysmem", sysmem_after));
       assert((ncores_after == ncores) && (sysmem_after == sysmem));
+      assert((core->get_num_cpus() == ncores) && (core->get_sysmem_size() == sysmem));
 
       // a copy of the runtime's object agrees with it, including through the
       //  string interface, and modifying the copy does not touch the original
@@ -820,6 +825,8 @@ int main(int argc, char **argv)
       assert(copied_cpus == TestConfig::num_cpu_procs);
       ASSERT_REALM(copy.get_resource("cpu", ncores_after));
       assert(ncores_after == ncores);
+      assert(copy.resources_discovered() && (copy.get_num_cpus() == ncores) &&
+             (copy.get_sysmem_size() == sysmem));
       copy.num_cpu_procs = TestConfig::num_cpu_procs + 1;
       assert(core->num_cpu_procs == TestConfig::num_cpu_procs);
 
@@ -831,6 +838,8 @@ int main(int argc, char **argv)
       // ... but a fresh object has not discovered any resources
       assert(fresh.get_resource("cpu", ncores_after) ==
              REALM_MODULE_CONFIG_ERROR_NO_RESOURCE);
+      assert(!fresh.resources_discovered() && (fresh.get_num_cpus() == 0) &&
+             (fresh.get_sysmem_size() == 0));
       // the configuration class of a module that is not present can be
       //  constructed and copied, but has nothing to look names up in
       assert(sizeof(MPIModuleConfig) > 0);
@@ -847,6 +856,7 @@ int main(int argc, char **argv)
     if(numa && (numa->get_resource("numa_mems", numa_mems) == REALM_SUCCESS) &&
        !numa_mems.empty()) {
       log_app.info() << "numa mems:" << PrettyVector<size_t>(numa_mems);
+      assert(numa->resources_discovered() && (numa->get_numa_mems() == numa_mems));
       numa->cfg_numa_mem_size = TestConfig::numa_mem_size;
       numa->cfg_numa_nocpu_mem_size = TestConfig::numa_nocpu_mem_size;
       numa->cfg_num_numa_cpus = TestConfig::num_numa_cpus;
@@ -862,6 +872,11 @@ int main(int argc, char **argv)
       ASSERT_REALM(cuda->get_resource("gpu", ngpus));
       ASSERT_REALM(cuda->get_resource("fbmem", fbmem));
       log_app.print("number of cuda GPUs %d, fbmem size %zu", ngpus, fbmem);
+      assert(cuda->resources_discovered() && (cuda->get_num_gpus() == ngpus) &&
+             (cuda->get_min_fbmem_size() == fbmem));
+      assert(cuda->get_fbmem_sizes().size() == size_t(ngpus));
+      assert(*std::min_element(cuda->get_fbmem_sizes().begin(),
+                               cuda->get_fbmem_sizes().end()) == fbmem);
       cuda->cfg_num_gpus = TestConfig::num_gpus;
       cuda->cfg_zc_mem_size = TestConfig::zc_mem_size;
       cuda->cfg_fb_mem_size = TestConfig::fb_mem_size;
@@ -880,6 +895,11 @@ int main(int argc, char **argv)
       ASSERT_REALM(hip->get_resource("gpu", ngpus));
       ASSERT_REALM(hip->get_resource("fbmem", fbmem));
       log_app.print("number of hip GPUs %d, fbmem size %zu", ngpus, fbmem);
+      assert(hip->resources_discovered() && (hip->get_num_gpus() == ngpus) &&
+             (hip->get_min_fbmem_size() == fbmem));
+      assert(hip->get_fbmem_sizes().size() == size_t(ngpus));
+      assert(*std::min_element(hip->get_fbmem_sizes().begin(),
+                               hip->get_fbmem_sizes().end()) == fbmem);
       hip->cfg_num_gpus = TestConfig::num_gpus;
       hip->cfg_zc_mem_size = TestConfig::zc_mem_size;
       hip->cfg_fb_mem_size = TestConfig::fb_mem_size;
