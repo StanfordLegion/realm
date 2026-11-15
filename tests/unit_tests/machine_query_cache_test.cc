@@ -883,6 +883,56 @@ namespace {
     }
     return result;
   }
+
+  // what MemoryQuery::best_affinity_to(p) must return, alone or with a
+  //  best_affinity_to(m) as well: of the memories that pass the other
+  //  restrictions, those with the highest score over a same-node affinity
+  //  from p plus, with m, one from m (a memory without both is not a
+  //  candidate)
+  std::set<Memory>
+  reference_best_mems_for_proc(const Machine &machine, std::optional<Memory::Kind> kind,
+                               std::optional<AddressSpace> node, size_t min_capacity,
+                               std::optional<Processor> must_reach, Processor p,
+                               int p_bandwidth_weight, int p_latency_weight,
+                               std::optional<Memory> m, int m_bandwidth_weight,
+                               int m_latency_weight)
+  {
+    std::set<Memory> all;
+    machine.get_all_memories(all);
+    std::optional<int> best;
+    std::set<Memory> result;
+    for(Memory c : all) {
+      if(kind && (c.kind() != *kind))
+        continue;
+      if(node && (c.address_space() != *node))
+        continue;
+      if((min_capacity > 0) && (c.capacity() < min_capacity))
+        continue;
+      if(must_reach && !machine.has_affinity(*must_reach, c))
+        continue;
+      std::vector<Machine::ProcessorMemoryAffinity> pmas;
+      machine.get_proc_mem_affinity(pmas, p, c, true /*local_only*/);
+      if(pmas.empty())
+        continue;
+      int score = affinity_score(pmas[0].bandwidth, pmas[0].latency, p_bandwidth_weight,
+                                 p_latency_weight);
+      if(m) {
+        std::vector<Machine::MemoryMemoryAffinity> mmas;
+        machine.get_mem_mem_affinity(mmas, *m, c, true /*local_only*/);
+        if(mmas.empty())
+          continue;
+        score += affinity_score(mmas[0].bandwidth, mmas[0].latency, m_bandwidth_weight,
+                                m_latency_weight);
+      }
+      if(!best || (score > *best)) {
+        best = score;
+        result.clear();
+        result.insert(c);
+      } else if(score == *best)
+        result.insert(c);
+    }
+    return result;
+  }
 } // namespace
 
 class BestAffinityAnchorTest : public ::testing::Test {
@@ -1086,6 +1136,22 @@ TEST_F(BestAffinityAnchorTest, MemorySpotChecks)
   EXPECT_EQ(
       MachineQueryCacheTest::results(Machine::MemoryQuery(machine).best_affinity_to(g0)),
       (MSet{f0}));
+  // both targets: g0 reaches m0 and f0, and of those only m0 has an affinity
+  //  from f0. Nothing on m1's node has one from m1, p0 and m1 are on different
+  //  nodes, and "no memory" is not in the machine model: those give nothing
+  EXPECT_EQ(MachineQueryCacheTest::results(
+                Machine::MemoryQuery(machine).best_affinity_to(g0).best_affinity_to(f0)),
+            (MSet{m0}));
+  EXPECT_TRUE(MachineQueryCacheTest::results(
+                  Machine::MemoryQuery(machine).best_affinity_to(p2).best_affinity_to(m1))
+                  .empty());
+  EXPECT_TRUE(MachineQueryCacheTest::results(
+                  Machine::MemoryQuery(machine).best_affinity_to(p0).best_affinity_to(m1))
+                  .empty());
+  EXPECT_TRUE(MachineQueryCacheTest::results(
+                  Machine::MemoryQuery(machine).best_affinity_to(p0).best_affinity_to(
+                      Memory::NO_MEMORY))
+                  .empty());
 }
 
 TEST_F(BestAffinityAnchorTest, MemoriesMatchReference)
@@ -1125,6 +1191,53 @@ TEST_F(BestAffinityAnchorTest, MemoriesMatchReference)
               checked++;
             }
   EXPECT_EQ(checked, 4 * 3 * 2 * 4 * 4 * 4);
+}
+
+TEST_F(BestAffinityAnchorTest, MemoriesForProcessorMatchReference)
+{
+  Machine machine = Machine::get_machine();
+  const std::optional<Memory::Kind> kinds[] = {std::nullopt, Memory::SYSTEM_MEM,
+                                               Memory::GPU_FB_MEM, Memory::Z_COPY_MEM};
+  const std::optional<AddressSpace> nodes[] = {std::nullopt, 0, 1};
+  const size_t capacities[] = {0, size_t(512) * 1024};
+  const std::optional<Processor> reach[] = {std::nullopt, g0, p2};
+  const Processor proc_targets[] = {p0, p1, g0, p2};
+  const int proc_weights[][2] = {{1, 0}, {0, 1}, {1, -1}};
+  const std::optional<Memory> mem_targets[] = {std::nullopt, m0, f0, o0, m1};
+  const int mem_weights[][2] = {{1, 0}, {2, 3}};
+  int checked = 0;
+  for(const std::optional<Memory::Kind> &kind : kinds)
+    for(const std::optional<AddressSpace> &node : nodes)
+      for(size_t capacity : capacities)
+        for(const std::optional<Processor> &must_reach : reach)
+          for(Processor p : proc_targets)
+            for(const int *pw : proc_weights)
+              for(const std::optional<Memory> &m : mem_targets)
+                for(const int *mw : mem_weights) {
+                  Machine::MemoryQuery q(machine);
+                  if(kind)
+                    q.only_kind(*kind);
+                  if(node)
+                    q.same_address_space_as((*node == 0) ? p0 : p2);
+                  if(capacity)
+                    q.has_capacity(capacity);
+                  if(must_reach)
+                    q.has_affinity_to(*must_reach);
+                  q.best_affinity_to(p, pw[0], pw[1]);
+                  if(m)
+                    q.best_affinity_to(*m, mw[0], mw[1]);
+                  std::set<Memory> expected = reference_best_mems_for_proc(
+                      machine, kind, node, capacity, must_reach, p, pw[0], pw[1], m,
+                      mw[0], mw[1]);
+                  EXPECT_EQ(MachineQueryCacheTest::results(q), expected)
+                      << "kind " << (kind ? int(*kind) : -1) << " node "
+                      << (node ? int(*node) : -1) << " capacity " << capacity << " reach "
+                      << (must_reach ? must_reach->id : 0) << " proc " << p.id
+                      << " weights " << pw[0] << "," << pw[1] << " mem "
+                      << (m ? m->id : 0) << " weights " << mw[0] << "," << mw[1];
+                  checked++;
+                }
+  EXPECT_EQ(checked, 4 * 3 * 2 * 3 * 4 * 3 * 5 * 2);
 }
 
 // an affinity from a processor on one node to a memory on another must be

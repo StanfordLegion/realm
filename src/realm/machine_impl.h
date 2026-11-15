@@ -610,6 +610,10 @@ namespace Realm {
     // the affinity map of a processor the query is anchored to, or NULL
     const std::map<Memory, Machine::ProcessorMemoryAffinity *> *
     anchor_affinities(Processor p, bool local_only) const;
+    // the same-node outgoing affinity map of a memory, or NULL if it is not in
+    //  the machine model (which "no memory" never is)
+    const std::map<Memory, Machine::MemoryMemoryAffinity *> *
+    local_mem_affinities(Memory m) const;
     // applies the node, kind, capacity and predicate restrictions to one memory
     bool candidate_matches(Memory m) const;
   };

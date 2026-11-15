@@ -2810,6 +2810,23 @@ namespace Realm {
     return local_only ? &(pit->second->pmas.local) : &(pit->second->pmas.all);
   }
 
+  // the caller holds the machine's reader lock (and keeps holding it while it
+  //  uses the returned map)
+  const std::map<Memory, Machine::MemoryMemoryAffinity *> *
+  MemoryQueryImpl::local_mem_affinities(Memory m) const
+  {
+    if(!m.exists())
+      return NULL;
+    std::map<NodeID, MachineNodeInfo *>::const_iterator nit =
+        machine->nodeinfos.find(ID(m).memory_owner_node());
+    if(nit == machine->nodeinfos.end())
+      return NULL;
+    std::map<Memory, MachineMemInfo *>::const_iterator mit = nit->second->mems.find(m);
+    if(mit == nit->second->mems.end())
+      return NULL;
+    return &(mit->second->mmas_out.local);
+  }
+
   // the caller holds the machine's reader lock
   bool MemoryQueryImpl::candidate_matches(Memory m) const
   {
@@ -3003,11 +3020,19 @@ namespace Realm {
 
     if(best_proc_affinity_cost.has_value()) {
       // only memories with a local affinity to the processor can score, so walk
-      // that processor's affinity map instead of every memory of the kind
+      // that processor's affinity map instead of every memory of the kind. With
+      // a memory target as well, a candidate must also have a same-node
+      // affinity from that memory, looked up in the target's outgoing map; a
+      // target that is not in the machine model ("no memory" included) gives
+      // no result, like a processor target that is not
       std::optional<int> best_score;
       std::vector<Memory> candidates;
-      std::vector<Machine::MemoryMemoryAffinity> mem_affinities;
-      bool mem_affinities_fetched = false;
+      const std::map<Memory, Machine::MemoryMemoryAffinity *> *mmas = NULL;
+      if(best_mem_affinity_cost.has_value()) {
+        mmas = local_mem_affinities(best_mem_affinity_cost->memory);
+        if(!mmas)
+          return;
+      }
       const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
           anchor_affinities(best_proc_affinity_cost->proc, true /*local_only*/);
       if(pmas) {
@@ -3019,24 +3044,13 @@ namespace Realm {
           int score =
               (it->second->bandwidth * best_proc_affinity_cost->bandwidth_weight) +
               (it->second->latency * best_proc_affinity_cost->latency_weight);
-          if(best_mem_affinity_cost.has_value()) {
-            if(!mem_affinities_fetched) {
-              machine->get_mem_mem_affinity_unlocked(
-                  mem_affinities, best_mem_affinity_cost->memory, Memory::NO_MEMORY,
-                  true /*local_only*/);
-              mem_affinities_fetched = true;
-            }
-            bool found = false;
-            for(const Machine::MemoryMemoryAffinity &a : mem_affinities) {
-              if(a.m2 == it->first) {
-                score += (a.bandwidth * best_mem_affinity_cost->bandwidth_weight) +
-                         (a.latency * best_mem_affinity_cost->latency_weight);
-                found = true;
-                break;
-              }
-            }
-            if(!found)
+          if(mmas) {
+            std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator mit =
+                mmas->find(it->first);
+            if(mit == mmas->end())
               continue;
+            score += (mit->second->bandwidth * best_mem_affinity_cost->bandwidth_weight) +
+                     (mit->second->latency * best_mem_affinity_cost->latency_weight);
           }
           if(!best_score || (score > *best_score)) {
             best_score = score;
@@ -3060,24 +3074,16 @@ namespace Realm {
     std::optional<int> best_score;
     std::vector<Memory> candidates;
     const Memory target = best_mem_affinity_cost->memory;
-    if(!target.exists())
-      return; // see above
-    const NodeID node = ID(target).memory_owner_node();
-    if(is_restricted_node && (node != NodeID(restricted_node_id)))
+    if(is_restricted_node && target.exists() &&
+       (NodeID(ID(target).memory_owner_node()) != NodeID(restricted_node_id)))
+      return; // the candidates are all on the target's node
+    const std::map<Memory, Machine::MemoryMemoryAffinity *> *mmas =
+        local_mem_affinities(target); // null for "no memory" (see above)
+    if(!mmas)
       return;
-    std::map<NodeID, MachineNodeInfo *>::const_iterator nit =
-        machine->nodeinfos.find(node);
-    if(nit == machine->nodeinfos.end())
-      return;
-    std::map<Memory, MachineMemInfo *>::const_iterator mit =
-        nit->second->mems.find(target);
-    if(mit == nit->second->mems.end())
-      return;
-    const std::map<Memory, Machine::MemoryMemoryAffinity *> &mmas =
-        mit->second->mmas_out.local;
     for(std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator it =
-            mmas.begin();
-        it != mmas.end(); ++it) {
+            mmas->begin();
+        it != mmas->end(); ++it) {
       if(!candidate_matches(it->first))
         continue;
       int score = (it->second->bandwidth * best_mem_affinity_cost->bandwidth_weight) +
