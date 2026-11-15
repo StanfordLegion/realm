@@ -654,12 +654,15 @@ namespace Realm {
       mset.insert((*it).m);
     }
 #else
+    // the maps are in id order and the caller's set is usually empty, so an
+    //  insert at the end is amortized constant per element (a wrong hint only
+    //  costs the usual search); the same in the other accessors below
     for(std::map<NodeID, MachineNodeInfo *>::const_iterator it = nodeinfos.begin();
         it != nodeinfos.end(); ++it)
       for(std::map<Memory, MachineMemInfo *>::const_iterator it2 =
               it->second->mems.begin();
           it2 != it->second->mems.end(); ++it2)
-        mset.insert(it2->first);
+        mset.insert(mset.end(), it2->first);
 #endif
   }
 
@@ -678,7 +681,7 @@ namespace Realm {
       for(std::map<Processor, MachineProcInfo *>::const_iterator it2 =
               it->second->procs.begin();
           it2 != it->second->procs.end(); ++it2)
-        pset.insert(it2->first);
+        pset.insert(pset.end(), it2->first);
 #endif
   }
 
@@ -717,7 +720,7 @@ namespace Realm {
     REALM_ASSERT(mynode != nullptr);
     for(std::map<Processor, MachineProcInfo *>::const_iterator it = mynode->procs.begin();
         it != mynode->procs.end(); ++it)
-      pset.insert(it->first);
+      pset.insert(pset.end(), it->first);
 #endif
   }
 
@@ -743,7 +746,7 @@ namespace Realm {
     if(it != mynode->proc_by_kind.end())
       for(std::map<Processor, MachineProcInfo *>::const_iterator it2 = it->second.begin();
           it2 != it->second.end(); ++it2)
-        pset.insert(it2->first);
+        pset.insert(pset.end(), it2->first);
 #endif
   }
 
@@ -772,7 +775,7 @@ namespace Realm {
     for(std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it2 =
             pmas.begin();
         it2 != pmas.end(); ++it2)
-      mset.insert(it2->first);
+      mset.insert(mset.end(), it2->first);
 #endif
   }
 
@@ -810,15 +813,17 @@ namespace Realm {
       for(std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator it2 =
               mmas.begin();
           it2 != mmas.end(); ++it2)
-        mset.insert(it2->first);
+        mset.insert(mset.end(), it2->first);
     }
     {
+      // the incoming affinities interleave with the outgoing ones above, so
+      //  the hint is only sometimes right here
       const std::map<Memory, Machine::MemoryMemoryAffinity *> &mmas =
           (local_only ? it->second->mmas_in.local : it->second->mmas_in.all);
       for(std::map<Memory, Machine::MemoryMemoryAffinity *>::const_iterator it2 =
               mmas.begin();
           it2 != mmas.end(); ++it2)
-        mset.insert(it2->first);
+        mset.insert(mset.end(), it2->first);
     }
 #endif
   }
@@ -847,7 +852,7 @@ namespace Realm {
     for(std::map<Processor, Machine::ProcessorMemoryAffinity *>::const_iterator it2 =
             pmas.begin();
         it2 != pmas.end(); ++it2)
-      pset.insert(it2->first);
+      pset.insert(pset.end(), it2->first);
 #endif
   }
 
