@@ -3245,6 +3245,11 @@ namespace Realm {
 
     StripedRWLock::AutoReaderLock al(machine->mutex);
     if(affinity_proc.exists()) {
+      // nothing on this node follows a memory of another node, as in the walk
+      //  below and in next_in_run()
+      if(is_restricted_node &&
+         (NodeID(ID(after).memory_owner_node()) != NodeID(restricted_node_id)))
+        return Memory::NO_MEMORY;
       const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
           anchor_affinities(affinity_proc, false /*!local_only*/);
       if(pmas)

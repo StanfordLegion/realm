@@ -1280,6 +1280,24 @@ TEST_F(MachineQueryCacheMultiNodeTest, NodeRestrictedQueries)
       EXPECT_EQ(sharing1.next(procs[0]), Processor::NO_PROC);
       EXPECT_EQ(mnode1.next(mems[0]), Memory::NO_MEMORY);
       EXPECT_EQ(mlocal.next(mems[0]), Memory::NO_MEMORY);
+      // a memory query anchored on a processor (has_affinity_to is its only
+      //  predicate) is walked from that processor's affinity map, which spans
+      //  nodes: an entry from another node has no successor there either
+      Machine::MemoryQuery anchored1(machine);
+      anchored1.same_address_space_as(procs[2]).has_affinity_to(procs[2]);
+      EXPECT_EQ(MachineQueryCacheTest::results(anchored1), (MSet{mems[1]}));
+      EXPECT_EQ(anchored1.next(mems[0]), Memory::NO_MEMORY) << "cache " << cache;
+      EXPECT_EQ(anchored1.next(mems[1]), Memory::NO_MEMORY);
+      Machine::MemoryQuery anchored0(machine);
+      anchored0.same_address_space_as(procs[0]).has_affinity_to(procs[2]);
+      EXPECT_EQ(MachineQueryCacheTest::results(anchored0), (MSet{mems[0]}));
+      EXPECT_EQ(anchored0.next(mems[0]), Memory::NO_MEMORY);
+      EXPECT_EQ(anchored0.next(mems[1]), Memory::NO_MEMORY);
+      // unrestricted, the walk goes on to the next node
+      Machine::MemoryQuery anchored(machine);
+      anchored.has_affinity_to(procs[2]);
+      EXPECT_EQ(anchored.next(mems[0]), mems[1]);
+      EXPECT_EQ(anchored.next(mems[1]), Memory::NO_MEMORY);
       // and nothing follows "no processor" / "no memory"
       EXPECT_EQ(node1.next(Processor::NO_PROC), Processor::NO_PROC);
       EXPECT_EQ(local.next(Processor::NO_PROC), Processor::NO_PROC);
