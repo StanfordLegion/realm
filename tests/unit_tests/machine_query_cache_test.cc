@@ -481,6 +481,51 @@ TEST_F(MachineQueryCacheTest, IterationSurvivesInvalidation)
   EXPECT_EQ(seen_mems, (std::set<Memory>{mems[0], mems[1]}));
 }
 
+// a best-affinity query keeps the list it built until the machine changes:
+//  every update advances the generation its list is stamped with, so the same
+//  query object must see an update that changes its answer, whether or not
+//  the shared cache is in use
+
+TEST_F(MachineQueryCacheTest, ExecutedBestAffinityQuerySeesUpdates)
+{
+  typedef std::set<Processor> PSet;
+  typedef std::set<Memory> MSet;
+  const bool saved = Config::use_machine_query_cache;
+  for(bool cache : {true, false}) {
+    Config::use_machine_query_cache = cache;
+    // best for m1: p2 and p3 (90 against 80); best for p0: m0 (100 against 80)
+    Machine::ProcessorQuery best(machine());
+    best.only_kind(Processor::LOC_PROC).best_affinity_to(mems[1]);
+    Machine::ProcessorQuery best_any(machine());
+    best_any.best_affinity_to(mems[1]);
+    Machine::MemoryQuery best_mem(machine());
+    best_mem.only_kind(Memory::SYSTEM_MEM).best_affinity_to(procs[0]);
+    EXPECT_EQ(results(best), (PSet{procs[2], procs[3]}));
+    EXPECT_EQ(results(best_any), (PSet{procs[2], procs[3]}));
+    EXPECT_EQ(results(best_mem), (MSet{mems[0]}));
+
+    // p1 -> m1 raised above the rest, p0 -> m0 lowered below p0 -> m1
+    set_affinity(procs[1], mems[1], 120, 15);
+    set_affinity(procs[0], mems[0], 70, 10);
+    EXPECT_EQ(results(best), (PSet{procs[1]})) << "cache " << cache;
+    EXPECT_EQ(best.first(), procs[1]);
+    EXPECT_EQ(best.count(), 1u);
+    EXPECT_EQ(best.next(procs[1]), Processor::NO_PROC);
+    EXPECT_EQ(results(best_any), (PSet{procs[1]})) << "cache " << cache;
+    EXPECT_EQ(results(best_mem), (MSet{mems[1]})) << "cache " << cache;
+    EXPECT_EQ(best_mem.first(), mems[1]);
+    EXPECT_EQ(best_mem.count(), 1u);
+
+    // and back
+    set_affinity(procs[1], mems[1], 80, 15);
+    set_affinity(procs[0], mems[0], 100, 10);
+    EXPECT_EQ(results(best), (PSet{procs[2], procs[3]})) << "cache " << cache;
+    EXPECT_EQ(results(best_any), (PSet{procs[2], procs[3]}));
+    EXPECT_EQ(results(best_mem), (MSet{mems[0]})) << "cache " << cache;
+  }
+  Config::use_machine_query_cache = saved;
+}
+
 // the shared cache serves kind-and-memory queries whose answer is empty (a
 //  kind with no processor having an affinity to the memory) as cheaply as
 //  any other, and sees the affinity that later fills them in

@@ -30,10 +30,10 @@
 #include "realm/transfer/ib_memory.h"
 
 #ifdef REALM_ON_WINDOWS
-// TODO: clean up query cache code and renable!
-#define REALM_DISABLE_MACHINE_QUERY_CACHE
-
-static int lrand48() { return rand(); }
+// MSVC's rand() gives 15 bits where lrand48() gives 31; combine two draws so
+//  that an index into a long list (random() on a cached result) reaches every
+//  entry
+static int lrand48() { return (rand() << 15) | rand(); }
 #endif
 
 TYPE_IS_SERIALIZABLE(Realm::NodeAnnounceTag);
@@ -1241,13 +1241,13 @@ namespace Realm {
 
   void MachineImpl::invalidate_query_caches()
   {
-#ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
     // bump the generations: every published snapshot and every list a query
     // is attached to becomes stale, and the next query that can use the cache
     // rebuilds it. Nothing to lock - readers only ever compare generations.
+    // The per-query best-affinity lists are stamped with the generation too,
+    // so this happens whether or not the shared cache is in use.
     MemoryQueryImpl::cache_invalid_count.fetch_add(1);
     ProcessorQueryImpl::cache_invalid_count.fetch_add(1);
-#endif
   }
 
   void cleanup_query_caches()
@@ -2017,7 +2017,6 @@ namespace Realm {
   {
     if(!Config::use_machine_query_cache)
       return false;
-#ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
@@ -2041,16 +2040,12 @@ namespace Realm {
       abort();
     }
     return true;
-#else
-    return false;
-#endif
   }
 
   bool ProcessorQueryImpl::cached_query(Processor p, Processor &pval)
   {
     if(!Config::use_machine_query_cache)
       return false;
-#ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
     // if the machine changed since this query last touched the cache, this
     //  attaches to the rebuilt list and we continue walking from 'p' in it
     const CachedList *clist = cached_list();
@@ -2062,25 +2057,18 @@ namespace Realm {
     else
       pval = next_in_run(items, p, restricted_node_id, Processor::NO_PROC);
     return true;
-#else
-    return false;
-#endif
   }
 
   bool ProcessorQueryImpl::cached_query(size_t &count) const
   {
     if(!Config::use_machine_query_cache)
       return false;
-#ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
     count = is_restricted_node ? run_size(clist->items, restricted_node_id)
                                : clist->items.size();
     return true;
-#else
-    return false;
-#endif
   }
 
   const ProcessorQueryImpl::CachedList *ProcessorQueryImpl::best_affinity_list() const
@@ -2922,7 +2910,6 @@ namespace Realm {
   {
     if(!Config::use_machine_query_cache)
       return false;
-#ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
@@ -2946,16 +2933,12 @@ namespace Realm {
       abort();
     }
     return true;
-#else
-    return false;
-#endif
   }
 
   bool MemoryQueryImpl::cached_query(Memory m, Memory &mval)
   {
     if(!Config::use_machine_query_cache)
       return false;
-#ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
@@ -2965,25 +2948,18 @@ namespace Realm {
     else
       mval = next_in_run(items, m, restricted_node_id, Memory::NO_MEMORY);
     return true;
-#else
-    return false;
-#endif
   }
 
   bool MemoryQueryImpl::cached_query(size_t &count) const
   {
     if(!Config::use_machine_query_cache)
       return false;
-#ifndef REALM_DISABLE_MACHINE_QUERY_CACHE
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
     count = is_restricted_node ? run_size(clist->items, restricted_node_id)
                                : clist->items.size();
     return true;
-#else
-    return false;
-#endif
   }
 
   const MemoryQueryImpl::CachedList *MemoryQueryImpl::best_affinity_list() const
