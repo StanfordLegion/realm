@@ -1864,14 +1864,6 @@ namespace Realm {
     return list;
   }
 
-  const ProcessorQueryImpl::CachedList *ProcessorQueryImpl::attached_list() const
-  {
-    const CachedList *list = attached.load_acquire();
-    if(list && (list->generation == cache_invalid_count.load()))
-      return list;
-    return nullptr;
-  }
-
   void ProcessorQueryImpl::reset_cached_list()
   {
     // the caller holds the only reference to this query (see
@@ -1879,24 +1871,16 @@ namespace Realm {
     attached.store(nullptr);
   }
 
-  // Returns the shared list that can serve this query, or null when the
-  // shared cache does not cover it: best-affinity queries, predicated queries
-  // other than the single memory-affinity predicate, and queries restricted
-  // to two different nodes (which match nothing) walk the machine directly.
-  // A query restricted to one node is answered by that node's run of the
-  // shared list (see range()). Reads nothing but the current snapshot unless
-  // that is stale, in which case a new one is built (under the machine's
-  // reader lock) and published.
-  const ProcessorQueryImpl::CachedList *ProcessorQueryImpl::cached_list() const
+  // The rest of cached_list() (machine_impl.h), for a query the shared cache
+  // covers (shared_cache_covers(): the others - best-affinity queries,
+  // predicated queries other than the single memory-affinity predicate, and
+  // queries restricted to two different nodes, which match nothing - walk
+  // the machine directly). A query restricted to one node is answered by that
+  // node's run of the shared list (see range()). Reads nothing but the
+  // current snapshot unless that is stale, in which case a new one is built
+  // (under the machine's reader lock) and published.
+  const ProcessorQueryImpl::CachedList *ProcessorQueryImpl::cached_list_lookup() const
   {
-    const CachedList *list = attached_list();
-    if(list)
-      return list;
-    if(!is_restricted_kind || (is_restricted_node && (restricted_node_id < 0)) ||
-       best_affinity_cost.has_value() || (!predicates.empty() && !is_cached_mem) ||
-       (unsigned(restricted_kind) >= NUM_PROCESSOR_KINDS))
-      return nullptr;
-
     // the generation is read before the snapshot: a snapshot stamped with it
     //  describes the machine as of this generation or later
     const unsigned generation = cache_invalid_count.load();
@@ -2775,14 +2759,6 @@ namespace Realm {
     return list;
   }
 
-  const MemoryQueryImpl::CachedList *MemoryQueryImpl::attached_list() const
-  {
-    const CachedList *list = attached.load_acquire();
-    if(list && (list->generation == cache_invalid_count.load()))
-      return list;
-    return nullptr;
-  }
-
   void MemoryQueryImpl::reset_cached_list()
   {
     // see ProcessorQueryImpl::reset_cached_list
@@ -2864,19 +2840,10 @@ namespace Realm {
     return true;
   }
 
-  // Returns the shared list that can serve this query, or null when the
-  // shared cache does not cover it (see ProcessorQueryImpl::cached_list).
-  const MemoryQueryImpl::CachedList *MemoryQueryImpl::cached_list() const
+  // The rest of cached_list(), for a query the shared cache covers (see
+  // ProcessorQueryImpl::cached_list_lookup).
+  const MemoryQueryImpl::CachedList *MemoryQueryImpl::cached_list_lookup() const
   {
-    const CachedList *list = attached_list();
-    if(list)
-      return list;
-    if(!is_restricted_kind || (is_restricted_node && (restricted_node_id < 0)) ||
-       !predicates.empty() || (restricted_min_capacity != 0) ||
-       best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value() ||
-       (unsigned(restricted_kind) >= NUM_MEMORY_KINDS))
-      return nullptr;
-
     const unsigned generation = cache_invalid_count.load();
     const KindCache *kc = kind_cache.get(generation);
     if(kc)

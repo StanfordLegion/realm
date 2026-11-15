@@ -450,12 +450,34 @@ namespace Realm {
     mutable std::optional<CachedList> first_own;
     mutable std::vector<std::unique_ptr<CachedList>> own_lists;
 
+    // whether the shared cache can serve this query at all: one kind, at most
+    //  one node, no best-affinity cost, and no predicate other than the one
+    //  memory affinity the by-kind-and-memory lists cover; anything else walks
+    //  the machine
+    bool shared_cache_covers() const
+    {
+      return is_restricted_kind && !(is_restricted_node && (restricted_node_id < 0)) &&
+             !best_affinity_cost.has_value() && (predicates.empty() || is_cached_mem) &&
+             (unsigned(restricted_kind) < NUM_PROCESSOR_KINDS);
+    }
     // the shared list that serves this query (attaching to it as a side
-    //  effect), or null if the shared cache does not cover this query
-    const CachedList *cached_list() const;
-    // the miss path of cached_list(): the snapshot for 'generation' is built
-    //  (or waited for) and the query attached to its list; out of line so the
-    //  hit path, which every cached call takes, stays small enough to inline
+    //  effect), or null if the shared cache does not cover this query. The
+    //  attached-list check (the hit path, which every cached call takes) and
+    //  the coverage test (which every call of an uncovered query takes) are
+    //  defined here so that they are inlined into the callers; the snapshot
+    //  lookup, taken once per query per machine update, is out of line
+    const CachedList *cached_list() const
+    {
+      const CachedList *list = attached_list();
+      if(list)
+        return list;
+      return shared_cache_covers() ? cached_list_lookup() : nullptr;
+    }
+    // the rest of cached_list(), for a query the shared cache covers: its list
+    //  in the current snapshot, attached
+    REALM_ATTR_NOINLINE(const CachedList *cached_list_lookup() const);
+    // the miss path of cached_list_lookup(): the snapshot for 'generation' is
+    //  built (or waited for) and the query attached to its list
     REALM_ATTR_NOINLINE(const CachedList *cached_list_miss(unsigned generation) const);
     // the list for this query's kind and memory in an affinity snapshot
     const CachedList *list_in(const AffinityCache *ac) const;
@@ -472,7 +494,11 @@ namespace Realm {
     // remembers 'list' as this query's current result
     const CachedList *attach(const CachedList *list) const;
     // this query's attached list if it is still current, else null
-    const CachedList *attached_list() const;
+    const CachedList *attached_list() const
+    {
+      const CachedList *list = attached.load_acquire();
+      return (list && (list->generation == cache_invalid_count.load())) ? list : nullptr;
+    }
     // drops the attached list - every change to the query's constraints does this
     void reset_cached_list();
     bool cached_query(Processor p, Processor &pval);
@@ -598,14 +624,33 @@ namespace Realm {
     std::optional<BestMemAffinityCostFn> best_mem_affinity_cost;
 
     // see ProcessorQueryImpl
-    const CachedList *cached_list() const;
+    bool shared_cache_covers() const
+    {
+      return is_restricted_kind && !(is_restricted_node && (restricted_node_id < 0)) &&
+             predicates.empty() && (restricted_min_capacity == 0) &&
+             !best_proc_affinity_cost.has_value() &&
+             !best_mem_affinity_cost.has_value() &&
+             (unsigned(restricted_kind) < NUM_MEMORY_KINDS);
+    }
+    const CachedList *cached_list() const
+    {
+      const CachedList *list = attached_list();
+      if(list)
+        return list;
+      return shared_cache_covers() ? cached_list_lookup() : nullptr;
+    }
+    REALM_ATTR_NOINLINE(const CachedList *cached_list_lookup() const);
     REALM_ATTR_NOINLINE(const CachedList *cached_list_miss(unsigned generation) const);
     KindCache *build_kind_cache(unsigned generation) const;
     const CachedList *best_affinity_list() const;
     REALM_ATTR_NOINLINE(Memory best_affinity_next(Memory after) const);
     void build_best_affinity_list(std::vector<Memory> &result) const;
     const CachedList *attach(const CachedList *list) const;
-    const CachedList *attached_list() const;
+    const CachedList *attached_list() const
+    {
+      const CachedList *list = attached.load_acquire();
+      return (list && (list->generation == cache_invalid_count.load())) ? list : nullptr;
+    }
     void reset_cached_list();
     // the affinity map of a processor the query is anchored to, or NULL
     const std::map<Memory, Machine::ProcessorMemoryAffinity *> *
