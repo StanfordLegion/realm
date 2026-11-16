@@ -167,7 +167,12 @@ namespace Realm {
       bool cfg_lmem_resize_to_max = false;
       bool cfg_multithread_dma = false;
       size_t cfg_hostreg_limit = 1 << 30;
-      int cfg_d2d_stream_priority = -1;
+      // Relative priority of every stream used for DMA: intra-GPU, peer, host<->device
+      // and CUDA IPC copies.  Lower values are higher priority, and task streams are
+      // always created at relative priority 0.  CUDA dispatches the pending blocks of
+      // higher-priority streams first, so the default of -1 keeps a copy kernel from
+      // waiting behind every block of the task kernels that were launched before it.
+      int cfg_dma_stream_priority = -1;
       bool cfg_use_cuda_ipc = true;
       int cfg_pageable_access = 0;
       bool cfg_enable_cupti = false;
