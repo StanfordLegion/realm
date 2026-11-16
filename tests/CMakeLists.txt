@@ -439,6 +439,10 @@ if(TEST_USE_GPU)
     2
     -ll:d2d_streams
     2
+    -ll:p2p_streams
+    2
+    -ll:hd_streams
+    3
   )
   if(REALM_USE_CUDA)
     list(APPEND machine_config_test_ARGS -cuda:dynfb 1 -cuda:dynfb_max 128)
