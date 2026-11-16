@@ -109,6 +109,12 @@ add_benchmark(
 )
 target_link_libraries(task_ubench ${TEST_GPU_LIBS})
 
+add_benchmark(
+  gpu_copy_streams "${REALM_BENCH_DIR}/gpu_copy_streams/gpu_copy_streams.cc"
+  "$<$<BOOL:BENCHMARK_USE_GPU>:${REALM_BENCH_DIR}/gpu_copy_streams/gpu_copy_streams_gpu.cu>"
+)
+target_link_libraries(gpu_copy_streams ${TEST_GPU_LIBS})
+
 set_tests_properties(
   ${_bench_list}
   PROPERTIES TEST_LAUNCHER
