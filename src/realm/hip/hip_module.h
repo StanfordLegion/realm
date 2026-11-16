@@ -117,6 +117,12 @@ namespace Realm {
       int cfg_num_gpus = 0;
       std::string cfg_gpu_idxs;
       unsigned cfg_task_streams = 12, cfg_d2d_streams = 4;
+      // Number of streams per peer GPU.  With a single stream per (src,dst) pair --
+      // the historical behaviour, still available as -ll:p2p_streams 1 -- copies to
+      // the same peer queue behind one another, and a small copy can wait for an
+      // unrelated bulk transfer to drain.  The default matches the CUDA module, where
+      // it was measured; it has not been measured separately on HIP devices.
+      unsigned cfg_p2p_streams = 8;
       bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
            cfg_pin_sysmem = true;
       bool cfg_fences_use_callbacks = false;

@@ -165,7 +165,7 @@ namespace Realm {
           return src->get_next_d2d_stream();
         }
         // P2P copy
-        return src->peer_to_peer_streams[dst->info->index];
+        return src->get_next_p2p_stream(dst->info->index);
       }
       // D2H copy
       if(src_gpu_mem) {
