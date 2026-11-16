@@ -123,6 +123,13 @@ namespace Realm {
       // unrelated bulk transfer to drain.  The default matches the CUDA module, where
       // it was measured; it has not been measured separately on HIP devices.
       unsigned cfg_p2p_streams = 8;
+      // Number of streams per direction for host<->device copies.  With a single stream
+      // each -- the historical behaviour, still available as -ll:hd_streams 1 -- every
+      // host->FB copy for a GPU queues on one stream and every FB->host copy on another,
+      // so a small copy waits for whatever bulk transfer is already in flight.  The
+      // default matches the CUDA module, where 2 was the measured optimum and larger
+      // values were no better; it has not been measured separately on HIP devices.
+      unsigned cfg_hd_streams = 2;
       bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
            cfg_pin_sysmem = true;
       bool cfg_fences_use_callbacks = false;
