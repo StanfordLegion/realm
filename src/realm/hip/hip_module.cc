@@ -1944,8 +1944,10 @@ namespace Realm {
       host_to_device_streams.resize(hd_streams_per_dir, nullptr);
       device_to_host_streams.resize(hd_streams_per_dir, nullptr);
       for(unsigned k = 0; k < hd_streams_per_dir; k++) {
-        host_to_device_streams[k] = new GPUStream(this, worker);
-        device_to_host_streams[k] = new GPUStream(this, worker);
+        host_to_device_streams[k] =
+            new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
+        device_to_host_streams[k] =
+            new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
       }
 
       hipDevice_t dev;
@@ -2046,7 +2048,7 @@ namespace Realm {
       device_to_device_streams.resize(module->config->cfg_d2d_streams, 0);
       for(unsigned i = 0; i < module->config->cfg_d2d_streams; i++)
         device_to_device_streams[i] =
-            new GPUStream(this, worker, module->config->cfg_d2d_stream_priority);
+            new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
 
       // only create p2p streams for devices we can talk to.  cfg_p2p_streams of them
       // per peer lets concurrent copies to the SAME peer overlap rather than serialising
@@ -2061,7 +2063,7 @@ namespace Realm {
         if(info->peers.count((*it)->device) != 0)
           for(unsigned k = 0; k < p2p_streams_per_peer; k++)
             peer_to_peer_streams[((*it)->index * p2p_streams_per_peer) + k] =
-                new GPUStream(this, worker);
+                new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
 
       task_streams.resize(module->config->cfg_task_streams);
       for(unsigned i = 0; i < module->config->cfg_task_streams; i++)
@@ -2415,7 +2417,7 @@ namespace Realm {
           .add_option_int("-ll:d2d_streams", cfg_d2d_streams)
           .add_option_int("-ll:p2p_streams", cfg_p2p_streams)
           .add_option_int("-ll:hd_streams", cfg_hd_streams)
-          .add_option_int("-ll:d2d_priority", cfg_d2d_stream_priority)
+          .add_option_int("-ll:dma_stream_priority", cfg_dma_stream_priority)
           .add_option_int("-ll:gpuworkthread", cfg_use_worker_threads)
           .add_option_int("-ll:gpuworker", cfg_use_shared_worker)
           .add_option_int("-ll:pin", cfg_pin_sysmem)
@@ -3316,7 +3318,8 @@ namespace Realm {
 
                 // do we have a stream for this target?
                 if((*it)->hipipc_streams.count(sender) == 0)
-                  (*it)->hipipc_streams[sender] = new GPUStream(*it, (*it)->worker);
+                  (*it)->hipipc_streams[sender] = new GPUStream(
+                      *it, (*it)->worker, (*it)->module->config->cfg_dma_stream_priority);
               }
             }
           }

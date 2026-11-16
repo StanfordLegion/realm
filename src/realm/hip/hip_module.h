@@ -140,7 +140,13 @@ namespace Realm {
       int cfg_max_ctxsync_threads = 4;
       bool cfg_multithread_dma = false;
       size_t cfg_hostreg_limit = 1 << 30;
-      int cfg_d2d_stream_priority = -1;
+      // Relative priority of every stream used for DMA: intra-GPU, peer, host<->device
+      // and HIP IPC copies.  Lower values are higher priority, and task streams are
+      // always created at relative priority 0.  The default of -1 is meant to keep a
+      // copy kernel from waiting behind every block of the task kernels that were
+      // launched before it, as measured for the CUDA module; the effect has not been
+      // measured on HIP devices.
+      int cfg_dma_stream_priority = -1;
       bool cfg_use_hip_ipc = true;
 
       // resources
