@@ -412,6 +412,8 @@ namespace Realm {
       get_null_task_stream(void) const; // needed by librealm_kokkos.so
       GPUStream *get_next_task_stream(bool create = false);
       GPUStream *get_next_d2d_stream();
+      // Round-robins over the cfg_p2p_streams streams dedicated to `target_index`.
+      GPUStream *get_next_p2p_stream(int target_index);
 
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elemSize,
                                            size_t volume, GPUStream *stream);
@@ -497,10 +499,20 @@ namespace Realm {
       GPUStream *device_to_host_stream = nullptr;
       GPUStream *device_to_device_stream = nullptr;
       std::vector<GPUStream *> device_to_device_streams;
-      std::vector<GPUStream *> peer_to_peer_streams; // indexed by target
+      // flat: [target_index * p2p_streams_per_peer + k].  Flat rather than nested so
+      // the single delete_container_contents() in the destructor still works; entries
+      // for this GPU itself stay null (deleting null is fine).
+      std::vector<GPUStream *> peer_to_peer_streams;
+      unsigned p2p_streams_per_peer = 1; // == max(1, cfg_p2p_streams), fixed at ctor
       std::vector<GPUStream *> task_streams;
       atomic<unsigned> next_task_stream = atomic<unsigned>(0);
       atomic<unsigned> next_d2d_stream = atomic<unsigned>(0);
+      // One rotation counter PER TARGET.  A single shared counter (as the d2d path
+      // uses, where there is only ever one target) would correlate with the target:
+      // with 2 streams and 2 active peers the counter alternates, so one peer would
+      // always land on stream 0 and the other always on stream 1 -- each peer would
+      // use exactly one stream and the extra streams would do nothing.
+      std::vector<atomic<unsigned>> next_p2p_stream;
       size_t cupti_activity_refcount = 0;
 
       GPUEventPool event_pool;

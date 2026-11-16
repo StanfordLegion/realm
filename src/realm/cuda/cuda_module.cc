@@ -1304,6 +1304,13 @@ namespace Realm {
       return device_to_device_streams[d2d_stream_index];
     }
 
+    GPUStream *GPU::get_next_p2p_stream(int target_index)
+    {
+      const unsigned tgt = static_cast<unsigned>(target_index);
+      unsigned k = (next_p2p_stream[tgt].fetch_add(1) % p2p_streams_per_peer);
+      return peer_to_peer_streams[(tgt * p2p_streams_per_peer) + k];
+    }
+
     static void launch_kernel(const Realm::Cuda::GPU::GPUFuncInfo &func_info,
                               void *params, size_t num_elems, GPUStream *stream)
     {
@@ -2397,12 +2404,21 @@ namespace Realm {
             new GPUStream(this, worker, module->config->cfg_d2d_stream_priority);
       }
 
-      // Create a peer_to_peer stream for all our known devices.  This will isolate the
-      // DMA requests for each GPU
-      peer_to_peer_streams.resize(module->gpu_info.size(), nullptr);
+      // Create peer_to_peer streams for all our known devices.  This isolates the DMA
+      // requests for each GPU from one another; cfg_p2p_streams of them per peer also
+      // lets concurrent copies to the SAME peer overlap rather than serialising behind
+      // whatever is already queued.  Clamped to >=1 so the round-robin modulo in
+      // get_next_p2p_stream cannot divide by zero.
+      p2p_streams_per_peer = std::max(1u, module->config->cfg_p2p_streams);
+      peer_to_peer_streams.resize(module->gpu_info.size() * p2p_streams_per_peer,
+                                  nullptr);
+      next_p2p_stream.resize(module->gpu_info.size(), atomic<unsigned>(0));
       for(const GPUInfo *gpu_info : module->gpu_info) {
         if(gpu_info->index != info->index) {
-          peer_to_peer_streams[gpu_info->index] = new GPUStream(this, worker);
+          for(unsigned k = 0; k < p2p_streams_per_peer; k++) {
+            peer_to_peer_streams[(gpu_info->index * p2p_streams_per_peer) + k] =
+                new GPUStream(this, worker);
+          }
         }
       }
 
@@ -2778,6 +2794,7 @@ namespace Realm {
       config_map.insert({"dynfb_max_size", &cfg_dynfb_max_size});
       config_map.insert({"task_streams", &cfg_task_streams});
       config_map.insert({"d2d_streams", &cfg_d2d_streams});
+      config_map.insert({"p2p_streams", &cfg_p2p_streams});
 
       resource_map.insert({"gpu", &res_num_gpus});
       resource_map.insert({"fbmem", &res_min_fbmem_size});
@@ -2825,6 +2842,7 @@ namespace Realm {
           .add_option_string("-ll:gpu_ids", cfg_gpu_idxs)
           .add_option_int("-ll:streams", cfg_task_streams)
           .add_option_int("-ll:d2d_streams", cfg_d2d_streams)
+          .add_option_int("-ll:p2p_streams", cfg_p2p_streams)
           .add_option_int("-ll:d2d_priority", cfg_d2d_stream_priority)
           .add_option_int("-ll:gpuworkthread", cfg_use_worker_threads)
           .add_option_int("-ll:gpuworker", cfg_use_shared_worker)

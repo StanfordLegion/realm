@@ -127,6 +127,15 @@ namespace Realm {
       int cfg_num_gpus = 0;
       std::string cfg_gpu_idxs;
       unsigned cfg_task_streams = 12, cfg_d2d_streams = 4;
+      // Number of streams per peer GPU.  With a single stream per (src,dst) pair --
+      // the historical behaviour, still available as -ll:p2p_streams 1 -- copies to
+      // the same peer queue behind one another, and a small copy can wait for an
+      // unrelated bulk transfer to drain.  8 is the measured floor of that effect:
+      // a contended peer copy runs at 1.02x its uncontended time at 8 streams,
+      // versus 7.07x at 4 and 14.85x at 1, with no measurable cost when idle.
+      // The requirement scales as (queued transfers + batches of the copy in
+      // flight), which is why 4 is not enough.
+      unsigned cfg_p2p_streams = 8;
       bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
            cfg_pin_sysmem = true;
       bool cfg_fences_use_callbacks = false;
