@@ -1304,6 +1304,18 @@ namespace Realm {
       return device_to_device_streams[d2d_stream_index];
     }
 
+    GPUStream *GPU::get_next_h2d_stream()
+    {
+      unsigned k = (next_h2d_stream.fetch_add(1) % hd_streams_per_dir);
+      return host_to_device_streams[k];
+    }
+
+    GPUStream *GPU::get_next_d2h_stream()
+    {
+      unsigned k = (next_d2h_stream.fetch_add(1) % hd_streams_per_dir);
+      return device_to_host_streams[k];
+    }
+
     GPUStream *GPU::get_next_p2p_stream(int target_index)
     {
       const unsigned tgt = static_cast<unsigned>(target_index);
@@ -2303,8 +2315,13 @@ namespace Realm {
 
       event_pool.init_pool();
 
-      host_to_device_stream = new GPUStream(this, worker);
-      device_to_host_stream = new GPUStream(this, worker);
+      hd_streams_per_dir = std::max(1u, module->config->cfg_hd_streams);
+      host_to_device_streams.resize(hd_streams_per_dir, nullptr);
+      device_to_host_streams.resize(hd_streams_per_dir, nullptr);
+      for(unsigned k = 0; k < hd_streams_per_dir; k++) {
+        host_to_device_streams[k] = new GPUStream(this, worker);
+        device_to_host_streams[k] = new GPUStream(this, worker);
+      }
 
       CUdevice dev;
       int numSMs;
@@ -2445,8 +2462,8 @@ namespace Realm {
       event_pool.empty_pool();
 
       // destroy streams
-      delete host_to_device_stream;
-      delete device_to_host_stream;
+      delete_container_contents(host_to_device_streams);
+      delete_container_contents(device_to_host_streams);
 
       delete_container_contents(device_to_device_streams);
 
@@ -2795,6 +2812,7 @@ namespace Realm {
       config_map.insert({"task_streams", &cfg_task_streams});
       config_map.insert({"d2d_streams", &cfg_d2d_streams});
       config_map.insert({"p2p_streams", &cfg_p2p_streams});
+      config_map.insert({"hd_streams", &cfg_hd_streams});
 
       resource_map.insert({"gpu", &res_num_gpus});
       resource_map.insert({"fbmem", &res_min_fbmem_size});
@@ -2843,6 +2861,7 @@ namespace Realm {
           .add_option_int("-ll:streams", cfg_task_streams)
           .add_option_int("-ll:d2d_streams", cfg_d2d_streams)
           .add_option_int("-ll:p2p_streams", cfg_p2p_streams)
+          .add_option_int("-ll:hd_streams", cfg_hd_streams)
           .add_option_int("-ll:d2d_priority", cfg_d2d_stream_priority)
           .add_option_int("-ll:gpuworkthread", cfg_use_worker_threads)
           .add_option_int("-ll:gpuworker", cfg_use_shared_worker)

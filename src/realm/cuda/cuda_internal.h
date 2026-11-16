@@ -414,6 +414,9 @@ namespace Realm {
       GPUStream *get_next_d2d_stream();
       // Round-robins over the cfg_p2p_streams streams dedicated to `target_index`.
       GPUStream *get_next_p2p_stream(int target_index);
+      // Round-robin over this GPU's host<->device stream pools (-ll:hd_streams).
+      GPUStream *get_next_h2d_stream();
+      GPUStream *get_next_d2h_stream();
 
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elemSize,
                                            size_t volume, GPUStream *stream);
@@ -495,8 +498,16 @@ namespace Realm {
       std::set<Memory> peer_fbs;
 
       // streams for different copy types and a pile for actual tasks
-      GPUStream *host_to_device_stream = nullptr;
-      GPUStream *device_to_host_stream = nullptr;
+      // One pool per direction.  These were single streams until measurement showed a
+      // 256 KiB host->FB copy taking 56x longer when it queued behind bulk traffic on the
+      // same GPU, while identical traffic on OTHER GPUs' streams cost 2.7x -- the same
+      // head-of-line blocking the peer streams had.  hd_streams_per_dir is clamped to >=1
+      // so the round-robin modulo cannot divide by zero.
+      std::vector<GPUStream *> host_to_device_streams;
+      std::vector<GPUStream *> device_to_host_streams;
+      unsigned hd_streams_per_dir = 1; // == max(1, cfg_hd_streams), fixed at ctor
+      atomic<unsigned> next_h2d_stream = atomic<unsigned>(0);
+      atomic<unsigned> next_d2h_stream = atomic<unsigned>(0);
       GPUStream *device_to_device_stream = nullptr;
       std::vector<GPUStream *> device_to_device_streams;
       // flat: [target_index * p2p_streams_per_peer + k].  Flat rather than nested so

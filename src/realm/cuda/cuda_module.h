@@ -136,6 +136,24 @@ namespace Realm {
       // The requirement scales as (queued transfers + batches of the copy in
       // flight), which is why 4 is not enough.
       unsigned cfg_p2p_streams = 8;
+
+      // Number of streams per direction for host<->device copies.  With a single stream
+      // each -- the historical behaviour, still available as -ll:hd_streams 1 -- every
+      // host->FB copy for a GPU queues on one stream and every FB->host copy on another,
+      // so a small copy waits for whatever bulk transfer is already in flight.  Measured
+      // on P100: a 256 KiB host->FB copy takes 49.5 us alone and 2786 us behind 32 MiB of
+      // same-GPU traffic (56x), while 96 MiB on OTHER GPUs' streams costs only 2.7x.
+      //
+      // 2 is the measured optimum, and the sweep {1,2,4,8,16} is the reason it is not
+      // higher.  Going 1 -> 2 raises AGGREGATE host<->device bandwidth by ~1.5x (h2d
+      // 11.26 -> 17.07 GiB/s, d2h 12.43 -> 18.75 GiB/s), i.e. one stream cannot saturate
+      // PCIe on its own, and roughly halves the head-of-line penalty.  Beyond 2 the d2h
+      // direction merely plateaus, but h2d REGRESSES all the way back to single-stream
+      // throughput (11.23 GiB/s at 4, 8 and 16) -- reproducible to <1.5 % and not yet
+      // explained, so do not raise this default without re-measuring on the target
+      // hardware.  Note the knob only ever buys ~2x: the residual contention is the copy
+      // engine / link, not the stream count.
+      unsigned cfg_hd_streams = 2;
       bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
            cfg_pin_sysmem = true;
       bool cfg_fences_use_callbacks = false;

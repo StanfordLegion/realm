@@ -215,12 +215,12 @@ namespace Realm {
       }
       // D2H copy
       if(src_gpu_mem) {
-        return src->device_to_host_stream;
+        return src->get_next_d2h_stream();
       }
       // H2D or H2H copy.  We use the destination gpu here instead, since it does not
       // matter what GPU actually accesses the host memory, as we want to minimize any
       // peer traffic that might occur
-      return dst->host_to_device_stream;
+      return dst->get_next_h2d_stream();
     }
 
     static void get_nonaffine_strides(size_t &pitch, size_t &height,
