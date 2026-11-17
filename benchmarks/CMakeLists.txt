@@ -92,6 +92,8 @@ set(event_ubench_ARGS -s 100)
 add_benchmark(event_ubench "${REALM_BENCH_DIR}/event_ubench/event_ubench.cc")
 add_benchmark(lock_chains "${REALM_BENCH_DIR}/lock_chains/lock_chains.cc")
 add_benchmark(lock_contention "${REALM_BENCH_DIR}/lock_contention/lock_contention.cc")
+set(machine_query_bench_ARGS -iters 20 -reps 1 -threads 1,2 -ll:cpu 2 -ll:util 1)
+add_benchmark(machine_query_bench "${REALM_BENCH_DIR}/machine_query_bench/machine_query_bench.cc")
 set(reducetest_ARGS -batches 1) # Run short version
 add_benchmark(reducetest "${REALM_BENCH_DIR}/reducetest/reducetest.cc")
 
