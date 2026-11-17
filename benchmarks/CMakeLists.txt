@@ -114,6 +114,22 @@ add_benchmark(
   "$<$<BOOL:BENCHMARK_USE_GPU>:${REALM_BENCH_DIR}/gpu_copy_streams/gpu_copy_streams_gpu.cu>"
 )
 target_link_libraries(gpu_copy_streams ${TEST_GPU_LIBS})
+set_tests_properties(gpu_copy_streams PROPERTIES SKIP_RETURN_CODE 77)
+if(REALM_USE_CUDA OR REALM_USE_HIP)
+  foreach(case placement aligned_capacity load_capacity launch_error zero_grid verify invalid_args)
+    add_test(NAME gpu_copy_streams_${case}
+      COMMAND ${CMAKE_COMMAND}
+        "-DPROGRAM=$<TARGET_FILE:gpu_copy_streams>" "-DCASE=${case}"
+        "-DMPIEXEC_EXECUTABLE=${MPIEXEC_EXECUTABLE}"
+        "-DMPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}"
+        "-DMPIEXEC_PREFLAGS=${MPIEXEC_PREFLAGS}"
+        "-DMPIEXEC_POSTFLAGS=${MPIEXEC_POSTFLAGS}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/gpu_copy_streams/check.cmake")
+    set_tests_properties(gpu_copy_streams_${case} PROPERTIES
+      LABELS integration RUN_SERIAL TRUE RESOURCE_LOCK "gpu;network"
+      ENVIRONMENT "${TEST_ENV}" TIMEOUT 120)
+  endforeach()
+endif()
 
 set_tests_properties(
   ${_bench_list}

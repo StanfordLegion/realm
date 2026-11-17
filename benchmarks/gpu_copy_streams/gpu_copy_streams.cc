@@ -39,9 +39,11 @@
 // framebuffer to another's, needs -ll:gpu 2 or more), h2d and d2h (host memory to
 // and from a framebuffer).  The default runs every path the machine has.
 //
+// Use -peer-rank N (and optionally -peer-gpu I) to select a framebuffer in
+// another rank, exercising IPC on one host or network staging across hosts.
 // The time reported is the copy's OperationTimeline, complete_time - start_time.
-// The benchmark does not check the copied data.  Results go to standard output,
-// because the logger's print level is compiled out of release builds.
+// -verify checks the measured payload outside the timing loop.  Results go to standard
+// output, because the logger's print level is compiled out of release builds.
 //
 // Examples (two GPUs):
 //   stream count, copy-engine target behind 4 background copies:
@@ -51,6 +53,7 @@
 
 #include "realm.h"
 #include "realm/cmdline.h"
+#include "realm/inst_layout.h"
 
 #if defined(REALM_USE_CUDA)
 #include "realm/cuda/cuda_module.h"
@@ -65,6 +68,11 @@
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <cstdlib>
+#include <limits>
+#include <map>
+#include <memory>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -78,6 +86,7 @@ enum
   TOP_LEVEL_TASK = Processor::TASK_ID_FIRST_AVAILABLE + 0,
   COPY_PROF_TASK,
   LOAD_TASK,
+  LOAD_PROF_TASK,
 };
 
 enum
@@ -95,6 +104,9 @@ namespace TestConfig {
   size_t rects = 4;            // rectangles in the measured copy (1 = dense)
   size_t pad = sizeof(elem_t); // bytes of a second, uncopied field (0 = none)
   size_t iters = 100;          // measured copies per path, after one warmup
+  bool verify = false;         // verify the measured copy outside the timing loop
+  int peer_rank = -1;          // -1: second local GPU; otherwise a remote Realm rank
+  size_t peer_gpu = 0;         // framebuffer index within peer_rank
   bool samples = false;        // print every sample
 
   size_t bg = 0;              // background copies issued before each measured copy
@@ -108,7 +120,7 @@ namespace TestConfig {
   size_t load_spin = 1000;     // arithmetic iterations per thread
   size_t load_wave = 2;        // measured copies per wave of load tasks
   size_t load_delay_us = 1000; // delay between launching a wave and the first copy
-}; // namespace TestConfig
+};                             // namespace TestConfig
 
 // ---------------------------------------------------------------------------
 // copy shapes
@@ -126,6 +138,8 @@ struct Shape {
   std::vector<size_t> field_sizes;
   size_t block_size = 0;
   size_t bytes = 0;
+
+  std::unique_ptr<InstanceLayoutGeneric> layout;
 
   Shape(size_t want_bytes, size_t num_rects, size_t pad)
   {
@@ -151,6 +165,9 @@ struct Shape {
       block_size = 1; // array of structs
     }
     bytes = num_rects * run * sizeof(elem_t);
+    const int dim_order[1] = {0};
+    layout.reset(InstanceLayoutGeneric::choose_instance_layout(
+        inst_space, InstanceLayoutConstraints(field_sizes, block_size), dim_order));
   }
 
   void destroy()
@@ -163,18 +180,18 @@ struct Shape {
   // bytes one instance of this shape occupies
   size_t footprint() const
   {
-    size_t element = 0;
-    for(size_t field_size : field_sizes) {
-      element += field_size;
-    }
-    return inst_space.volume() * element;
+    // Account for alignment between consecutive allocations as well as AoS
+    // field padding. Use this same layout when creating the actual instances.
+    const size_t alignment = layout->alignment_reqd;
+    const size_t padding = (alignment - layout->bytes_used % alignment) % alignment;
+    if(layout->bytes_used > std::numeric_limits<size_t>::max() - padding)
+      return std::numeric_limits<size_t>::max();
+    return layout->bytes_used + padding;
   }
 
   bool create(Memory mem, RegionInstance &inst) const
   {
-    RegionInstance::create_instance(inst, mem, inst_space, field_sizes, block_size,
-                                    ProfilingRequestSet())
-        .wait();
+    RegionInstance::create_instance(inst, mem, *layout, ProfilingRequestSet()).wait();
     return inst.exists();
   }
 
@@ -223,6 +240,26 @@ static void copy_prof_task(const void *args, size_t arglen, const void *userdata
 // compute load
 // ---------------------------------------------------------------------------
 
+struct LoadTiming {
+  long long start = -1, complete = -1;
+  UserEvent measured;
+};
+
+static void load_prof_task(const void *args, size_t arglen, const void *, size_t,
+                           Processor)
+{
+  ProfilingResponse response(args, arglen);
+  assert(response.user_data_size() == sizeof(LoadTiming *));
+  auto *timing = *static_cast<LoadTiming *const *>(response.user_data());
+  ProfilingMeasurements::OperationTimeline timeline;
+  bool found = response.get_measurement(timeline);
+  assert(found && timeline.start_time >= 0 &&
+         timeline.complete_time >= timeline.start_time);
+  timing->start = timeline.start_time;
+  timing->complete = timeline.complete_time;
+  timing->measured.trigger();
+}
+
 struct LoadArgs {
   RegionInstance buffer;
   size_t elements;
@@ -267,12 +304,18 @@ static void load_task(const void *args, size_t arglen, const void *userdata,
 // The load on one GPU: a buffer for the kernels to write to, and the processor
 // that runs the tasks.
 struct LoadGPU {
+  Memory fb = Memory::NO_MEMORY;
+  Event done = Event::NO_EVENT;
+  long long task_span_total = 0;
   Processor proc = Processor::NO_PROC;
   RegionInstance buffer = RegionInstance::NO_INST;
   size_t elements = 0;
 };
 
 struct Load {
+  static constexpr size_t buffer_bytes = (1 << 20) * sizeof(float);
+  Processor profiling_proc;
+  std::vector<LoadTiming> timings;
   std::vector<LoadGPU> gpus;
   Event done = Event::NO_EVENT;
   long long wave_start = 0;
@@ -283,7 +326,11 @@ struct Load {
 
   void add_gpu(Memory fb)
   {
+    for(const auto &existing : gpus)
+      if(existing.fb == fb)
+        return;
     LoadGPU gpu;
+    gpu.fb = fb;
     gpu.proc = Machine::ProcessorQuery(Machine::get_machine())
                    .only_kind(Processor::TOC_PROC)
                    .best_affinity_to(fb)
@@ -302,6 +349,9 @@ struct Load {
       log_app.warning() << "no room for the load buffer in " << fb;
       return;
     }
+    // The instance was created by the root task; a remote load task needs its
+    // metadata before constructing an accessor. Keep this setup outside waves.
+    gpu.buffer.fetch_metadata(gpu.proc).wait();
     gpus.push_back(gpu);
   }
 
@@ -310,7 +360,11 @@ struct Load {
   {
     std::vector<Event> launched, finished;
     wave_start = Clock::current_time_in_nanoseconds();
-    for(const LoadGPU &gpu : gpus) {
+    timings.clear();
+    timings.resize(gpus.size() * TestConfig::load_tasks);
+    size_t index = 0;
+    for(LoadGPU &gpu : gpus) {
+      std::vector<Event> gpu_finished;
       for(size_t i = 0; i < TestConfig::load_tasks; i++) {
         LoadArgs largs;
         largs.buffer = gpu.buffer;
@@ -320,20 +374,52 @@ struct Load {
         largs.spin = TestConfig::load_spin;
         largs.launched = UserEvent::create_user_event();
         launched.push_back(largs.launched);
-        finished.push_back(gpu.proc.spawn(LOAD_TASK, &largs, sizeof(largs)));
+        LoadTiming *timing = &timings[index++];
+        timing->measured = UserEvent::create_user_event();
+        ProfilingRequestSet requests;
+        requests.add_request(profiling_proc, LOAD_PROF_TASK, &timing, sizeof(timing))
+            .add_measurement<ProfilingMeasurements::OperationTimeline>();
+        gpu_finished.push_back(
+            gpu.proc.spawn(LOAD_TASK, &largs, sizeof(largs), requests));
       }
+      gpu.done = Event::merge_events(gpu_finished);
+      finished.push_back(gpu.done);
     }
     done = Event::merge_events(finished);
     Event::merge_events(launched).wait();
     std::this_thread::sleep_for(std::chrono::microseconds(TestConfig::load_delay_us));
   }
 
+  // Pending task events describe completion, not instantaneous SM occupancy.
   bool busy() const { return !done.has_triggered(); }
+  bool pending(Memory fb) const
+  {
+    for(const auto &gpu : gpus)
+      if(gpu.fb == fb)
+        return !gpu.done.has_triggered();
+    return false;
+  }
 
   void finish()
   {
     done.wait();
     wave_total += Clock::current_time_in_nanoseconds() - wave_start;
+    std::vector<Event> measured;
+    for(const auto &timing : timings)
+      measured.push_back(timing.measured);
+    Event::merge_events(measured).wait();
+    for(size_t g = 0; g < gpus.size(); g++) {
+      long long first = std::numeric_limits<long long>::max(), last = 0;
+      for(size_t t = 0; t < TestConfig::load_tasks; t++) {
+        const auto &timing = timings[g * TestConfig::load_tasks + t];
+        first = std::min(first, timing.start);
+        last = std::max(last, timing.complete);
+      }
+      gpus[g].task_span_total += last - first;
+      if(TestConfig::samples)
+        std::cout << "LOAD_WAVE gpu=" << gpus[g].fb << " wave=" << waves
+                  << " task_span_ms=" << (last - first) / 1e6 << std::endl;
+    }
     waves++;
   }
 
@@ -358,7 +444,7 @@ struct PathSpec {
 
 struct Sample {
   long long nanoseconds;
-  bool busy;
+  bool busy, source_pending, destination_pending, wave_first;
 };
 
 // nearest-rank quantile of a sorted vector
@@ -372,7 +458,7 @@ static double quantile_us(const std::vector<long long> &sorted, double q)
   return sorted[rank - 1] / 1e3;
 }
 
-static void run_path(const PathSpec &spec, Processor p)
+static bool run_path(const PathSpec &spec, Processor p)
 {
   Shape shape(TestConfig::bytes, TestConfig::rects, TestConfig::pad);
   Shape bg_shape(TestConfig::bg_bytes, TestConfig::bg_rects, 0);
@@ -380,16 +466,39 @@ static void run_path(const PathSpec &spec, Processor p)
   RegionInstance src = RegionInstance::NO_INST, dst = RegionInstance::NO_INST;
   RegionInstance bg_src = RegionInstance::NO_INST;
   std::vector<RegionInstance> bg_dsts;
-  // Realm aborts when an instance does not fit, so check the sizes first.  This
-  // ignores whatever else is in the memories and the load buffer.
-  size_t src_need = shape.footprint();
-  size_t dst_need = shape.footprint() + TestConfig::bg * bg_shape.footprint();
-  if(TestConfig::bg > 0) {
-    src_need += bg_shape.footprint();
+  std::set<Memory> load_memories;
+  if(TestConfig::load_tasks > 0) {
+    if((TestConfig::load_place & 1) && spec.src.kind() == Memory::GPU_FB_MEM)
+      load_memories.insert(spec.src);
+    if((TestConfig::load_place & 2) && spec.dst.kind() == Memory::GPU_FB_MEM)
+      load_memories.insert(spec.dst);
   }
-  bool ok = (spec.src == spec.dst) ? ((src_need + dst_need) <= spec.src.capacity())
-                                   : ((src_need <= spec.src.capacity()) &&
-                                      (dst_need <= spec.dst.capacity()));
+  Memory verify_mem = Memory::NO_MEMORY;
+  if(TestConfig::verify)
+    verify_mem = Machine::MemoryQuery(Machine::get_machine())
+                     .local_address_space()
+                     .only_kind(Memory::SYSTEM_MEM)
+                     .first();
+  // Reserve the complete footprint per memory before attempting any allocation.
+  // Division before multiplication also prevents overflow for large -bg values.
+  std::map<Memory, size_t> needed;
+  auto reserve = [&](Memory mem, size_t bytes, size_t count = 1) {
+    if(!mem.exists())
+      return false;
+    size_t &used = needed[mem];
+    if(bytes && count > (mem.capacity() - used) / bytes)
+      return false;
+    used += bytes * count;
+    return true;
+  };
+  bool ok = reserve(spec.src, shape.footprint()) && reserve(spec.dst, shape.footprint());
+  if(TestConfig::bg > 0)
+    ok = ok && reserve(spec.src, bg_shape.footprint()) &&
+         reserve(spec.dst, bg_shape.footprint(), TestConfig::bg);
+  for(Memory mem : load_memories)
+    ok = ok && reserve(mem, Load::buffer_bytes);
+  if(TestConfig::verify)
+    ok = ok && reserve(verify_mem, shape.footprint(), 2);
   ok = ok && shape.create(spec.src, src) && shape.create(spec.dst, dst);
   if(ok && (TestConfig::bg > 0)) {
     ok = bg_shape.create(spec.src, bg_src);
@@ -405,25 +514,31 @@ static void run_path(const PathSpec &spec, Processor p)
   }
 
   Load load;
-  if(ok && (TestConfig::load_tasks > 0)) {
+  load.profiling_proc = p;
+  if(ok) {
 #if defined(REALM_USE_CUDA) || defined(REALM_USE_HIP)
-    if(((TestConfig::load_place & 1) != 0) && (spec.src.kind() == Memory::GPU_FB_MEM)) {
-      load.add_gpu(spec.src);
-    }
-    if(((TestConfig::load_place & 2) != 0) && (spec.dst.kind() == Memory::GPU_FB_MEM) &&
-       (spec.dst != spec.src)) {
-      load.add_gpu(spec.dst);
-    }
+    for(Memory mem : load_memories)
+      load.add_gpu(mem);
 #endif
-    if(!load.enabled()) {
-      log_app.warning() << "path " << spec.name << ": no GPU to put the load on";
+    if(TestConfig::load_tasks && !load.enabled())
+      log_app.warning() << "path " << spec.name << ": no GPU selected for load";
+  }
+  RegionInstance verify_src = RegionInstance::NO_INST,
+                 verify_dst = RegionInstance::NO_INST;
+  if(ok && TestConfig::verify) {
+    ok = shape.create(verify_mem, verify_src) && shape.create(verify_mem, verify_dst);
+    if(ok) {
+      AffineAccessor<elem_t, 1> input(verify_src, FID_PAYLOAD);
+      for(PointInRectIterator<1> it(shape.inst_space.bounds); it.valid; it.step())
+        input[it.p] = elem_t(42) + it.p[0] * 17;
+      shape.copy(verify_src, src, ProfilingRequestSet()).wait();
     }
   }
 
   if(!ok) {
-    log_app.warning() << "path " << spec.name << ": instances do not fit in " << spec.src
-                      << " and " << spec.dst
-                      << ", skipping (raise -ll:fsize / -ll:zsize / -ll:csize)";
+    std::cout << "SKIP path=" << spec.name << ": instances do not fit in " << spec.src
+              << " and " << spec.dst
+              << ", skipping (raise -ll:fsize / -ll:zsize / -ll:csize)" << std::endl;
   } else {
     // warmup, which also tells us how many hops the measured copy takes
     long long warmup_time = -1;
@@ -453,6 +568,9 @@ static void run_path(const PathSpec &spec, Processor p)
       Sample sample;
       sample.nanoseconds = -1;
       sample.busy = load.enabled() && load.busy();
+      sample.source_pending = load.pending(spec.src);
+      sample.destination_pending = load.pending(spec.dst);
+      sample.wave_first = load.enabled() && ((it % TestConfig::load_wave) == 0);
 
       CopyProfResult result;
       result.nanoseconds = &sample.nanoseconds;
@@ -474,7 +592,11 @@ static void run_path(const PathSpec &spec, Processor p)
       samples.push_back(sample);
       if(TestConfig::samples) {
         std::cout << "SAMPLE path=" << spec.name << " iter=" << it
-                  << " busy=" << sample.busy << " ns=" << sample.nanoseconds << std::endl;
+                  << " busy=" << sample.busy
+                  << " source_pending=" << sample.source_pending
+                  << " destination_pending=" << sample.destination_pending
+                  << " wave_first=" << sample.wave_first << " ns=" << sample.nanoseconds
+                  << std::endl;
       }
 
       if(load.enabled() &&
@@ -483,10 +605,16 @@ static void run_path(const PathSpec &spec, Processor p)
       }
     }
 
-    std::vector<long long> all, busy, idle;
+    std::vector<long long> all, busy, idle, first, source_pending, destination_pending;
     size_t over_1ms = 0;
     for(const Sample &sample : samples) {
       all.push_back(sample.nanoseconds);
+      if(sample.wave_first)
+        first.push_back(sample.nanoseconds);
+      if(sample.source_pending)
+        source_pending.push_back(sample.nanoseconds);
+      if(sample.destination_pending)
+        destination_pending.push_back(sample.nanoseconds);
       (sample.busy ? busy : idle).push_back(sample.nanoseconds);
       if(sample.nanoseconds > 1000000) {
         over_1ms++;
@@ -495,11 +623,15 @@ static void run_path(const PathSpec &spec, Processor p)
     std::sort(all.begin(), all.end());
     std::sort(busy.begin(), busy.end());
     std::sort(idle.begin(), idle.end());
+    std::sort(first.begin(), first.end());
+    std::sort(source_pending.begin(), source_pending.end());
+    std::sort(destination_pending.begin(), destination_pending.end());
 
     std::cout << "RESULT path=" << spec.name << " src=" << spec.src << " dst=" << spec.dst
-              << " bytes=" << shape.bytes << " rects=" << TestConfig::rects
-              << " pad=" << TestConfig::pad << " hops=" << num_hops
-              << " bg=" << bg_dsts.size()
+              << " src_rank=" << spec.src.address_space()
+              << " dst_rank=" << spec.dst.address_space() << " bytes=" << shape.bytes
+              << " rects=" << TestConfig::rects << " pad=" << TestConfig::pad
+              << " hops=" << num_hops << " bg=" << bg_dsts.size()
               << " bg_bytes=" << (bg_dsts.empty() ? 0 : bg_shape.bytes)
               << " load_gpus=" << load.gpus.size() << " n=" << all.size()
               << " min_us=" << quantile_us(all, 0.0)
@@ -513,13 +645,43 @@ static void run_path(const PathSpec &spec, Processor p)
       std::cout << "LOAD path=" << spec.name << " waves=" << load.waves
                 << " mean_wave_ms="
                 << (load.waves ? (load.wave_total / 1e6 / load.waves) : 0.0)
-                << " busy_n=" << busy.size()
+                << " first_n=" << first.size()
+                << " first_median_us=" << quantile_us(first, 0.5)
+                << " first_p99_us=" << quantile_us(first, 0.99)
+                << " source_pending_n=" << source_pending.size()
+                << " source_pending_median_us=" << quantile_us(source_pending, 0.5)
+                << " destination_pending_n=" << destination_pending.size()
+                << " destination_pending_median_us="
+                << quantile_us(destination_pending, 0.5) << " busy_n=" << busy.size()
                 << " busy_median_us=" << quantile_us(busy, 0.5)
                 << " idle_n=" << idle.size()
                 << " idle_median_us=" << quantile_us(idle, 0.5) << std::endl;
+      for(const auto &gpu : load.gpus)
+        std::cout << "LOAD_GPU path=" << spec.name << " gpu=" << gpu.fb
+                  << " rank=" << gpu.fb.address_space()
+                  << " mean_task_span_ms=" << gpu.task_span_total / 1e6 / load.waves
+                  << " waves=" << load.waves << std::endl;
+    }
+    if(TestConfig::verify) {
+      shape.copy(dst, verify_dst, ProfilingRequestSet()).wait();
+      AffineAccessor<elem_t, 1> output(verify_dst, FID_PAYLOAD);
+      size_t checked = 0, bad = 0;
+      for(IndexSpaceIterator<1> r(shape.domain); r.valid; r.step())
+        for(PointInRectIterator<1> it(r.rect); it.valid; it.step()) {
+          bad += output[it.p] != elem_t(42) + it.p[0] * 17;
+          checked++;
+        }
+      std::cout << "VERIFY path=" << spec.name << " checked=" << checked
+                << " errors=" << bad << std::endl;
+      if(bad)
+        std::exit(1);
     }
   }
 
+  if(verify_src.exists())
+    verify_src.destroy();
+  if(verify_dst.exists())
+    verify_dst.destroy();
   load.destroy();
   if(src.exists()) {
     src.destroy();
@@ -535,6 +697,7 @@ static void run_path(const PathSpec &spec, Processor p)
   }
   shape.destroy();
   bg_shape.destroy();
+  return ok;
 }
 
 static void top_level_task(const void *args, size_t arglen, const void *userdata,
@@ -553,6 +716,7 @@ static void top_level_task(const void *args, size_t arglen, const void *userdata
   if(fbs.empty()) {
     std::cout << "no GPU framebuffer memories (run with -ll:gpu), nothing to do"
               << std::endl;
+    Runtime::get_runtime().shutdown(Processor::get_current_finish_event(), 77);
     return;
   }
 
@@ -575,12 +739,27 @@ static void top_level_task(const void *args, size_t arglen, const void *userdata
     paths.push_back(PathSpec{"local", fbs[0], fbs[0]});
   }
   if(all || (want == "peer")) {
-    if(fbs.size() >= 2) {
-      paths.push_back(PathSpec{"peer", fbs[0], fbs[1]});
+    if(TestConfig::peer_rank < 0) {
+      if(fbs.size() >= 2)
+        paths.push_back(PathSpec{"peer", fbs[0], fbs[1]});
+      else
+        std::cout << "path peer: needs two local GPUs or -peer-rank, skipping"
+                  << std::endl;
     } else {
-      std::cout << "path peer: needs two GPUs in this process, skipping" << std::endl;
+      std::vector<Memory> peers;
+      Machine::MemoryQuery peer_query(machine);
+      peer_query.only_kind(Memory::GPU_FB_MEM);
+      for(auto mem : peer_query)
+        if(int(mem.address_space()) == TestConfig::peer_rank && mem.capacity() > 0)
+          peers.push_back(mem);
+      if(TestConfig::peer_gpu < peers.size() && peers[TestConfig::peer_gpu] != fbs[0])
+        paths.push_back(PathSpec{"peer", fbs[0], peers[TestConfig::peer_gpu]});
+      else
+        std::cout << "path peer: requested rank/GPU is unavailable, skipping"
+                  << std::endl;
     }
   }
+
   if(all || (want == "h2d") || (want == "d2h")) {
     if(!host.exists()) {
       std::cout << "paths h2d/d2h: no " << TestConfig::host << " host memory, skipping"
@@ -598,9 +777,11 @@ static void top_level_task(const void *args, size_t arglen, const void *userdata
     std::cout << "no path to measure for -path " << want << std::endl;
   }
 
-  for(const PathSpec &spec : paths) {
-    run_path(spec, p);
-  }
+  size_t measured = 0;
+  for(const PathSpec &spec : paths)
+    measured += run_path(spec, p);
+  Runtime::get_runtime().shutdown(Processor::get_current_finish_event(),
+                                  measured ? 0 : 77);
 }
 
 int main(int argc, char **argv)
@@ -617,6 +798,9 @@ int main(int argc, char **argv)
       .add_option_int("-pad", TestConfig::pad)
       .add_option_int("-iters", TestConfig::iters)
       .add_option_bool("-samples", TestConfig::samples)
+      .add_option_bool("-verify", TestConfig::verify)
+      .add_option_int("-peer-rank", TestConfig::peer_rank)
+      .add_option_int("-peer-gpu", TestConfig::peer_gpu)
       .add_option_int("-bg", TestConfig::bg)
       .add_option_int("-bg-bytes", TestConfig::bg_bytes)
       .add_option_int("-bg-rects", TestConfig::bg_rects)
@@ -628,11 +812,26 @@ int main(int argc, char **argv)
       .add_option_int("-load-wave", TestConfig::load_wave)
       .add_option_int("-load-delay-us", TestConfig::load_delay_us);
   bool ok = cp.parse_command_line(argc, const_cast<const char **>(argv));
-  assert(ok);
-  TestConfig::load_wave = std::max<size_t>(TestConfig::load_wave, 1);
+  ok = ok && TestConfig::iters > 0 && TestConfig::rects > 0 && TestConfig::bytes > 0 &&
+       TestConfig::bg_rects > 0 && TestConfig::bg_bytes > 0 &&
+       TestConfig::load_wave > 0 && TestConfig::load_place >= 0 &&
+       TestConfig::load_place <= 3 && TestConfig::peer_rank >= -1;
+  ok = ok &&
+       (TestConfig::path == "all" || TestConfig::path == "local" ||
+        TestConfig::path == "peer" || TestConfig::path == "h2d" ||
+        TestConfig::path == "d2h") &&
+       (TestConfig::host == "zc" || TestConfig::host == "sys");
+  if(!ok) {
+    std::cerr << "invalid gpu_copy_streams arguments" << std::endl;
+    rt.shutdown(Event::NO_EVENT, 1);
+    return rt.wait_for_shutdown();
+  }
 
   Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/, TOP_LEVEL_TASK,
                                    CodeDescriptor(top_level_task), ProfilingRequestSet())
+      .wait();
+  Processor::register_task_by_kind(Processor::LOC_PROC, false, LOAD_PROF_TASK,
+                                   CodeDescriptor(load_prof_task), ProfilingRequestSet())
       .wait();
   Processor::register_task_by_kind(Processor::LOC_PROC, false /*!global*/, COPY_PROF_TASK,
                                    CodeDescriptor(copy_prof_task), ProfilingRequestSet())
@@ -648,9 +847,7 @@ int main(int argc, char **argv)
                     .first();
   assert(p.exists());
 
-  Event e = rt.collective_spawn(p, TOP_LEVEL_TASK, 0, 0);
-
-  rt.shutdown(e);
+  rt.collective_spawn(p, TOP_LEVEL_TASK, 0, 0);
 
   return rt.wait_for_shutdown();
 }

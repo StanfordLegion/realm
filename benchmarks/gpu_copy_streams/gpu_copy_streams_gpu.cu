@@ -16,6 +16,14 @@
  */
 
 #include "realm.h"
+#include <climits>
+#include <cstdio>
+#include <cstdlib>
+#ifdef REALM_USE_CUDA
+#include <cuda_runtime.h>
+#else
+#include <hip/hip_runtime.h>
+#endif
 
 // Compute load for gpu_copy_streams.  Every thread runs a chain of `spin`
 // dependent floating-point operations and stores the result, so a block lasts for
@@ -40,5 +48,22 @@ void launch_load_kernel(float *buffer, size_t elements, size_t blocks, size_t th
                         size_t spin, hipStream_t stream)
 #endif
 {
+  if(blocks == 0 || threads == 0 || blocks > UINT_MAX || threads > UINT_MAX) {
+    fprintf(stderr, "invalid load kernel grid/block dimensions\n");
+    std::exit(1);
+  }
   load_kernel<<<blocks, threads, 0, stream>>>(buffer, elements, spin);
+#ifdef REALM_USE_CUDA
+  cudaError_t error = cudaGetLastError();
+  if(error != cudaSuccess) {
+    fprintf(stderr, "load kernel launch failed: %s\n", cudaGetErrorString(error));
+    std::exit(1);
+  }
+#else
+  hipError_t error = hipGetLastError();
+  if(error != hipSuccess) {
+    fprintf(stderr, "load kernel launch failed: %s\n", hipGetErrorString(error));
+    std::exit(1);
+  }
+#endif
 }
