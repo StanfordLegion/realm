@@ -382,13 +382,20 @@ TEST_F(MachineQueryCacheTest, ConcurrentReadsThroughCopies)
   mq.only_kind(Memory::SYSTEM_MEM);
   Machine::ProcessorQuery bq(machine());
   bq.only_kind(Processor::LOC_PROC).best_affinity_to(mems[0]);
+  // two the shared cache does not serve, which build their own lists on the
+  //  first next() of whichever copy gets there first: p2 and p3 reach m1 at
+  //  bandwidth 90; only m1 has 2 MB
+  Machine::ProcessorQuery aq(machine());
+  aq.has_affinity_to(mems[1], 85 /*min bandwidth*/);
+  Machine::MemoryQuery cq(machine());
+  cq.has_capacity(size_t(1536) * 1024);
 
   std::atomic<bool> go(false);
   std::atomic<int> failures(0);
   std::vector<std::thread> readers;
   for(int t = 0; t < 4; t++) {
     // each thread holds its own copy, all sharing one implementation
-    readers.emplace_back([&, pq, mq, bq] {
+    readers.emplace_back([&, pq, mq, bq, aq, cq] {
       while(!go.load())
         ;
       for(int i = 0; i < 2000; i++) {
@@ -405,6 +412,16 @@ TEST_F(MachineQueryCacheTest, ConcurrentReadsThroughCopies)
           failures.fetch_add(1);
         if(!mq.first().exists() || !bq.random().exists())
           failures.fetch_add(1);
+        n = 0;
+        for(Processor p = aq.first(); p.exists(); p = aq.next(p))
+          n++;
+        if((n != 2) || (aq.count() != 2) || (aq.first() != procs[2]))
+          failures.fetch_add(1);
+        n = 0;
+        for(Memory m = cq.first(); m.exists(); m = cq.next(m))
+          n++;
+        if((n != 1) || (cq.count() != 1) || (cq.random() != mems[1]))
+          failures.fetch_add(1);
       }
     });
   }
@@ -416,6 +433,8 @@ TEST_F(MachineQueryCacheTest, ConcurrentReadsThroughCopies)
   EXPECT_EQ(pq.count(), 4u);
   EXPECT_EQ(mq.count(), 2u);
   EXPECT_EQ(bq.count(), 2u);
+  EXPECT_EQ(aq.count(), 2u);
+  EXPECT_EQ(cq.count(), 1u);
 }
 
 // invalidating and rebuilding the shared cache while other queries are
@@ -566,6 +585,25 @@ TEST_F(MachineQueryCacheTest, IterationSurvivesInvalidation)
   mq.only_kind(Memory::SYSTEM_MEM);
   std::set<Memory> seen_mems;
   for(Memory m = mq.first(); m.exists(); m = mq.next(m)) {
+    seen_mems.insert(m);
+    invalidate_caches();
+  }
+  EXPECT_EQ(seen_mems, (std::set<Memory>{mems[0], mems[1]}));
+
+  // the same for queries that build their own list on next(): every step
+  //  finds the list stale and rebuilds it for the new generation
+  Machine::ProcessorQuery aq(machine());
+  aq.has_affinity_to(mems[1], 85 /*min bandwidth*/);
+  seen.clear();
+  for(Processor p = aq.first(); p.exists(); p = aq.next(p)) {
+    seen.insert(p);
+    invalidate_caches();
+  }
+  EXPECT_EQ(seen, (std::set<Processor>{procs[2], procs[3]}));
+  Machine::MemoryQuery cq(machine());
+  cq.has_capacity(1);
+  seen_mems.clear();
+  for(Memory m = cq.first(); m.exists(); m = cq.next(m)) {
     seen_mems.insert(m);
     invalidate_caches();
   }
@@ -918,6 +956,171 @@ TEST_F(MachineQueryCacheTest, MemoryAffinityQueriesUseTheCache)
   EXPECT_EQ(into0.next(mems[0]), mems[1]);
   EXPECT_EQ(MemoryQueryImpl::walk_count(), walks2 + 3);
   EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored2);
+  Config::use_machine_query_cache = saved;
+}
+
+// a query the shared cache does not serve builds the list of its matches on
+//  its first next() and answers from it from then on - except a memory query
+//  anchored on a processor, whose few candidates are cheaper to step through;
+//  first(), count() and random() use that list but never build one; a
+//  machine update makes it stale, the next next() rebuilds it (an iteration
+//  goes on across the update), refinement frees the lists, and with the
+//  cache off nothing is built
+TEST_F(MachineQueryCacheTest, OwnListBuiltOnNext)
+{
+  typedef std::set<Processor> PSet;
+  typedef std::set<Memory> MSet;
+  const bool saved = Config::use_machine_query_cache;
+  Config::use_machine_query_cache = true;
+  // a bounded affinity predicate (an anchored pass) and a capacity bound (a
+  //  walk): p2 and p3 reach m1 at bandwidth 90; only m1 has 2 MB
+  QueryStorageProbe<Machine::ProcessorQuery, ProcessorQueryImpl> pq(machine());
+  pq.has_affinity_to(mems[1], 85 /*min bandwidth*/);
+  QueryStorageProbe<Machine::MemoryQuery, MemoryQueryImpl> mq(machine());
+  mq.has_capacity(size_t(1536) * 1024);
+  unsigned long anchored = ProcessorQueryImpl::anchored_count();
+  unsigned long walks = MemoryQueryImpl::walk_count();
+  EXPECT_EQ(pq.count(), 2u);
+  EXPECT_EQ(pq.first(), procs[2]);
+  EXPECT_TRUE(PSet({procs[2], procs[3]}).count(pq.random()) > 0);
+  EXPECT_EQ(mq.count(), 1u);
+  EXPECT_EQ(mq.first(), mems[1]);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 3);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 2);
+  EXPECT_EQ(pq.owned_list_count(), 0u);
+  EXPECT_EQ(mq.owned_list_count(), 0u);
+  // the first next() builds the list with one more pass; then every call is
+  //  a lookup in it
+  EXPECT_EQ(pq.next(procs[2]), procs[3]);
+  EXPECT_EQ(mq.next(mems[0]), mems[1]);
+  EXPECT_EQ(pq.owned_list_count(), 1u);
+  EXPECT_EQ(mq.owned_list_count(), 1u);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 4);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 3);
+  EXPECT_EQ(pq.next(procs[3]), Processor::NO_PROC);
+  EXPECT_EQ(pq.next(procs[0]), procs[2]);
+  EXPECT_EQ(pq.count(), 2u);
+  EXPECT_EQ(pq.first(), procs[2]);
+  EXPECT_TRUE(PSet({procs[2], procs[3]}).count(pq.random()) > 0);
+  EXPECT_EQ(mq.next(mems[1]), Memory::NO_MEMORY);
+  EXPECT_EQ(mq.count(), 1u);
+  EXPECT_EQ(mq.first(), mems[1]);
+  EXPECT_EQ(mq.random(), mems[1]);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 4);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 3);
+  EXPECT_EQ(pq.owned_list_count(), 1u);
+  EXPECT_EQ(mq.owned_list_count(), 1u);
+  // a memory query anchored on a processor steps through that processor's
+  //  few affinities instead of building a list (p0 reaches m0 at bandwidth
+  //  100 and m1 at 80)
+  QueryStorageProbe<Machine::MemoryQuery, MemoryQueryImpl> vq(machine());
+  vq.has_affinity_to(procs[0], 90 /*min bandwidth*/);
+  EXPECT_EQ(vq.first(), mems[0]);
+  EXPECT_EQ(vq.next(mems[0]), Memory::NO_MEMORY);
+  EXPECT_EQ(vq.count(), 1u);
+  EXPECT_EQ(vq.owned_list_count(), 0u);
+  // one with a bound on a local memory target walks, and builds its list on
+  //  the first next() like the capacity query (m1 -> m0 is 60)
+  QueryStorageProbe<Machine::MemoryQuery, MemoryQueryImpl> lq(machine());
+  lq.has_affinity_to(mems[0], 50 /*min bandwidth*/);
+  const unsigned long lwalks = MemoryQueryImpl::walk_count();
+  EXPECT_EQ(lq.count(), 1u);
+  EXPECT_EQ(lq.owned_list_count(), 0u);
+  EXPECT_EQ(lq.next(mems[0]), mems[1]);
+  EXPECT_EQ(lq.owned_list_count(), 1u);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), lwalks + 2);
+  EXPECT_EQ(lq.next(mems[1]), Memory::NO_MEMORY);
+  EXPECT_EQ(lq.count(), 1u);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), lwalks + 2);
+  // a machine update: the list is stale, so count() passes over the
+  //  candidates again and the next next() builds a second list
+  invalidate_caches();
+  anchored = ProcessorQueryImpl::anchored_count();
+  walks = MemoryQueryImpl::walk_count();
+  EXPECT_EQ(pq.count(), 2u);
+  EXPECT_EQ(mq.count(), 1u);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 1);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 1);
+  EXPECT_EQ(pq.owned_list_count(), 1u);
+  EXPECT_EQ(mq.owned_list_count(), 1u);
+  EXPECT_EQ(pq.next(procs[2]), procs[3]);
+  EXPECT_EQ(mq.next(mems[0]), mems[1]);
+  EXPECT_EQ(pq.owned_list_count(), 2u);
+  EXPECT_EQ(mq.owned_list_count(), 2u);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 2);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 2);
+  // the answers are the walk's, and a copy shares the list
+  EXPECT_EQ(results(pq), (PSet{procs[2], procs[3]}));
+  EXPECT_EQ(results(mq), (MSet{mems[1]}));
+  expect_cache_agrees_with_walk(pq);
+  expect_cache_agrees_with_walk(mq);
+  Config::use_machine_query_cache = true;
+  {
+    Machine::ProcessorQuery copy(pq);
+    anchored = ProcessorQueryImpl::anchored_count();
+    EXPECT_EQ(copy.next(procs[2]), procs[3]);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored);
+  }
+  // refinement frees the lists
+  pq.only_kind(Processor::LOC_PROC);
+  mq.only_kind(Memory::SYSTEM_MEM);
+  EXPECT_EQ(pq.owned_list_count(), 0u);
+  EXPECT_EQ(mq.owned_list_count(), 0u);
+  EXPECT_EQ(results(pq), (PSet{procs[2], procs[3]}));
+  EXPECT_EQ(results(mq), (MSet{mems[1]}));
+  // an update in the middle of an iteration: the list built for the new
+  //  generation continues it
+  Machine::ProcessorQuery walk(machine());
+  walk.has_affinity_to(mems[1], 85);
+  Processor p = walk.first();
+  EXPECT_EQ(p, procs[2]);
+  invalidate_caches();
+  EXPECT_EQ(walk.next(p), procs[3]);
+  EXPECT_EQ(walk.next(procs[3]), Processor::NO_PROC);
+  // with the cache off, every call passes over the candidates and no list is
+  //  built
+  Config::use_machine_query_cache = false;
+  QueryStorageProbe<Machine::ProcessorQuery, ProcessorQueryImpl> pq2(machine());
+  pq2.has_affinity_to(mems[1], 85);
+  QueryStorageProbe<Machine::MemoryQuery, MemoryQueryImpl> mq2(machine());
+  mq2.has_capacity(size_t(1536) * 1024);
+  anchored = ProcessorQueryImpl::anchored_count();
+  walks = MemoryQueryImpl::walk_count();
+  EXPECT_EQ(pq2.first(), procs[2]);
+  EXPECT_EQ(pq2.next(procs[2]), procs[3]);
+  EXPECT_EQ(pq2.next(procs[3]), Processor::NO_PROC);
+  EXPECT_EQ(mq2.first(), mems[1]);
+  EXPECT_EQ(mq2.next(mems[1]), Memory::NO_MEMORY);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 3);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 2);
+  EXPECT_EQ(pq2.owned_list_count(), 0u);
+  EXPECT_EQ(mq2.owned_list_count(), 0u);
+  Config::use_machine_query_cache = saved;
+}
+
+// a best-affinity memory query that also has a processor predicate carries a
+//  processor anchor; once a machine update makes its list of the best stale,
+//  next() must rebuild that list, not step through every memory the
+//  processor reaches (p0 reaches m0 at 100 and m1 at 80: the best is m0 alone)
+TEST_F(MachineQueryCacheTest, StaleBestAffinityListWithProcessorPredicate)
+{
+  const bool saved = Config::use_machine_query_cache;
+  for(bool cache : {true, false}) {
+    Config::use_machine_query_cache = cache;
+    Machine::MemoryQuery q(machine());
+    q.has_affinity_to(procs[0]).best_affinity_to(procs[0]);
+    EXPECT_EQ(q.first(), mems[0]) << "cache " << cache;
+    invalidate_caches();
+    EXPECT_EQ(q.next(mems[0]), Memory::NO_MEMORY) << "cache " << cache;
+    EXPECT_EQ(q.count(), 1u);
+    EXPECT_EQ(results(q), (std::set<Memory>{mems[0]}));
+    // and from a fresh query whose first call is the next()
+    Machine::MemoryQuery fresh(machine());
+    fresh.best_affinity_to(procs[0]).has_affinity_to(procs[0]);
+    EXPECT_EQ(fresh.next(mems[0]), Memory::NO_MEMORY) << "cache " << cache;
+    EXPECT_EQ(fresh.next(Memory::NO_MEMORY), Memory::NO_MEMORY);
+    EXPECT_EQ(results(fresh), (std::set<Memory>{mems[0]}));
+  }
   Config::use_machine_query_cache = saved;
 }
 

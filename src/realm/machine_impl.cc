@@ -2132,7 +2132,7 @@ namespace Realm {
     return true;
   }
 
-  const ProcessorQueryImpl::CachedList *ProcessorQueryImpl::best_affinity_list() const
+  const ProcessorQueryImpl::CachedList *ProcessorQueryImpl::own_list() const
   {
     const CachedList *list = attached_list();
     if(list)
@@ -2156,22 +2156,73 @@ namespace Realm {
     // read the generation before walking the machine, so a change during the
     //  walk makes the result stale and the next call rebuilds it
     built->generation = cache_invalid_count.load();
-    build_best_affinity_list(built->items);
+    build_own_list(built->items);
     if(heap)
       own_lists.push_back(std::move(heap));
     return attach(built);
   }
 
-  // the successor of 'after' in the best-affinity list; for a query restricted
+  // the successor of 'after' in the query's own list; for a query restricted
   //  to one node, an 'after' on another node has no successor, as in the walk
   //  and in cached_query(). Out of line, so that next_match()'s walk, which
   //  does not take this branch, keeps its size
-  Processor ProcessorQueryImpl::best_affinity_next(Processor after) const
+  Processor ProcessorQueryImpl::own_list_next(Processor after) const
   {
-    const std::vector<Processor> &items = best_affinity_list()->items;
+    const std::vector<Processor> &items = own_list()->items;
     if(is_restricted_node)
       return next_in_run(items, after, restricted_node_id, Processor::NO_PROC);
     return successor(items, after, Processor::NO_PROC);
+  }
+
+  void ProcessorQueryImpl::build_own_list(std::vector<Processor> &result) const
+  {
+    if(best_affinity_cost.has_value())
+      build_best_affinity_list(result);
+    else
+      build_match_list(result);
+  }
+
+  void ProcessorQueryImpl::build_match_list(std::vector<Processor> &result) const
+  {
+    StripedRWLock::AutoReaderLock al(machine->mutex);
+    if(anchor_mem) {
+      // the candidates are the anchor memory's affinity map, in id order
+      proc_anchored++;
+      for_each_anchored(Processor::NO_PROC, [&result](Processor p) {
+        result.push_back(p);
+        return true;
+      });
+      return;
+    }
+    // otherwise the walk of count_matches(), collecting
+    proc_walks++;
+    std::map<NodeID, MachineNodeInfo *>::const_iterator it;
+    if(is_restricted_node)
+      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    else
+      it = machine->nodeinfos.begin();
+    while(it != machine->nodeinfos.end()) {
+      if(is_restricted_node && (it->first != restricted_node_id))
+        break;
+      const std::map<Processor, MachineProcInfo *> *plist;
+      if(is_restricted_kind) {
+        std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
+            it2 = it->second->proc_by_kind.find(restricted_kind);
+        plist = (it2 != it->second->proc_by_kind.end()) ? &(it2->second) : 0;
+      } else
+        plist = &(it->second->procs);
+      if(plist)
+        for(std::map<Processor, MachineProcInfo *>::const_iterator it2 = plist->begin();
+            it2 != plist->end(); ++it2) {
+          bool ok = true;
+          for(std::vector<ProcQueryPredicate *>::const_iterator it3 = predicates.begin();
+              ok && (it3 != predicates.end()); it3++)
+            ok = (*it3)->matches_predicate(machine, it2->first, it2->second);
+          if(ok)
+            result.push_back(it2->first);
+        }
+      ++it;
+    }
   }
 
   void ProcessorQueryImpl::build_best_affinity_list(std::vector<Processor> &result) const
@@ -2404,7 +2455,7 @@ namespace Realm {
     // If best affinity is specified, we need to collect all candidates
     // and filter by best affinity cost
     if(best_affinity_cost.has_value()) {
-      const std::vector<Processor> &best = best_affinity_list()->items;
+      const std::vector<Processor> &best = own_list()->items;
       hint_position(best, 0);
       return best.empty() ? Processor::NO_PROC : best.front();
     }
@@ -2507,7 +2558,7 @@ namespace Realm {
 #else
     // best affinity: the successor of 'after' in the query's own list
     if(best_affinity_cost.has_value())
-      return best_affinity_next(after);
+      return own_list_next(after);
 
     if(anchor_mem)
       return anchored_next(after);
@@ -2567,9 +2618,16 @@ namespace Realm {
     Processor pval = Processor::NO_PROC;
     if(cached_query(after, pval))
       return pval;
-    else
-      // caches may be invalidated in the middle of a query
+    // the shared cache covers this query but its snapshot is being rebuilt
+    //  (the machine changed during the build): step as the walk does, like
+    //  before, rather than build a list this query would then keep using
+    if(shared_cache_covers())
       return next_match(after);
+    // the shared cache does not serve this query: a next() is the start of
+    //  an iteration, so the query builds the list of its matches (a
+    //  best-affinity query has one already) and its steps are lookups in it
+    //  from here on
+    return own_list_next(after);
   }
 
   size_t ProcessorQueryImpl::count_matches(void) const
@@ -2604,7 +2662,7 @@ namespace Realm {
 #else
     // If best affinity is specified, use the Level 2 cache
     if(best_affinity_cost.has_value()) {
-      return best_affinity_list()->items.size();
+      return own_list()->items.size();
     }
 
     size_t count = 0;
@@ -2703,7 +2761,7 @@ namespace Realm {
     // If best affinity is specified, the results should be in the Level 2 cache
     // Pick randomly from those
     if(best_affinity_cost.has_value()) {
-      const std::vector<Processor> &best = best_affinity_list()->items;
+      const std::vector<Processor> &best = own_list()->items;
       if(!best.empty()) {
         size_t idx = lrand48() % best.size();
         return best[idx];
@@ -3402,9 +3460,9 @@ namespace Realm {
     return true;
   }
 
-  const MemoryQueryImpl::CachedList *MemoryQueryImpl::best_affinity_list() const
+  const MemoryQueryImpl::CachedList *MemoryQueryImpl::own_list() const
   {
-    // see ProcessorQueryImpl::best_affinity_list
+    // see ProcessorQueryImpl::own_list
     const CachedList *list = attached_list();
     if(list)
       return list;
@@ -3421,19 +3479,73 @@ namespace Realm {
       built = heap.get();
     }
     built->generation = cache_invalid_count.load();
-    build_best_affinity_list(built->items);
+    build_own_list(built->items);
     if(heap)
       own_lists.push_back(std::move(heap));
     return attach(built);
   }
 
-  // see ProcessorQueryImpl::best_affinity_next
-  Memory MemoryQueryImpl::best_affinity_next(Memory after) const
+  // see ProcessorQueryImpl::own_list_next
+  Memory MemoryQueryImpl::own_list_next(Memory after) const
   {
-    const std::vector<Memory> &items = best_affinity_list()->items;
+    const std::vector<Memory> &items = own_list()->items;
     if(is_restricted_node)
       return next_in_run(items, after, restricted_node_id, Memory::NO_MEMORY);
     return successor(items, after, Memory::NO_MEMORY);
+  }
+
+  void MemoryQueryImpl::build_own_list(std::vector<Memory> &result) const
+  {
+    if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value())
+      build_best_affinity_list(result);
+    else
+      build_match_list(result);
+  }
+
+  void MemoryQueryImpl::build_match_list(std::vector<Memory> &result) const
+  {
+    StripedRWLock::AutoReaderLock al(machine->mutex);
+    if(anchored()) {
+      mem_anchored++;
+      for_each_anchored(Memory::NO_MEMORY, [&result](Memory m) {
+        result.push_back(m);
+        return true;
+      });
+      return;
+    }
+    // otherwise the walk of count_matches(), collecting
+    mem_walks++;
+    std::map<NodeID, MachineNodeInfo *>::const_iterator it;
+    if(is_restricted_node)
+      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    else
+      it = machine->nodeinfos.begin();
+    while(it != machine->nodeinfos.end()) {
+      if(is_restricted_node && (it->first != restricted_node_id))
+        break;
+      const std::map<Memory, MachineMemInfo *> *plist;
+      if(is_restricted_kind) {
+        std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
+            it->second->mem_by_kind.find(restricted_kind);
+        plist = (it2 != it->second->mem_by_kind.end()) ? &(it2->second) : 0;
+      } else
+        plist = &(it->second->mems);
+      if(plist)
+        for(std::map<Memory, MachineMemInfo *>::const_iterator it2 = plist->begin();
+            it2 != plist->end(); ++it2) {
+          bool ok =
+              ((restricted_min_capacity == 0) ||
+               (MemoryImpl::get_memory_size(machine->get_runtime_impl(), it2->first) >=
+                restricted_min_capacity));
+          for(std::vector<MemoryQueryPredicate *>::const_iterator it3 =
+                  predicates.begin();
+              ok && (it3 != predicates.end()); it3++)
+            ok = (*it3)->matches_predicate(machine, it2->first, it2->second);
+          if(ok)
+            result.push_back(it2->first);
+        }
+      ++it;
+    }
   }
 
   void MemoryQueryImpl::build_best_affinity_list(std::vector<Memory> &result) const
@@ -3559,15 +3671,15 @@ namespace Realm {
     // If best affinity is specified, we need to collect all candidates
     // and filter by best affinity cost
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
-      const std::vector<Memory> &best = best_affinity_list()->items;
+      const std::vector<Memory> &best = own_list()->items;
       hint_position(best, 0);
       return best.empty() ? Memory::NO_MEMORY : best.front();
     }
 
     // a query anchored on a processor is never one the shared cache covers
-    //  (its predicates are not the one lone memory affinity) and never builds
-    //  a list of its own (see cache_next), so it goes straight to that
-    //  processor's affinity map
+    //  (its predicates are not the one lone memory affinity) and, best
+    //  affinity having been handled above, never holds a list of its own
+    //  (see cache_next), so it goes straight to that processor's affinity map
     if(anchor_proc)
       return anchored_first();
     Memory mval = Memory::NO_MEMORY;
@@ -3669,7 +3781,7 @@ namespace Realm {
 #else
     // best affinity: see ProcessorQueryImpl::next_match
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value())
-      return best_affinity_next(after);
+      return own_list_next(after);
 
     if(anchored())
       return anchored_next(after);
@@ -3731,9 +3843,19 @@ namespace Realm {
     Memory mval = Memory::NO_MEMORY;
     if(cached_query(after, mval))
       return mval;
-    else
-      // caches may be invalidated in the middle of a query
-      return next_match(after);
+    if(shared_cache_covers())
+      return next_match(after); // see ProcessorQueryImpl::cache_next
+    // a query anchored on a processor - and not a best-affinity query, whose
+    //  own list of the best is what must be (re)built here - steps through
+    //  the few memories that processor reaches: cheaper than building a list
+    //  of them (an iteration over them is four or five steps). Every other
+    //  uncovered query builds its list, see ProcessorQueryImpl::cache_next.
+    //  (The probe above stays first: a test on this path would cost every
+    //  cached step a load and a branch)
+    if(anchor_proc && !best_proc_affinity_cost.has_value() &&
+       !best_mem_affinity_cost.has_value())
+      return anchored_next(after);
+    return own_list_next(after);
   }
 
   size_t MemoryQueryImpl::count_matches(void) const
@@ -3770,7 +3892,7 @@ namespace Realm {
 #else
     // If best affinity is specified, use the Level 2 cache
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
-      return best_affinity_list()->items.size();
+      return own_list()->items.size();
     }
 
     if(anchor_proc)
@@ -3873,7 +3995,7 @@ namespace Realm {
     // If best affinity is specified, the results should be in the Level 2 cache
     // Pick randomly from those
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value()) {
-      const std::vector<Memory> &best = best_affinity_list()->items;
+      const std::vector<Memory> &best = own_list()->items;
       if(!best.empty()) {
         size_t idx = lrand48() % best.size();
         return best[idx];

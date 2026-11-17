@@ -459,15 +459,23 @@ namespace Realm {
     //  object and may read concurrently, so this is an atomic; the lists it
     //  points to are immutable and outlive it (see QueryCacheSlot)
     mutable atomic<const CachedList *> attached;
-    // best-affinity results depend on the query's cost function, so they are
-    //  built per query. Across machine updates every list is kept, because
-    //  another copy may still be reading an older one. Refinement holds the
-    //  only reference to the implementation and frees all its lists; otherwise
-    //  they live until the query is destroyed. Between refinements a query
-    //  builds one list per machine update it observes. The first list lives
-    //  in the query itself, the rest on the heap; the optional is constructed
-    //  only when a list is built, so a query that never needs one pays nothing
-    //  for it
+    // a query's own result lists: best-affinity results depend on the query's
+    //  cost function, so they are built per query; and a query the shared
+    //  cache does not serve builds the list of its matches on its first
+    //  next(), the start of an iteration, so that each step is a lookup in
+    //  the list rather than another pass over the candidates (first(),
+    //  count() and random() use that list while it is current but do not
+    //  build one: a one-shot call keeps its one pass). The exception is a
+    //  memory query anchored on a processor: its candidates are the few
+    //  memories that processor reaches, so a step through them costs less
+    //  than building a list would (see MemoryQueryImpl::cache_next). Across machine
+    //  updates every list is kept, because another copy may still be reading an older
+    //  one. Refinement holds the only reference to the implementation and
+    //  frees all its lists; otherwise they live until the query is destroyed.
+    //  Between refinements a query builds one list per machine update it
+    //  observes. The first list lives in the query itself, the rest on the
+    //  heap; the optional is constructed only when a list is built, so a query
+    //  that never needs one pays nothing for it
     mutable UnfairMutex build_mutex;
     mutable std::optional<CachedList> first_own;
     mutable std::vector<std::unique_ptr<CachedList>> own_lists;
@@ -512,12 +520,19 @@ namespace Realm {
     //  by QueryCacheSlot::get_or_build
     KindCache *build_kind_cache(unsigned generation) const;
     AffinityCache *build_affinity_cache(unsigned generation) const;
-    // the list of this query's best-affinity results, building it if needed
-    const CachedList *best_affinity_list() const;
+    // the list of this query's own results - its best-affinity results, or
+    //  the matches of a query the shared cache does not serve - building it
+    //  if it is missing or stale
+    const CachedList *own_list() const;
     // next() over that list (see the definition)
-    REALM_ATTR_NOINLINE(Processor best_affinity_next(Processor after) const);
+    REALM_ATTR_NOINLINE(Processor own_list_next(Processor after) const);
+    // builds this query's results into 'result' (one of the two below)
+    void build_own_list(std::vector<Processor> &result) const;
     // builds the best-affinity results of this query into 'result'
     void build_best_affinity_list(std::vector<Processor> &result) const;
+    // builds the matches of this query into 'result', from the anchor
+    //  memory's affinity map or by a walk of the machine
+    void build_match_list(std::vector<Processor> &result) const;
     // remembers 'list' as this query's current result
     const CachedList *attach(const CachedList *list) const;
     // this query's attached list if it is still current, else null
@@ -744,9 +759,12 @@ namespace Realm {
     REALM_ATTR_NOINLINE(const CachedList *cached_list_miss(unsigned generation) const);
     KindCache *build_kind_cache(unsigned generation) const;
     AffinityCache *build_affinity_cache(unsigned generation) const;
-    const CachedList *best_affinity_list() const;
-    REALM_ATTR_NOINLINE(Memory best_affinity_next(Memory after) const);
+    // see ProcessorQueryImpl
+    const CachedList *own_list() const;
+    REALM_ATTR_NOINLINE(Memory own_list_next(Memory after) const);
+    void build_own_list(std::vector<Memory> &result) const;
     void build_best_affinity_list(std::vector<Memory> &result) const;
+    void build_match_list(std::vector<Memory> &result) const;
     const CachedList *attach(const CachedList *list) const;
     const CachedList *attached_list() const
     {
