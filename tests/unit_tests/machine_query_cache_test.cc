@@ -670,6 +670,49 @@ TEST_F(MachineQueryCacheTest, CacheAgreesWithWalk)
   expect_cache_agrees_with_walk(refined);
 }
 
+// a memory's affinity to itself (a copy within one memory) must be reported
+//  from either end: it was in the memory's outgoing map but not its incoming
+//  one, so the sources of a memory left out the memory itself
+TEST_F(MachineQueryCacheTest, SelfAffinityInBothMaps)
+{
+  Machine m = machine();
+  std::vector<Machine::MemoryMemoryAffinity> out, in;
+  EXPECT_FALSE(m.has_affinity(mems[0], mems[0]));
+  EXPECT_EQ(m.get_mem_mem_affinity(out, mems[0], mems[0]), 0);
+
+  Machine::MemoryMemoryAffinity self;
+  self.m1 = mems[0];
+  self.m2 = mems[0];
+  self.bandwidth = 70;
+  self.latency = 5;
+  // as the mock's setup records an affinity, followed by a machine update
+  runtime_impl_->machine->nodeinfos[0]->add_mem_mem_affinity(self);
+  runtime_impl_->machine->update_kind_maps();
+
+  EXPECT_TRUE(m.has_affinity(mems[0], mems[0]));
+  // from the source: m0 -> m0 and m0 -> m1
+  EXPECT_EQ(m.get_mem_mem_affinity(out, mems[0]), 2);
+  // from the destination: m0 -> m0 and m1 -> m0, with the same numbers
+  EXPECT_EQ(m.get_mem_mem_affinity(in, Memory::NO_MEMORY, mems[0]), 2);
+  bool found = false;
+  for(const Machine::MemoryMemoryAffinity &a : in)
+    if((a.m1 == mems[0]) && (a.m2 == mems[0]) && (a.bandwidth == 70) && (a.latency == 5))
+      found = true;
+  EXPECT_TRUE(found) << "the self affinity is missing from the incoming map";
+  // adding it again changes nothing
+  EXPECT_FALSE(runtime_impl_->machine->nodeinfos[0]->add_mem_mem_affinity(self));
+
+  // the memories reachable from m0 include m0, and the query that asks for
+  //  memories with an affinity to m0 lists m0 and m1 however it is answered
+  std::set<Memory> visible;
+  m.get_visible_memories(mems[0], visible);
+  EXPECT_TRUE(visible.count(mems[0]) > 0);
+  Machine::MemoryQuery reach(m);
+  reach.has_affinity_to(mems[0]);
+  EXPECT_EQ(results(reach), (std::set<Memory>{mems[0], mems[1]}));
+  expect_cache_agrees_with_walk(reach);
+}
+
 // copies of a query share its implementation by reference count; the last
 //  copy to go away deletes it, and a copy that is refined while others read
 //  through theirs makes a private one. Both must be ordered after every

@@ -171,16 +171,26 @@ namespace Realm {
   bool MachineMemInfo::add_mem_mem_affinity(const Machine::MemoryMemoryAffinity &mma)
   {
     bool is_local = is_local_affinity(mma);
+    bool changed = false;
+    bool ours = false;
 
-    if(mma.m1 == m)
-      return mmas_out.add_affinity(mma.m2, mma, is_local);
-
-    if(mma.m2 == m)
-      return mmas_in.add_affinity(mma.m1, mma, is_local);
-
-    // shouldn't have been called!
-    abort();
-    return false;
+    // an affinity from this memory to itself goes in both maps, so that the
+    //  incoming map of every memory lists every source the outgoing maps know
+    if(mma.m1 == m) {
+      ours = true;
+      if(mmas_out.add_affinity(mma.m2, mma, is_local))
+        changed = true;
+    }
+    if(mma.m2 == m) {
+      ours = true;
+      if(mmas_in.add_affinity(mma.m1, mma, is_local))
+        changed = true;
+    }
+    if(!ours) {
+      // shouldn't have been called!
+      abort();
+    }
+    return changed;
   }
 
   ////////////////////////////////////////////////////////////////////////
