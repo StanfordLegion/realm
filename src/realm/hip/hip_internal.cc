@@ -154,7 +154,7 @@ namespace Realm {
 
       // IPC copy
       if(dst_mapping != nullptr) {
-        return src->hipipc_streams[dst_mapping->owner];
+        return dst_mapping->stream_pool->get_next_stream();
       }
 
       const bool src_gpu_mem = src->is_accessible_gpu_mem(src_mem);

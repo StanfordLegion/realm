@@ -434,14 +434,30 @@ namespace Realm {
       //  in practice)
       int least_stream_priority, greatest_stream_priority;
 
+      // All imported memories from one remote GPU share a pool. The pool is
+      // constructed during IPC setup and remains stable until GPU shutdown.
+      struct IpcStreamPool {
+        std::vector<GPUStream *> streams;
+        atomic<unsigned> next_stream = atomic<unsigned>(0);
+
+        GPUStream *get_next_stream()
+        {
+          assert(!streams.empty());
+          return streams[next_stream.fetch_add(1) % streams.size()];
+        }
+      };
+
       struct HipIpcMapping {
         NodeID owner;
+        IpcStreamPool *stream_pool = nullptr;
         Memory mem;
         uintptr_t local_base;
         uintptr_t address_offset; // add to convert from original to local base
       };
       std::vector<HipIpcMapping> hipipc_mappings;
-      std::map<NodeID, GPUStream *> hipipc_streams;
+      // HIP currently exports one framebuffer per GPU, so Memory identifies
+      // the remote peer independently of its owning rank.
+      std::map<Memory, IpcStreamPool> hipipc_streams;
 
       const HipIpcMapping *find_ipc_mapping(Memory mem) const;
     };

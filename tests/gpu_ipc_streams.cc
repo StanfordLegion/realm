@@ -18,7 +18,11 @@
 #include "realm.h"
 #include "realm/cmdline.h"
 #include "realm/id.h"
+#if defined(REALM_USE_CUDA)
 #include "realm/cuda/cuda_internal.h"
+#elif defined(REALM_USE_HIP)
+#include "realm/hip/hip_internal.h"
+#endif
 #include <algorithm>
 #include <atomic>
 #include <cassert>
@@ -28,9 +32,15 @@
 #include <thread>
 
 using namespace Realm;
+#if defined(REALM_USE_CUDA)
 namespace Backend = Realm::Cuda;
 using GPUModule = Backend::CudaModule;
 static const char *module_name = "cuda";
+#else
+namespace Backend = Realm::Hip;
+using GPUModule = Backend::HipModule;
+static const char *module_name = "hip";
+#endif
 static int root_rank = 0, require_ipc = 0;
 enum
 {
@@ -47,7 +57,14 @@ static void top(const void *, size_t, const void *, size_t, Processor proc)
     // Inspect real imported pools, then interleave selections across peers. A
     // shared rotation counter degenerates when peer count matches pool size.
     std::vector<Backend::GPU::IpcStreamPool *> pools;
-    for(auto &peer : gpu->cudaipc_streams) {
+#if defined(REALM_USE_CUDA)
+    auto &peer_streams = gpu->cudaipc_streams;
+    const auto &mappings = gpu->cudaipc_mappings;
+#else
+    auto &peer_streams = gpu->hipipc_streams;
+    const auto &mappings = gpu->hipipc_mappings;
+#endif
+    for(auto &peer : peer_streams) {
       auto &pool = peer.second;
       assert(pool.streams.size() == count);
       assert(std::set<Backend::GPUStream *>(pool.streams.begin(), pool.streams.end())
@@ -66,8 +83,14 @@ static void top(const void *, size_t, const void *, size_t, Processor proc)
     for(auto &cycle : first)
       assert(std::set<Backend::GPUStream *>(cycle.begin(), cycle.end()).size() == count);
 
+#if defined(REALM_USE_CUDA)
     CUcontext previous;
     assert(cuCtxPushCurrent(gpu->context) == CUDA_SUCCESS);
+#else
+    int previous;
+    assert(hipGetDevice(&previous) == hipSuccess);
+    assert(hipSetDevice(gpu->device_id) == hipSuccess);
+#endif
     const int expected = std::max(
         gpu->greatest_stream_priority,
         std::min(gpu->least_stream_priority,
@@ -77,7 +100,11 @@ static void top(const void *, size_t, const void *, size_t, Processor proc)
     for(auto *pool : pools) {
       for(auto *stream : pool->streams) {
         int priority;
+#if defined(REALM_USE_CUDA)
         assert(cuStreamGetPriority(stream->get_stream(), &priority) == CUDA_SUCCESS);
+#else
+        assert(hipStreamGetPriority(stream->get_stream(), &priority) == hipSuccess);
+#endif
         assert(priority == expected);
       }
       // Concurrent DMA producers must share the atomic per-peer rotation safely.
@@ -99,11 +126,15 @@ static void top(const void *, size_t, const void *, size_t, Processor proc)
       for(unsigned k = 0; k < count; k++)
         assert(hits[k] == 128);
     }
+#if defined(REALM_USE_CUDA)
     assert(cuCtxPopCurrent(&previous) == CUDA_SUCCESS);
+#else
+    assert(hipSetDevice(previous) == hipSuccess);
+#endif
 
     std::vector<Memory> targets;
     std::set<Backend::GPU::IpcStreamPool *> target_pools;
-    for(const auto &mapping : gpu->cudaipc_mappings) {
+    for(const auto &mapping : mappings) {
       assert(mapping.stream_pool && mapping.stream_pool->streams.size() == count);
       if(!ID(mapping.mem).is_ib_memory() && mapping.mem.kind() == Memory::GPU_FB_MEM) {
         targets.push_back(mapping.mem);

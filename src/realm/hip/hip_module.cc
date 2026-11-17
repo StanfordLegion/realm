@@ -2089,9 +2089,8 @@ namespace Realm {
         if(*it)
           delete *it;
 
-      for(std::map<NodeID, GPUStream *>::iterator it = hipipc_streams.begin();
-          it != hipipc_streams.end(); ++it)
-        delete it->second;
+      for(auto &peer : hipipc_streams)
+        delete_container_contents(peer.second.streams);
 
       delete_container_contents(task_streams);
 
@@ -3314,12 +3313,15 @@ namespace Realm {
                                        reinterpret_cast<uintptr_t>(dptr);
               {
                 AutoLock<> al(hip_module_singleton->hipipc_mutex);
+                GPU::IpcStreamPool &pool = (*it)->hipipc_streams[mapping.mem];
+                if(pool.streams.empty()) {
+                  for(unsigned k = 0; k < (*it)->p2p_streams_per_peer; k++)
+                    pool.streams.push_back(new GPUStream(
+                        *it, (*it)->worker,
+                        (*it)->module->config->cfg_dma_stream_priority));
+                }
+                mapping.stream_pool = &pool;
                 (*it)->hipipc_mappings.push_back(mapping);
-
-                // do we have a stream for this target?
-                if((*it)->hipipc_streams.count(sender) == 0)
-                  (*it)->hipipc_streams[sender] = new GPUStream(
-                      *it, (*it)->worker, (*it)->module->config->cfg_dma_stream_priority);
               }
             }
           }
