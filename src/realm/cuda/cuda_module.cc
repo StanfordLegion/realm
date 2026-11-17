@@ -2470,7 +2470,8 @@ namespace Realm {
       delete_container_contents(device_to_device_streams);
 
       delete_container_contents(peer_to_peer_streams);
-      delete_container_contents(cudaipc_streams);
+      for(auto &peer : cudaipc_streams)
+        delete_container_contents(peer.second.streams);
       delete_container_contents(task_streams);
 
       if(fb_dmem) {
@@ -4583,14 +4584,21 @@ namespace Realm {
             mapping.local_base = alloc->get_dptr();
             mapping.address_offset = entry.base_ptr - alloc->get_dptr();
 
-            gpu->cudaipc_mappings.push_back(mapping);
-
-            // do we have a stream for this target?
-            if(gpu->cudaipc_streams.count(sender) == 0) {
+            // A rank can export several GPUs, and each GPU can export several
+            // memories (e.g. framebuffer and intermediate buffers). Isolate GPUs
+            // while sharing a counter and pool across one GPU's memory mappings.
+            GPU::IpcStreamKey key;
+            key.first = sender;
+            memcpy(key.second.data(), entry.src_gpu_uuid.bytes, key.second.size());
+            GPU::IpcStreamPool &pool = gpu->cudaipc_streams[key];
+            if(pool.streams.empty()) {
               AutoGPUContext ag(gpu);
-              gpu->cudaipc_streams[sender] = new GPUStream(
-                  gpu, gpu->worker, gpu->module->config->cfg_dma_stream_priority);
+              for(unsigned k = 0; k < gpu->p2p_streams_per_peer; k++)
+                pool.streams.push_back(new GPUStream(
+                    gpu, gpu->worker, gpu->module->config->cfg_dma_stream_priority));
             }
+            mapping.stream_pool = &pool;
+            gpu->cudaipc_mappings.push_back(mapping);
           } else {
             log_cudaipc.info("Unable to import given memory from sender %u",
                              static_cast<unsigned>(sender));

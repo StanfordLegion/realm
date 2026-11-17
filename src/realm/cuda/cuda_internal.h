@@ -20,6 +20,7 @@
 
 #include "realm/cuda/cuda_module.h"
 
+#include <array>
 #include <memory>
 #include <unordered_map>
 #if !defined(CUDA_ENABLE_DEPRECATED)
@@ -532,15 +533,30 @@ namespace Realm {
       //  in practice)
       int least_stream_priority, greatest_stream_priority;
 
+      // All imported memories from one remote GPU share a pool. The pool is
+      // constructed during IPC setup and remains stable until GPU shutdown.
+      struct IpcStreamPool {
+        std::vector<GPUStream *> streams;
+        atomic<unsigned> next_stream = atomic<unsigned>(0);
+
+        GPUStream *get_next_stream()
+        {
+          assert(!streams.empty());
+          return streams[next_stream.fetch_add(1) % streams.size()];
+        }
+      };
+      using IpcStreamKey = std::pair<NodeID, std::array<char, sizeof(CUuuid)>>;
+
       struct CudaIpcMapping {
         NodeID owner;
         GPU *src_gpu;
+        IpcStreamPool *stream_pool = nullptr;
         Memory mem;
         uintptr_t local_base;
         uintptr_t address_offset; // add to convert from original to local base
       };
       std::vector<CudaIpcMapping> cudaipc_mappings;
-      std::map<NodeID, GPUStream *> cudaipc_streams;
+      std::map<IpcStreamKey, IpcStreamPool> cudaipc_streams;
       Mutex alloc_mutex;
       const CudaIpcMapping *find_ipc_mapping(Memory mem) const;
 
