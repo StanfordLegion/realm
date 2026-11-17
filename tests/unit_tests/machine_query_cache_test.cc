@@ -31,6 +31,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -838,6 +839,88 @@ TEST_F(MachineQueryCacheTest, AffinityQueriesWithoutKindUseTheCache)
   Config::use_machine_query_cache = saved;
 }
 
+// a memory query with one plain has_affinity_to(Memory) predicate is served
+//  the shared snapshot's by-memory list (the memories with an edge into the
+//  target), with or without a kind, and never walks; one with a bound or a
+//  second predicate is anchored on a processor predicate when it has one,
+//  and otherwise walks for a target on this node (a local memory's incoming
+//  map can span the machine; a remote one's is anchored, see
+//  RemoteMemoryTargetIsAnchored)
+TEST_F(MachineQueryCacheTest, MemoryAffinityQueriesUseTheCache)
+{
+  typedef std::set<Memory> MSet;
+  const bool saved = Config::use_machine_query_cache;
+  Config::use_machine_query_cache = true;
+  invalidate_caches();
+  const unsigned long builds = MemoryQueryImpl::affinity_cache.build_count();
+  const unsigned long walks = MemoryQueryImpl::walk_count();
+  const unsigned long anchored = MemoryQueryImpl::anchored_count();
+  // m0 <-> m1 are the only edges: the sources of each is the other
+  Machine::MemoryQuery into0(machine());
+  into0.has_affinity_to(mems[0]);
+  EXPECT_EQ(results(into0), (MSet{mems[1]}));
+  Machine::MemoryQuery into1(machine());
+  into1.only_kind(Memory::SYSTEM_MEM).has_affinity_to(mems[1]);
+  EXPECT_EQ(results(into1), (MSet{mems[0]}));
+  Machine::MemoryQuery into2(machine());
+  into2.has_affinity_to(mems[2]); // nothing reaches m2 (it is not even in the model)
+  EXPECT_TRUE(results(into2).empty());
+  Machine::MemoryQuery local1(machine());
+  local1.local_address_space().has_affinity_to(mems[1]);
+  EXPECT_EQ(results(local1), (MSet{mems[0]}));
+  Machine::MemoryQuery gpu0(machine());
+  gpu0.only_kind(Memory::GPU_FB_MEM).has_affinity_to(mems[0]);
+  EXPECT_TRUE(results(gpu0).empty());
+  EXPECT_EQ(MemoryQueryImpl::affinity_cache.build_count(), builds + 1);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << "an affinity query walked";
+  EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored) << "the cache did not serve";
+  // a bound on a local target: a local memory's incoming map can span the
+  //  machine, so the query walks as it did before (m1 -> m0 is 60/25)
+  unsigned long walks2 = MemoryQueryImpl::walk_count();
+  Machine::MemoryQuery fast0(machine());
+  fast0.has_affinity_to(mems[0], 70 /*min bandwidth*/);
+  EXPECT_TRUE(results(fast0).empty());
+  Machine::MemoryQuery slow0(machine());
+  slow0.has_affinity_to(mems[0], 0, 25 /*max latency*/);
+  EXPECT_EQ(results(slow0), (MSet{mems[1]}));
+  EXPECT_GT(MemoryQueryImpl::walk_count(), walks2);
+  EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored);
+  // with a processor predicate, in either order, the query is anchored on
+  //  the processor's few affinities and never walks
+  walks2 = MemoryQueryImpl::walk_count();
+  Machine::MemoryQuery both(machine());
+  both.has_affinity_to(mems[1]).has_affinity_to(procs[0]);
+  EXPECT_EQ(results(both), (MSet{mems[0]}));
+  Machine::MemoryQuery both2(machine());
+  both2.has_affinity_to(procs[0]).has_affinity_to(mems[1]);
+  EXPECT_EQ(results(both2), (MSet{mems[0]}));
+  EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks2);
+  // two local memory targets, or a capacity bound: a walk again
+  Machine::MemoryQuery both3(machine());
+  both3.has_affinity_to(mems[0]).has_affinity_to(mems[1]); // nothing reaches both
+  EXPECT_TRUE(results(both3).empty());
+  Machine::MemoryQuery cap(machine());
+  cap.has_affinity_to(mems[0]).has_capacity(size_t(1536) * 1024); // m1 is 2 MB
+  EXPECT_EQ(results(cap), (MSet{mems[1]}));
+  cap.has_capacity(size_t(3072) * 1024);
+  EXPECT_TRUE(results(cap).empty());
+  EXPECT_GT(MemoryQueryImpl::walk_count(), walks2);
+  for(const Machine::MemoryQuery *q : {&into0, &into1, &into2, &local1, &gpu0, &fast0,
+                                       &slow0, &both, &both2, &both3, &cap})
+    expect_cache_agrees_with_walk(*q);
+  // with the cache off the plain local-target query walks, as before
+  Config::use_machine_query_cache = false;
+  walks2 = MemoryQueryImpl::walk_count();
+  const unsigned long anchored2 = MemoryQueryImpl::anchored_count();
+  EXPECT_EQ(into0.count(), 1u);
+  EXPECT_EQ(into0.first(), mems[1]);
+  EXPECT_EQ(into0.next(mems[0]), mems[1]);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks2 + 3);
+  EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored2);
+  Config::use_machine_query_cache = saved;
+}
+
 // copies of a query share its implementation by reference count; the last
 //  copy to go away deletes it, and a copy that is refined while others read
 //  through theirs makes a private one. Both must be ordered after every
@@ -1222,6 +1305,44 @@ namespace {
   }
 } // namespace
 
+// what MemoryQuery::has_affinity_to(m, min_bandwidth, max_latency) must
+//  return, alone or with a has_affinity_to(Processor) as well: of the memories
+//  that pass the other restrictions, those with an edge to m (any node) within
+//  the bounds
+namespace {
+  std::set<Memory>
+  reference_mems_with_affinity(const Machine &machine, std::optional<Memory::Kind> kind,
+                               std::optional<AddressSpace> node, size_t min_capacity,
+                               Memory m, unsigned min_bandwidth, unsigned max_latency,
+                               std::optional<Processor> also)
+  {
+    std::set<Memory> all, result;
+    machine.get_all_memories(all);
+    if(!m.exists())
+      return result; // no memory has an affinity to "no memory"
+    for(Memory c : all) {
+      if(kind && (c.kind() != *kind))
+        continue;
+      if(node && (c.address_space() != *node))
+        continue;
+      if((min_capacity > 0) && (c.capacity() < min_capacity))
+        continue;
+      std::vector<Machine::MemoryMemoryAffinity> mmas;
+      machine.get_mem_mem_affinity(mmas, c, m, false /*any node*/);
+      if(mmas.empty())
+        continue;
+      if((min_bandwidth != 0) && (mmas[0].bandwidth < min_bandwidth))
+        continue;
+      if((max_latency != 0) && (mmas[0].latency > max_latency))
+        continue;
+      if(also && !machine.has_affinity(*also, c))
+        continue;
+      result.insert(c);
+    }
+    return result;
+  }
+} // namespace
+
 class BestAffinityAnchorTest : public ::testing::Test {
 protected:
   // node 0: CPUs p0 and p1, GPU g0; memories m0 (system), f0 (framebuffer,
@@ -1332,6 +1453,149 @@ TEST_F(BestAffinityAnchorTest, ProcessorsWithAffinityMatchReference)
   }
   Config::use_machine_query_cache = saved;
   EXPECT_EQ(checked, 2 * 3 * 3 * 5 * 5 * 4);
+}
+
+// memories with an affinity to a memory come from the shared snapshot's
+//  by-memory list or from the target's incoming affinity map (or a
+//  processor's map, when the query has a processor predicate too), never from
+//  a walk, and must be exactly the brute-force answer for every mix of kind,
+//  node, capacity, target (including one nothing reaches, and "no memory"),
+//  bounds and a processor predicate added before or after, with the cache on
+//  and off - and again once a memory has an affinity to itself. The path each
+//  is answered by is checked too
+TEST_F(BestAffinityAnchorTest, MemoriesWithAffinityMatchReference)
+{
+  Machine machine = Machine::get_machine();
+  const bool saved = Config::use_machine_query_cache;
+  const std::optional<Memory::Kind> kinds[] = {std::nullopt, Memory::SYSTEM_MEM,
+                                               Memory::GPU_FB_MEM};
+  const std::optional<AddressSpace> nodes[] = {std::nullopt, 0, 1};
+  const size_t capacities[] = {0, size_t(512) * 1024};
+  const Memory targets[] = {m0, f0, o0, m1, Memory::NO_MEMORY};
+  const unsigned bounds[][2] = {{0, 0}, {50, 0}, {0, 20}, {900, 0}};
+  // the processor predicate: none, or one of these added before or after
+  //  ("no processor" anchors a query too and nothing has an affinity to it)
+  const std::optional<Processor> alsos[] = {std::nullopt, p0, g0, p2, Processor::NO_PROC};
+  int checked = 0;
+  for(int self_edge = 0; self_edge < 2; self_edge++) {
+    if(self_edge) {
+      Machine::MemoryMemoryAffinity mma;
+      mma.m1 = f0;
+      mma.m2 = f0;
+      mma.bandwidth = 70;
+      mma.latency = 7;
+      runtime_impl_->machine->nodeinfos[0]->add_mem_mem_affinity(mma);
+      runtime_impl_->machine->update_kind_maps();
+    }
+    for(bool cache : {true, false}) {
+      Config::use_machine_query_cache = cache;
+      for(std::optional<Memory::Kind> kind : kinds)
+        for(std::optional<AddressSpace> node : nodes)
+          for(size_t capacity : capacities)
+            for(Memory m : targets)
+              for(const unsigned *bound : bounds)
+                for(std::optional<Processor> also : alsos)
+                  for(int before = 0; before < (also ? 2 : 1); before++) {
+                    Machine::MemoryQuery q(machine);
+                    if(kind)
+                      q.only_kind(*kind);
+                    if(node)
+                      q.same_address_space_as((*node == 0) ? p0 : p2);
+                    if(capacity)
+                      q.has_capacity(capacity);
+                    if(also && before)
+                      q.has_affinity_to(*also);
+                    q.has_affinity_to(m, bound[0], bound[1]);
+                    if(also && !before)
+                      q.has_affinity_to(*also);
+                    std::set<Memory> expected = reference_mems_with_affinity(
+                        machine, kind, node, capacity, m, bound[0], bound[1], also);
+                    const unsigned long walks = MemoryQueryImpl::walk_count();
+                    const unsigned long anchored = MemoryQueryImpl::anchored_count();
+                    std::ostringstream what;
+                    what << "self edge " << self_edge << " cache " << cache << " kind "
+                         << (kind ? int(*kind) : -1) << " node "
+                         << (node ? int(*node) : -1) << " capacity " << capacity
+                         << " mem " << m.id << " bounds " << bound[0] << "," << bound[1]
+                         << " also " << (also ? also->id : 0) << " before " << before;
+                    EXPECT_EQ(MachineQueryCacheTest::results(q), expected) << what.str();
+                    // how it was answered: the shared list for the plain
+                    //  predicate (no bound, no capacity) with the cache on;
+                    //  otherwise an anchor (the processor, or the remote
+                    //  memory m1, or "no memory") without a walk; otherwise -
+                    //  a local target - a walk
+                    const bool served = cache && (bound[0] == 0) && (bound[1] == 0) &&
+                                        !also && (capacity == 0);
+                    const bool remote = !m.exists() || (m.address_space() == 1);
+                    if(served) {
+                      EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << what.str();
+                      EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored)
+                          << what.str();
+                    } else if(also || remote) {
+                      EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << what.str();
+                      EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored)
+                          << what.str();
+                    } else {
+                      EXPECT_GT(MemoryQueryImpl::walk_count(), walks) << what.str();
+                      EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored)
+                          << what.str();
+                    }
+                    checked++;
+                  }
+    }
+  }
+  Config::use_machine_query_cache = saved;
+  EXPECT_EQ(checked, 2 * 2 * 3 * 3 * 2 * 5 * 4 * 9);
+}
+
+// the incoming map of a memory on another node holds this node's memories
+//  only, so a bounded has_affinity_to(remote memory) is enumerated from it; a
+//  local memory's incoming map can span the machine, so that query walks as
+//  before. A processor predicate anchors the query whatever the target
+TEST_F(BestAffinityAnchorTest, RemoteMemoryTargetIsAnchored)
+{
+  Machine machine = Machine::get_machine();
+  typedef std::set<Memory> MSet;
+  const bool saved = Config::use_machine_query_cache;
+  for(bool cache : {true, false}) {
+    Config::use_machine_query_cache = cache;
+    unsigned long walks = MemoryQueryImpl::walk_count();
+    unsigned long anchored = MemoryQueryImpl::anchored_count();
+    Machine::MemoryQuery remote(machine);
+    remote.has_affinity_to(m1, 1 /*min bandwidth*/); // m0 -> m1 only
+    EXPECT_EQ(MachineQueryCacheTest::results(remote), (MSet{m0}));
+    EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << "cache " << cache;
+    EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored) << "cache " << cache;
+    anchored = MemoryQueryImpl::anchored_count();
+    Machine::MemoryQuery local(machine);
+    local.has_affinity_to(m0, 1); // f0 -> m0 and m1 -> m0
+    EXPECT_EQ(MachineQueryCacheTest::results(local), (MSet{f0, m1}));
+    EXPECT_GT(MemoryQueryImpl::walk_count(), walks) << "cache " << cache;
+    EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored) << "cache " << cache;
+    // the plain predicate: the shared list with the cache on, else the same
+    walks = MemoryQueryImpl::walk_count();
+    Machine::MemoryQuery plain_remote(machine);
+    plain_remote.has_affinity_to(m1);
+    Machine::MemoryQuery plain_local(machine);
+    plain_local.has_affinity_to(m0);
+    EXPECT_EQ(MachineQueryCacheTest::results(plain_remote), (MSet{m0}));
+    EXPECT_EQ(MachineQueryCacheTest::results(plain_local), (MSet{f0, m1}));
+    if(cache) {
+      EXPECT_EQ(MemoryQueryImpl::walk_count(), walks);
+      EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored);
+    } else {
+      EXPECT_GT(MemoryQueryImpl::walk_count(), walks);
+      EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored);
+    }
+    // a processor predicate anchors the query whatever the memory target: p0
+    //  reaches m0 and f0, and of those only f0 has an edge to m0
+    walks = MemoryQueryImpl::walk_count();
+    Machine::MemoryQuery both(machine);
+    both.has_affinity_to(m0, 1).has_affinity_to(p0);
+    EXPECT_EQ(MachineQueryCacheTest::results(both), (MSet{f0}));
+    EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << "cache " << cache;
+  }
+  Config::use_machine_query_cache = saved;
 }
 
 TEST_F(BestAffinityAnchorTest, ProcessorSpotChecks)
