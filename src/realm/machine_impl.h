@@ -648,11 +648,9 @@ namespace Realm {
     //  predicate's target would do; a processor's map is always small (the
     //  memories one processor reaches) where a memory's incoming map may
     //  span the machine, so a processor anchors the query whenever it has a
-    //  has_affinity_to(Processor), else the first has_affinity_to(Memory) of
-    //  a memory on another node does (see Machine::MemoryQuery::has_affinity_to
-    //  for why not a local one). A target that is not in the model ("no
-    //  processor", "no memory") anchors too: it has no map, and nothing has
-    //  an affinity to it
+    //  has_affinity_to(Processor), else the first has_affinity_to(Memory)
+    //  does. A target that is not in the model ("no processor", "no
+    //  memory") anchors too: it has no map, and nothing has an affinity to it
     void set_anchor_proc(Processor p)
     {
       if(!anchor_proc)

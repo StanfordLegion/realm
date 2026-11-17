@@ -1503,19 +1503,18 @@ namespace Realm {
     impl = ((MemoryQueryImpl *)impl)->writeable_reference();
     ((MemoryQueryImpl *)impl)
         ->add_predicate(new MemoryHasMemAffinityPredicate(m, min_bandwidth, max_latency));
-    // the shared by-memory lists serve the plain predicate. The memory's own
-    //  incoming map serves the others, but only for a memory on another node:
-    //  the model holds the edges into a remote memory from this node's few
-    //  memories only (enumerate_mem_mem_affinities), while a local memory's
-    //  incoming map lists every memory in the machine with a path to it - no
-    //  fewer than a walk visits, each at a higher cost. "No memory" anchors
-    //  too: nothing has an affinity to it
+    // the shared by-memory lists serve the plain predicate; the memory's own
+    //  incoming map serves the others. The model holds the edges into a
+    //  memory on another node from this node's few memories only
+    //  (enumerate_mem_mem_affinities), and into a local memory from every
+    //  memory with a path to it: the whole machine for a memory the network
+    //  writes into, this node's memories for one it does not. Every target
+    //  anchors, "no memory" included: nothing has an affinity to it
     if(!min_bandwidth && !max_latency)
       ((MemoryQueryImpl *)impl)->set_cached_mem(m);
     else
       ((MemoryQueryImpl *)impl)->reset_cached_mem();
-    if(!m.exists() || (NodeID(ID(m).memory_owner_node()) != Network::my_node_id))
-      ((MemoryQueryImpl *)impl)->set_anchor_mem(m);
+    ((MemoryQueryImpl *)impl)->set_anchor_mem(m);
     return *this;
   }
 
