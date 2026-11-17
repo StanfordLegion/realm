@@ -166,7 +166,7 @@ struct Shape {
     }
     bytes = num_rects * run * sizeof(elem_t);
     const int dim_order[1] = {0};
-    layout.reset(InstanceLayoutGeneric::choose_instance_layout(
+    layout.reset(InstanceLayoutGeneric::choose_instance_layout<1>(
         inst_space, InstanceLayoutConstraints(field_sizes, block_size), dim_order));
   }
 
