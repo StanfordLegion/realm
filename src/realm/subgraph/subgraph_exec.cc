@@ -578,10 +578,13 @@ namespace Realm {
     }
     if(pf->wants_status) {
       ProfilingMeasurements::OperationStatus status;
+      // the same report Realm makes for an operation whose precondition
+      // was poisoned (Operation::handle_poisoned_precondition), and the
+      // same one a skipped copy makes
       status.result =
           skipped ? ProfilingMeasurements::OperationStatus::CANCELLED
                   : ProfilingMeasurements::OperationStatus::COMPLETED_SUCCESSFULLY;
-      status.error_code = 0;
+      status.error_code = skipped ? Faults::ERROR_POISONED_PRECONDITION : 0;
       pf->measurements.add_measurement(status);
     }
     if(pf->wants_fevent) {

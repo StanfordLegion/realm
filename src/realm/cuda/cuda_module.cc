@@ -3615,7 +3615,11 @@ namespace Realm {
       }
 
       if(m->config->cfg_enable_cuhook && !resolve_cupti_api_fnptrs()) {
-        log_cuhook.info() << "Unable to load cuhook because of missing CUPTI";
+        // a warning, not info: the application asked for validation and is
+        // not getting it (tests that rely on it fail on this message)
+        log_cuhook.warning()
+            << "-cuda:validation requested, but libcupti.so could not be "
+               "loaded: CUDA calls will not be validated";
       }
 
       // create GPUInfo

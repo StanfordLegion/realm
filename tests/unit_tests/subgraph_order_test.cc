@@ -310,3 +310,15 @@ TEST(SubgraphOrder, DelayedFirstMessageReleasesLargeBacklog)
   EXPECT_EQ(t.num_held(), 0u);
   EXPECT_EQ(t.next_unhandled(), count + 1);
 }
+
+TEST(SubgraphOrder, DuplicateHeldNumberIsRejected)
+{
+  // a number that is still held cannot be held again: the sender reused it
+  RemoteOrderTracker t;
+  int payload_a = 0, payload_b = 0;
+  ASSERT_FALSE(t.ready(3, true));
+  EXPECT_TRUE(t.hold(3, &payload_a));
+  EXPECT_FALSE(t.hold(3, &payload_b));
+  EXPECT_EQ(t.num_held(), 1u);
+  EXPECT_FALSE(t.handled_already(3)); // held, not handled
+}

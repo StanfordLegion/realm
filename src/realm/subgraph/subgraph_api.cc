@@ -421,7 +421,10 @@ namespace Realm {
                                  static_cast<const char *>(remote->data) +
                                      remote->datalen);
             held->msg.data = held->payload.data();
-            tracker.hold(remote->order.seq, held);
+            if(!tracker.hold(remote->order.seq, held))
+              SUBGRAPH_FATAL(me, "node " << remote->order.sender
+                                         << " reused instantiate sequence number "
+                                         << remote->order.seq << " (still held)");
             get_runtime()->subgraph_resource_reaper.instantiation_held();
             log_subgraph.info()
                 << "instantiate held for order: subgraph=" << me

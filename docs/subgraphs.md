@@ -195,7 +195,11 @@ postcondition and the finish event, and still waits for the external
 preconditions before the finish event triggers. A poisoned
 `destroy` precondition destroys the subgraph anyway (with a warning). Operations
 downstream are skipped (tasks and copies are not run, arrivals are not
-performed); their successors still drain. Misuse is fatal, not poisoned.
+performed); their successors still drain. A skipped operation still answers
+its profiling requests, as a Realm operation with a poisoned precondition
+does: status `CANCELLED` with error code `ERROR_POISONED_PRECONDITION`, a
+timeline without a start time, and its (poisoned) finish event. Misuse is
+fatal, not poisoned.
 
 **Finish events.** `Processor::get_current_finish_event()` inside a subgraph
 task creates an event on demand. It triggers when the task completes: at

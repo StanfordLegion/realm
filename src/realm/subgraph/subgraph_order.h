@@ -87,7 +87,11 @@ namespace Realm {
     }
 
     // An early arrival, kept until its predecessors have been handled.
-    void hold(uint64_t seq, void *payload) { held.emplace(seq, payload); }
+    // False if a message with this number is already held: a sender never
+    // reuses a number, so that is a protocol violation (handled_already
+    // catches a reuse of a number that was handled; this catches one that
+    // is still waiting).
+    bool hold(uint64_t seq, void *payload) { return held.emplace(seq, payload).second; }
 
     // Pops a held message whose predecessors have all been handled, if any
     // (not recorded: the caller handles it, which records it; readiness only
