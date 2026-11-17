@@ -1802,6 +1802,14 @@ namespace Realm {
     };
     thread_local IterationHint iteration_hint = {nullptr, 0};
 
+    // how the calls on this thread were answered, for tests: a walk is a pass
+    //  over the whole machine model, an anchored pass one over a single
+    //  affinity map (see ProcessorQueryImpl::walk_count)
+    thread_local unsigned long proc_walks = 0;
+    thread_local unsigned long proc_anchored = 0;
+    thread_local unsigned long mem_walks = 0;
+    thread_local unsigned long mem_anchored = 0;
+
     template <typename T>
     inline void hint_position(const std::vector<T> &items, size_t index)
     {
@@ -1872,6 +1880,12 @@ namespace Realm {
     }
   } // namespace
 
+  /*static*/ unsigned long ProcessorQueryImpl::walk_count(void) { return proc_walks; }
+  /*static*/ unsigned long ProcessorQueryImpl::anchored_count(void)
+  {
+    return proc_anchored;
+  }
+
   const ProcessorQueryImpl::CachedList *
   ProcessorQueryImpl::attach(const CachedList *list) const
   {
@@ -1905,7 +1919,7 @@ namespace Realm {
     if(!is_cached_mem) {
       const KindCache *kc = kind_cache.get(generation);
       if(kc)
-        return attach(&kc->by_kind[restricted_kind]);
+        return attach(list_in(kc));
     } else {
       const AffinityCache *ac = affinity_cache.get(generation);
       if(ac)
@@ -1931,7 +1945,7 @@ namespace Realm {
                                   [this](unsigned g) { return build_kind_cache(g); });
       if(!kc)
         return nullptr; // the machine changed underneath us; walk it instead
-      return attach(&kc->by_kind[restricted_kind]);
+      return attach(list_in(kc));
     }
     const AffinityCache *ac =
         affinity_cache.get_or_build(generation, cache_invalid_count, [this](unsigned g) {
@@ -1949,11 +1963,12 @@ namespace Realm {
     kc->generation = generation;
     for(unsigned k = 0; k < NUM_PROCESSOR_KINDS; k++)
       kc->by_kind[k].generation = generation;
+    kc->all.generation = generation;
     {
       StripedRWLock::AutoReaderLock al(machine->mutex);
       for(std::map<NodeID, MachineNodeInfo *>::const_iterator it =
               machine->nodeinfos.begin();
-          it != machine->nodeinfos.end(); ++it)
+          it != machine->nodeinfos.end(); ++it) {
         for(std::map<Processor::Kind,
                      std::map<Processor, MachineProcInfo *>>::const_iterator it2 =
                 it->second->proc_by_kind.begin();
@@ -1966,11 +1981,19 @@ namespace Realm {
               it3 != it2->second.end(); ++it3)
             items.push_back(it3->first);
         }
+        // every processor of the node, as a walk with no kind restriction
+        //  visits them
+        for(std::map<Processor, MachineProcInfo *>::const_iterator it2 =
+                it->second->procs.begin();
+            it2 != it->second->procs.end(); ++it2)
+          kc->all.items.push_back(it2->first);
+      }
     }
     // nodes and the processors within a node are visited in id order, and
     //  ids sort by node first, so the lists are sorted - next() relies on it
     for(unsigned k = 0; k < NUM_PROCESSOR_KINDS; k++)
       std::sort(kc->by_kind[k].items.begin(), kc->by_kind[k].items.end());
+    std::sort(kc->all.items.begin(), kc->all.items.end());
     return kc;
   }
 
@@ -2230,6 +2253,7 @@ namespace Realm {
       return pval;
 
     // general case where restricted_node_id or predicates are defined
+    proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     if(is_restricted_node)
@@ -2316,6 +2340,7 @@ namespace Realm {
     if(best_affinity_cost.has_value())
       return best_affinity_next(after);
 
+    proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     // start where we left off
@@ -2414,6 +2439,7 @@ namespace Realm {
     if(cached_query(count))
       return count;
 
+    proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     if(is_restricted_node)
@@ -2516,6 +2542,7 @@ namespace Realm {
     Processor pval = Processor::NO_PROC;
     if(cached_query(pval, QUERY_RANDOM))
       return pval;
+    proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     int count = 0;
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
@@ -2771,6 +2798,9 @@ namespace Realm {
     reset_cached_list();
   }
 
+  /*static*/ unsigned long MemoryQueryImpl::walk_count(void) { return mem_walks; }
+  /*static*/ unsigned long MemoryQueryImpl::anchored_count(void) { return mem_anchored; }
+
   const MemoryQueryImpl::CachedList *MemoryQueryImpl::attach(const CachedList *list) const
   {
     attached.store_release(list);
@@ -2867,7 +2897,7 @@ namespace Realm {
     const unsigned generation = cache_invalid_count.load();
     const KindCache *kc = kind_cache.get(generation);
     if(kc)
-      return attach(&kc->by_kind[restricted_kind]);
+      return attach(list_in(kc));
     return cached_list_miss(generation);
   }
 
@@ -2879,7 +2909,7 @@ namespace Realm {
                                 [this](unsigned g) { return build_kind_cache(g); });
     if(!kc)
       return nullptr; // the machine changed underneath us; walk it instead
-    return attach(&kc->by_kind[restricted_kind]);
+    return attach(list_in(kc));
   }
 
   MemoryQueryImpl::KindCache *MemoryQueryImpl::build_kind_cache(unsigned generation) const
@@ -2888,11 +2918,12 @@ namespace Realm {
     kc->generation = generation;
     for(unsigned k = 0; k < NUM_MEMORY_KINDS; k++)
       kc->by_kind[k].generation = generation;
+    kc->all.generation = generation;
     {
       StripedRWLock::AutoReaderLock al(machine->mutex);
       for(std::map<NodeID, MachineNodeInfo *>::const_iterator it =
               machine->nodeinfos.begin();
-          it != machine->nodeinfos.end(); ++it)
+          it != machine->nodeinfos.end(); ++it) {
         for(std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator
                 it2 = it->second->mem_by_kind.begin();
             it2 != it->second->mem_by_kind.end(); ++it2) {
@@ -2904,9 +2935,15 @@ namespace Realm {
               it3 != it2->second.end(); ++it3)
             items.push_back(it3->first);
         }
+        for(std::map<Memory, MachineMemInfo *>::const_iterator it2 =
+                it->second->mems.begin();
+            it2 != it->second->mems.end(); ++it2)
+          kc->all.items.push_back(it2->first);
+      }
     }
     for(unsigned k = 0; k < NUM_MEMORY_KINDS; k++)
       std::sort(kc->by_kind[k].items.begin(), kc->by_kind[k].items.end());
+    std::sort(kc->all.items.begin(), kc->all.items.end());
     return kc;
   }
 
@@ -3129,6 +3166,7 @@ namespace Realm {
     }
 
     if(affinity_proc.exists()) {
+      mem_anchored++;
       StripedRWLock::AutoReaderLock al(machine->mutex);
       const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
           anchor_affinities(affinity_proc, false /*!local_only*/);
@@ -3145,6 +3183,7 @@ namespace Realm {
     if(cached_query(mval, QUERY_FIRST))
       return mval;
 
+    mem_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     if(is_restricted_node)
@@ -3238,6 +3277,7 @@ namespace Realm {
 
     StripedRWLock::AutoReaderLock al(machine->mutex);
     if(affinity_proc.exists()) {
+      mem_anchored++;
       // nothing on this node follows a memory of another node, as in the walk
       //  below and in next_in_run()
       if(is_restricted_node &&
@@ -3254,6 +3294,7 @@ namespace Realm {
       return Memory::NO_MEMORY;
     }
 
+    mem_walks++;
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     // start where we left off
     it = machine->nodeinfos.find(ID(after).memory_owner_node());
@@ -3352,6 +3393,7 @@ namespace Realm {
     }
 
     if(affinity_proc.exists()) {
+      mem_anchored++;
       StripedRWLock::AutoReaderLock al(machine->mutex);
       size_t count = 0;
       const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas =
@@ -3368,6 +3410,7 @@ namespace Realm {
     size_t count = 0;
     if(cached_query(count))
       return count;
+    mem_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     if(is_restricted_node)
@@ -3469,6 +3512,7 @@ namespace Realm {
     }
 
     if(affinity_proc.exists()) {
+      mem_anchored++;
       StripedRWLock::AutoReaderLock al(machine->mutex);
       Memory chosen = Memory::NO_MEMORY;
       int count = 0;
@@ -3490,6 +3534,7 @@ namespace Realm {
     if(cached_query(mval, QUERY_RANDOM))
       return mval;
 
+    mem_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     size_t count = 0;
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;

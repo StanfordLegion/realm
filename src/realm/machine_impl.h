@@ -269,11 +269,13 @@ namespace Realm {
     std::vector<T> items; // sorted by id
   };
 
-  // the lists of all things of each kind
+  // the lists of all things of each kind, and of every kind together (for a
+  //  query with no kind restriction)
   template <typename T, unsigned NUM_KINDS>
   struct QueryKindCache {
     unsigned generation = 0;
     QueryResultList<T> by_kind[NUM_KINDS];
+    QueryResultList<T> all;
   };
 
   // the publication slot for one kind of snapshot
@@ -390,6 +392,11 @@ namespace Realm {
     size_t count_matches(void) const;
     Processor random_match(void) const;
 
+    // how many calls on the calling thread were answered by a pass over the
+    //  whole machine model, and by a pass over one affinity map (for tests)
+    static unsigned long walk_count(void);
+    static unsigned long anchored_count(void);
+
     void set_cached_mem(Memory m)
     {
       cached_mem = m;
@@ -452,15 +459,16 @@ namespace Realm {
     mutable std::optional<CachedList> first_own;
     mutable std::vector<std::unique_ptr<CachedList>> own_lists;
 
-    // whether the shared cache can serve this query at all: one kind, at most
-    //  one node, no best-affinity cost, and no predicate other than the one
-    //  memory affinity the by-kind-and-memory lists cover; anything else walks
-    //  the machine
+    // whether the shared cache can serve this query at all: at most one kind
+    //  and one node, no best-affinity cost, and no predicate other than the one
+    //  memory affinity the by-kind-and-memory lists cover (those need the
+    //  kind); anything else walks the machine
     bool shared_cache_covers() const
     {
-      return is_restricted_kind && !(is_restricted_node && (restricted_node_id < 0)) &&
-             !best_affinity_cost.has_value() && (predicates.empty() || is_cached_mem) &&
-             (unsigned(restricted_kind) < NUM_PROCESSOR_KINDS);
+      return !(is_restricted_node && (restricted_node_id < 0)) &&
+             !best_affinity_cost.has_value() &&
+             (predicates.empty() || (is_cached_mem && is_restricted_kind)) &&
+             (!is_restricted_kind || (unsigned(restricted_kind) < NUM_PROCESSOR_KINDS));
     }
     // the shared list that serves this query (attaching to it as a side
     //  effect), or null if the shared cache does not cover this query. The
@@ -483,6 +491,11 @@ namespace Realm {
     REALM_ATTR_NOINLINE(const CachedList *cached_list_miss(unsigned generation) const);
     // the list for this query's kind and memory in an affinity snapshot
     const CachedList *list_in(const AffinityCache *ac) const;
+    // the list for this query's kind (or of every kind) in a kind snapshot
+    const CachedList *list_in(const KindCache *kc) const
+    {
+      return is_restricted_kind ? &kc->by_kind[restricted_kind] : &kc->all;
+    }
     // builders of the shared snapshots for 'generation', run one at a time
     //  by QueryCacheSlot::get_or_build
     KindCache *build_kind_cache(unsigned generation) const;
@@ -579,6 +592,9 @@ namespace Realm {
     Memory next_match(Memory after) const;
     size_t count_matches(void) const;
     Memory random_match(void) const;
+    // see ProcessorQueryImpl
+    static unsigned long walk_count(void);
+    static unsigned long anchored_count(void);
     Memory cache_next(Memory after);
     bool cached_query(Memory p, Memory &pval);
     bool cached_query(Memory &pval, QueryType q) const;
@@ -628,11 +644,14 @@ namespace Realm {
     // see ProcessorQueryImpl
     bool shared_cache_covers() const
     {
-      return is_restricted_kind && !(is_restricted_node && (restricted_node_id < 0)) &&
-             predicates.empty() && (restricted_min_capacity == 0) &&
-             !best_proc_affinity_cost.has_value() &&
+      return !(is_restricted_node && (restricted_node_id < 0)) && predicates.empty() &&
+             (restricted_min_capacity == 0) && !best_proc_affinity_cost.has_value() &&
              !best_mem_affinity_cost.has_value() &&
-             (unsigned(restricted_kind) < NUM_MEMORY_KINDS);
+             (!is_restricted_kind || (unsigned(restricted_kind) < NUM_MEMORY_KINDS));
+    }
+    const CachedList *list_in(const KindCache *kc) const
+    {
+      return is_restricted_kind ? &kc->by_kind[restricted_kind] : &kc->all;
     }
     const CachedList *cached_list() const
     {

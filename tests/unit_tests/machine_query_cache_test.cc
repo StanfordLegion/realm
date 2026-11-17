@@ -713,6 +713,65 @@ TEST_F(MachineQueryCacheTest, SelfAffinityInBothMaps)
   expect_cache_agrees_with_walk(reach);
 }
 
+// a query with no kind restriction is served the snapshot's list of
+//  everything, as a kind-restricted one is served its kind's list, so it does
+//  not walk the machine any more; the two lists live in one snapshot
+TEST_F(MachineQueryCacheTest, KindFreeQueriesUseTheCache)
+{
+  typedef std::set<Processor> PSet;
+  typedef std::set<Memory> MSet;
+  const bool saved = Config::use_machine_query_cache;
+  Config::use_machine_query_cache = true;
+  invalidate_caches();
+  const unsigned long pbuilds = ProcessorQueryImpl::kind_cache.build_count();
+  const unsigned long mbuilds = MemoryQueryImpl::kind_cache.build_count();
+  Machine::ProcessorQuery all(machine());
+  Machine::MemoryQuery mall(machine());
+  unsigned long pwalks = ProcessorQueryImpl::walk_count();
+  unsigned long mwalks = MemoryQueryImpl::walk_count();
+  // (m2 has no affinities, so nothing put it into the machine model)
+  EXPECT_EQ(results(all), (PSet{procs[0], procs[1], procs[2], procs[3]}));
+  EXPECT_EQ(results(mall), (MSet{mems[0], mems[1]}));
+  EXPECT_EQ(all.next(procs[1]), procs[2]);
+  EXPECT_EQ(mall.next(mems[1]), Memory::NO_MEMORY);
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), pwalks) << "a kind-free query walked";
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), mwalks) << "a kind-free query walked";
+  // one snapshot each, which the by-kind queries then share
+  EXPECT_EQ(ProcessorQueryImpl::kind_cache.build_count(), pbuilds + 1);
+  EXPECT_EQ(MemoryQueryImpl::kind_cache.build_count(), mbuilds + 1);
+  EXPECT_EQ(Machine::ProcessorQuery(machine()).only_kind(Processor::LOC_PROC).count(),
+            4u);
+  EXPECT_EQ(Machine::MemoryQuery(machine()).only_kind(Memory::SYSTEM_MEM).count(), 2u);
+  EXPECT_EQ(ProcessorQueryImpl::kind_cache.build_count(), pbuilds + 1);
+  EXPECT_EQ(MemoryQueryImpl::kind_cache.build_count(), mbuilds + 1);
+  // restricted to this node (the only one): the node's run of the same list
+  Machine::ProcessorQuery local(machine());
+  local.local_address_space();
+  Machine::MemoryQuery mlocal(machine());
+  mlocal.local_address_space();
+  EXPECT_EQ(results(local), results(all));
+  EXPECT_EQ(results(mlocal), results(mall));
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), pwalks);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), mwalks);
+  EXPECT_EQ(ProcessorQueryImpl::kind_cache.build_count(), pbuilds + 1);
+  EXPECT_EQ(MemoryQueryImpl::kind_cache.build_count(), mbuilds + 1);
+  expect_cache_agrees_with_walk(all);
+  expect_cache_agrees_with_walk(mall);
+  expect_cache_agrees_with_walk(local);
+  expect_cache_agrees_with_walk(mlocal);
+  // with the cache off every call is a walk
+  Config::use_machine_query_cache = false;
+  pwalks = ProcessorQueryImpl::walk_count();
+  mwalks = MemoryQueryImpl::walk_count();
+  EXPECT_EQ(all.count(), 4u);
+  EXPECT_EQ(all.first(), procs[0]);
+  EXPECT_EQ(all.next(procs[0]), procs[1]);
+  EXPECT_EQ(mall.count(), 2u);
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), pwalks + 3);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), mwalks + 1);
+  Config::use_machine_query_cache = saved;
+}
+
 // copies of a query share its implementation by reference count; the last
 //  copy to go away deletes it, and a copy that is refined while others read
 //  through theirs makes a private one. Both must be ordered after every
@@ -1505,6 +1564,20 @@ TEST_F(MachineQueryCacheMultiNodeTest, NodeRestrictedQueries)
   EXPECT_TRUE(MachineQueryCacheTest::results(mtwo_nodes).empty());
   MachineQueryCacheTest::expect_cache_agrees_with_walk(mtwo_nodes);
 
+  // without a kind: the node's run of the list of everything
+  Machine::ProcessorQuery anode1(machine);
+  anode1.same_address_space_as(procs[2]);
+  EXPECT_EQ(MachineQueryCacheTest::results(anode1), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(anode1);
+  Machine::MemoryQuery amnode1(machine);
+  amnode1.same_address_space_as(procs[2]);
+  EXPECT_EQ(MachineQueryCacheTest::results(amnode1), (MSet{mems[1]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(amnode1);
+  Machine::ProcessorQuery atwo_nodes(machine);
+  atwo_nodes.same_address_space_as(procs[0]).same_address_space_as(procs[2]);
+  EXPECT_TRUE(MachineQueryCacheTest::results(atwo_nodes).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(atwo_nodes);
+
   // next() from an entry outside the node has no successor, as in a walk
   {
     const bool saved = Config::use_machine_query_cache;
@@ -1518,6 +1591,11 @@ TEST_F(MachineQueryCacheMultiNodeTest, NodeRestrictedQueries)
       EXPECT_EQ(sharing1.next(procs[0]), Processor::NO_PROC);
       EXPECT_EQ(mnode1.next(mems[0]), Memory::NO_MEMORY);
       EXPECT_EQ(mlocal.next(mems[0]), Memory::NO_MEMORY);
+      EXPECT_EQ(anode1.next(procs[0]), Processor::NO_PROC);
+      EXPECT_EQ(anode1.next(procs[2]), procs[3]);
+      EXPECT_EQ(anode1.next(procs[3]), Processor::NO_PROC);
+      EXPECT_EQ(amnode1.next(mems[0]), Memory::NO_MEMORY);
+      EXPECT_EQ(amnode1.next(mems[1]), Memory::NO_MEMORY);
       // a memory query anchored on a processor (has_affinity_to is its only
       //  predicate) is walked from that processor's affinity map, which spans
       //  nodes: an entry from another node has no successor there either
