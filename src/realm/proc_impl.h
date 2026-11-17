@@ -37,6 +37,11 @@
 #include "realm/threads.h"
 #include "realm/codedesc.h"
 
+#ifdef REALM_USE_NVTX
+#include "realm/nvtx.h"
+#include <memory>
+#endif
+
 namespace Realm {
 
   class ProcessorGroupImpl;
@@ -134,6 +139,12 @@ namespace Realm {
     Processor me;
     Processor::Kind kind;
     int num_cores;
+#ifdef REALM_USE_NVTX
+    // Per-processor NVTX category, created at construction (on the main thread,
+    // before worker threads start). Tasks executed on this processor are
+    // annotated under it so they group per processor in NVTX tools.
+    std::unique_ptr<NvtxCategory> nvtx_category;
+#endif
   };
 
   // generic local task processor - subclasses must create and configure a task
