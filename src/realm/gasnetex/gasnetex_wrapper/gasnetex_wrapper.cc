@@ -138,19 +138,19 @@ namespace Realm {
                                 static_cast<gex_MK_t>(kind), flags);
     }
 
-    static void gex_ep_bind_segment(gex_ep_opaque_t ep, gex_segment_opaque_t segment,
-                                    gex_flags_t flags)
+    static int gex_ep_bind_segment(gex_ep_opaque_t ep, gex_segment_opaque_t segment,
+                                   gex_flags_t flags)
     {
-      gex_System_SetVerboseErrors(1);
-      gex_EP_BindSegment(static_cast<gex_EP_t>(ep), static_cast<gex_Segment_t>(segment),
-                         flags);
+      int rc = gex_EP_BindSegment(static_cast<gex_EP_t>(ep),
+                                  static_cast<gex_Segment_t>(segment), flags);
+      if(rc != GASNET_OK) {
+        return rc;
+      }
       if(gex_EP_QuerySegment(static_cast<gex_EP_t>(ep)) !=
          static_cast<gex_Segment_t>(segment)) {
-        fprintf(stderr, "failed to bind segment");
-        fflush(stderr);
-        abort();
+        return -1;
       }
-      gex_System_SetVerboseErrors(0);
+      return 0;
     }
 
     static void gex_query_shared_peers(gex_rank_t *num_shared_ranks,
