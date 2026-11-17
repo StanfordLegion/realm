@@ -1872,8 +1872,11 @@ namespace Realm {
   void ProcessorQueryImpl::reset_cached_list()
   {
     // the caller holds the only reference to this query (see
-    //  writeable_reference), so nobody is reading this concurrently
+    //  writeable_reference), so nobody is reading this concurrently and its
+    //  old best-affinity lists can be reclaimed
     attached.store(nullptr);
+    first_own.reset();
+    own_lists.clear();
   }
 
   // The rest of cached_list() (machine_impl.h), for a query the shared cache
@@ -2768,6 +2771,8 @@ namespace Realm {
   {
     // see ProcessorQueryImpl::reset_cached_list
     attached.store(nullptr);
+    first_own.reset();
+    own_lists.clear();
   }
 
   void MemoryQueryImpl::set_affinity_proc(Processor p)

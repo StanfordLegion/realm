@@ -440,12 +440,14 @@ namespace Realm {
     //  points to are immutable and outlive it (see QueryCacheSlot)
     mutable atomic<const CachedList *> attached;
     // best-affinity results depend on the query's cost function, so they are
-    //  built per query. Every list this query built is kept until the query
-    //  is destroyed, because another copy of it may still be reading an older
-    //  one; a query builds one list per machine update it observes. The first
-    //  list lives in the query itself (a fresh query builds exactly one), the
-    //  rest on the heap; the optional is constructed only when a list is
-    //  built, so a query that never needs one pays nothing for it
+    //  built per query. Across machine updates every list is kept, because
+    //  another copy may still be reading an older one. Refinement holds the
+    //  only reference to the implementation and frees all its lists; otherwise
+    //  they live until the query is destroyed. Between refinements a query
+    //  builds one list per machine update it observes. The first list lives
+    //  in the query itself, the rest on the heap; the optional is constructed
+    //  only when a list is built, so a query that never needs one pays nothing
+    //  for it
     mutable UnfairMutex build_mutex;
     mutable std::optional<CachedList> first_own;
     mutable std::vector<std::unique_ptr<CachedList>> own_lists;

@@ -151,6 +151,88 @@ protected:
 // a query that has already been executed must give the same answers after
 //  refinement as a fresh query with the same constraints
 
+namespace {
+  // Inspect owned result storage through pointers to inherited members of the
+  // actual implementation, so the regression test can check retention directly.
+  template <typename Query, typename Impl>
+  class QueryStorageProbe : public Query {
+    struct StorageAccess : Impl {
+      static size_t count(const Impl &impl)
+      {
+        return (impl.*&StorageAccess::own_lists).size() +
+               size_t((impl.*&StorageAccess::first_own).has_value());
+      }
+    };
+
+  public:
+    using Query::Query;
+
+    size_t owned_list_count() const
+    {
+      return StorageAccess::count(*static_cast<const Impl *>(this->impl));
+    }
+  };
+} // namespace
+
+TEST_F(MachineQueryCacheTest, RefinementReclaimsOwnedLists)
+{
+  QueryStorageProbe<Machine::ProcessorQuery, ProcessorQueryImpl> pq(machine());
+  pq.only_kind(Processor::LOC_PROC).best_affinity_to(mems[0]);
+  QueryStorageProbe<Machine::MemoryQuery, MemoryQueryImpl> mq(machine());
+  mq.only_kind(Memory::SYSTEM_MEM).best_affinity_to(procs[0]);
+  EXPECT_EQ(pq.count(), 2u);
+  EXPECT_EQ(mq.count(), 1u);
+
+  // Updates must retain the previous lists: other copies may still read them.
+  for(int i = 0; i < 3; i++) {
+    invalidate_caches();
+    EXPECT_EQ(pq.count(), 2u);
+    EXPECT_EQ(mq.count(), 1u);
+  }
+  EXPECT_EQ(pq.owned_list_count(), 4u);
+  EXPECT_EQ(mq.owned_list_count(), 4u);
+  auto saved_pq = pq;
+  auto saved_mq = mq;
+  const unsigned proc_generation = ProcessorQueryImpl::cache_invalid_count.load();
+  const unsigned mem_generation = MemoryQueryImpl::cache_invalid_count.load();
+
+  // The first refinement detaches from the saved copies. Later refinements
+  // reuse a unique implementation and must reclaim its old results, even
+  // though the machine generation has not changed.
+  for(int i = 0; i < 128; i++) {
+    const bool latency_only = (i % 2) != 0;
+    pq.best_affinity_to(mems[0], latency_only ? 0 : 1, latency_only ? 1 : 0);
+    mq.best_affinity_to(procs[0], latency_only ? 0 : 1, latency_only ? 1 : 0);
+    EXPECT_EQ(results(pq), latency_only ? (std::set<Processor>{procs[2], procs[3]})
+                                        : (std::set<Processor>{procs[0], procs[1]}));
+    EXPECT_EQ(results(mq), (std::set<Memory>{latency_only ? mems[1] : mems[0]}));
+    EXPECT_EQ(pq.owned_list_count(), 1u);
+    EXPECT_EQ(mq.owned_list_count(), 1u);
+    EXPECT_EQ(results(saved_pq), (std::set<Processor>{procs[0], procs[1]}));
+    EXPECT_EQ(results(saved_mq), (std::set<Memory>{mems[0]}));
+  }
+  EXPECT_EQ(saved_pq.owned_list_count(), 4u);
+  EXPECT_EQ(saved_mq.owned_list_count(), 4u);
+  EXPECT_EQ(ProcessorQueryImpl::cache_invalid_count.load(), proc_generation);
+  EXPECT_EQ(MemoryQueryImpl::cache_invalid_count.load(), mem_generation);
+
+  // Reclaim history accumulated across updates once the implementation is
+  // unique, including when refinement repeats an existing restriction.
+  for(int i = 0; i < 3; i++) {
+    invalidate_caches();
+    EXPECT_EQ(pq.count(), 2u);
+    EXPECT_EQ(mq.count(), 1u);
+  }
+  EXPECT_EQ(pq.owned_list_count(), 4u);
+  EXPECT_EQ(mq.owned_list_count(), 4u);
+  pq.only_kind(Processor::LOC_PROC);
+  mq.has_capacity(0);
+  EXPECT_EQ(pq.owned_list_count(), 0u);
+  EXPECT_EQ(mq.owned_list_count(), 0u);
+  EXPECT_EQ(results(pq), (std::set<Processor>{procs[2], procs[3]}));
+  EXPECT_EQ(results(mq), (std::set<Memory>{mems[1]}));
+}
+
 TEST_F(MachineQueryCacheTest, RefineProcessorQueryWithBestAffinity)
 {
   Machine::ProcessorQuery warmed(machine());

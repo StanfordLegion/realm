@@ -47,7 +47,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
-#include <memory>
 #include <set>
 #include <sstream>
 #include <string>
@@ -486,12 +485,13 @@ namespace {
 
     // --- handle properties (hit the runtime's processor/memory tables) ---
     {
-      std::shared_ptr<std::atomic<size_t>> cursor =
-          std::make_shared<std::atomic<size_t>>(0);
       add(
           "handle_props",
           [=]() -> uint64_t {
-            size_t i = cursor->fetch_add(1);
+            // Keep sample selection local to each worker so it does not add
+            // contention to the property accesses being measured.
+            thread_local size_t cursor = 0;
+            size_t i = cursor++;
             Processor pp = sampled_procs[i % sampled_procs.size()];
             Memory mm = sampled_mems[i % sampled_mems.size()];
             return (uint64_t)pp.kind() + (uint64_t)mm.kind() + mm.capacity() +
