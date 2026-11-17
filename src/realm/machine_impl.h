@@ -182,6 +182,16 @@ namespace Realm {
     RuntimeImpl *runtime_impl{nullptr};
   };
 
+  // the target and bounds of a has_affinity_to predicate: a query the shared
+  //  cache does not serve may enumerate the target's affinity map instead of
+  //  walking the machine (see ProcessorQueryImpl::add_anchor_mem)
+  template <typename T>
+  struct AffinityAnchor {
+    T target;
+    unsigned min_bandwidth;
+    unsigned max_latency;
+  };
+
   template <typename T, typename T2>
   class QueryPredicate {
   public:
@@ -191,6 +201,10 @@ namespace Realm {
 
     virtual bool matches_predicate(const MachineImpl *machine, T thing,
                                    const T2 *info = 0) const = 0;
+
+    // the target and bounds of a has_affinity_to(Memory) predicate, else null
+    //  (see ProcessorQueryImpl::for_each_anchored)
+    virtual const AffinityAnchor<Memory> *memory_anchor(void) const { return nullptr; }
   };
 
   typedef QueryPredicate<Processor, MachineProcInfo> ProcQueryPredicate;
@@ -204,11 +218,10 @@ namespace Realm {
 
     virtual bool matches_predicate(const MachineImpl *machine, Processor thing,
                                    const MachineProcInfo *info = 0) const;
+    virtual const AffinityAnchor<Memory> *memory_anchor(void) const { return &anchor; }
 
   protected:
-    Memory memory;
-    unsigned min_bandwidth;
-    unsigned max_latency;
+    AffinityAnchor<Memory> anchor; // the memory and the bounds
   };
 
   namespace Config {
@@ -395,9 +408,12 @@ namespace Realm {
     Processor random_match(void) const;
 
     // how many calls on the calling thread were answered by a pass over the
-    //  whole machine model, and by a pass over one affinity map (for tests)
+    //  whole machine model, and by a pass over one affinity map, and how
+    //  many entries of those maps the anchored passes examined (an entry
+    //  counts once its node is read, the one ending a node's run included)
     static unsigned long walk_count(void);
     static unsigned long anchored_count(void);
+    static unsigned long anchored_visits(void);
 
     void set_cached_mem(Memory m)
     {
@@ -412,15 +428,17 @@ namespace Realm {
       cached_mem = Memory::NO_MEMORY;
       is_cached_mem = false;
     };
-    // records the memory of a has_affinity_to(Memory) predicate: a query the
-    //  shared cache does not serve enumerates that memory's affinity map (the
-    //  first such predicate's; every predicate is applied to each candidate)
-    //  instead of every processor in the machine. "No memory" anchors too: it
-    //  has no map, and no processor has an affinity to it
-    void set_anchor_mem(Memory m)
+    // records the first has_affinity_to(Memory) predicate: a query the shared
+    //  cache does not serve enumerates the affinity map of one of its
+    //  memories (the smallest, chosen from the predicates when the query runs)
+    //  instead of every processor in the machine, applying the node and kind
+    //  restrictions and the other predicates to each entry (see
+    //  for_each_anchored). "No memory" anchors too: it has no map, and no
+    //  processor has an affinity to it
+    void add_anchor_mem(Memory m, unsigned min_bandwidth, unsigned max_latency)
     {
       if(!anchor_mem)
-        anchor_mem = m;
+        anchor_mem = AffinityAnchor<Memory>{m, min_bandwidth, max_latency};
     }
     Processor cache_next(Processor after);
 
@@ -451,7 +469,8 @@ namespace Realm {
 
     Memory cached_mem;
     bool is_cached_mem;
-    std::optional<Memory> anchor_mem; // see set_anchor_mem
+    std::optional<AffinityAnchor<Memory>> anchor_mem; // see add_anchor_mem
+    bool anchored() const { return anchor_mem.has_value(); }
 
     // the list this query last used: one in a shared snapshot, or one of
     //  the best-affinity lists it built itself. It is current while its
@@ -546,7 +565,7 @@ namespace Realm {
     bool cached_query(Processor p, Processor &pval);
     bool cached_query(Processor &pval, QueryType q) const;
     bool cached_query(size_t &count) const;
-    // the affinity map of the memory the query is anchored to (every
+    // the affinity map of a memory the query is anchored to (every
     //  processor with an affinity to it), or NULL if it is not in the model
     const std::map<Processor, Machine::ProcessorMemoryAffinity *> *
     anchor_affinities(Memory m) const;
@@ -593,11 +612,10 @@ namespace Realm {
 
     virtual bool matches_predicate(const MachineImpl *machine, Memory thing,
                                    const MachineMemInfo *info = 0) const;
+    virtual const AffinityAnchor<Memory> *memory_anchor(void) const { return &anchor; }
 
   protected:
-    Memory memory;
-    unsigned min_bandwidth;
-    unsigned max_latency;
+    AffinityAnchor<Memory> anchor; // the memory and the bounds
   };
 
   class MemoryQueryImpl {
@@ -640,26 +658,24 @@ namespace Realm {
     void restrict_to_kind(Memory::Kind new_kind);
     void restrict_by_capacity(size_t new_min_bytes);
     void add_predicate(MemoryQueryPredicate *pred);
-    // the anchor of a query with affinity predicates: a query the shared
-    //  cache does not serve enumerates the anchor's affinity map (every
+    // the anchors of a query with affinity predicates: a query the shared
+    //  cache does not serve enumerates one anchor's affinity map (every
     //  memory a processor reaches, or every memory with an edge into a
-    //  memory), applying every restriction and predicate to each entry,
-    //  instead of walking every memory in the machine. Any affinity
-    //  predicate's target would do; a processor's map is always small (the
-    //  memories one processor reaches) where a memory's incoming map may
-    //  span the machine, so a processor anchors the query whenever it has a
-    //  has_affinity_to(Processor), else the first has_affinity_to(Memory)
-    //  does. A target that is not in the model ("no processor", "no
-    //  memory") anchors too: it has no map, and nothing has an affinity to it
-    void set_anchor_proc(Processor p)
+    //  memory), applying the restrictions and the other predicates to each
+    //  entry, instead of walking every memory in the machine. A match has an
+    //  affinity to every anchor, so any anchor's map holds every match, and
+    //  the smallest is scanned (see for_each_anchored). A target that is not
+    //  in the model ("no processor", "no memory") anchors too: it has no map,
+    //  and nothing has an affinity to it
+    void set_anchor_proc(Processor p, unsigned min_bandwidth, unsigned max_latency)
     {
       if(!anchor_proc)
-        anchor_proc = p;
+        anchor_proc = AffinityAnchor<Processor>{p, min_bandwidth, max_latency};
     }
-    void set_anchor_mem(Memory m)
+    void add_anchor_mem(Memory m, unsigned min_bandwidth, unsigned max_latency)
     {
       if(!anchor_mem)
-        anchor_mem = m;
+        anchor_mem = AffinityAnchor<Memory>{m, min_bandwidth, max_latency};
     }
     // the memory of a has_affinity_to(Memory) predicate with no bounds, which
     //  the shared by-memory lists serve while it is the only predicate
@@ -681,6 +697,7 @@ namespace Realm {
     // see ProcessorQueryImpl
     static unsigned long walk_count(void);
     static unsigned long anchored_count(void);
+    static unsigned long anchored_visits(void);
     Memory cache_next(Memory after);
     bool cached_query(Memory p, Memory &pval);
     bool cached_query(Memory &pval, QueryType q) const;
@@ -724,8 +741,8 @@ namespace Realm {
     // see set_anchor_proc and set_cached_mem
     Memory cached_mem;
     bool is_cached_mem;
-    std::optional<Processor> anchor_proc;
-    std::optional<Memory> anchor_mem;
+    std::optional<AffinityAnchor<Processor>> anchor_proc;
+    std::optional<AffinityAnchor<Memory>> anchor_mem;
     bool anchored() const { return anchor_proc.has_value() || anchor_mem.has_value(); }
 
     // Best affinity cost functions (not predicates)
@@ -785,9 +802,11 @@ namespace Realm {
     //  caller holds the machine's reader lock
     template <typename Fn>
     void for_each_anchored(Memory after, Fn &&fn) const;
-    // the matches among the keys of an anchor's map (see for_each_anchored)
+    // the matches among the keys of an anchor's map, whose entries that
+    //  anchor's bounds are checked against (see for_each_anchored)
     template <typename Map, typename Fn>
-    void scan_anchor(const Map &map, Memory after, Fn &&fn) const;
+    void scan_anchor(const Map &map, unsigned min_bandwidth, unsigned max_latency,
+                     Memory after, Fn &&fn) const;
     // the accessors over the anchor's map, for a query the shared cache does
     //  not serve (see ProcessorQueryImpl::first_match)
     Memory anchored_first(void) const;
