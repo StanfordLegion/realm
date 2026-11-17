@@ -61,7 +61,7 @@ TEST_F(CInstCopyTest, CopyNullRuntime)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(nullptr, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(nullptr, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_RUNTIME_ERROR_NOT_INITIALIZED);
 }
@@ -72,7 +72,7 @@ TEST_F(CInstCopyTest, CopyNullParams)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, nullptr, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, nullptr, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_PARAMS);
 }
@@ -87,7 +87,7 @@ TEST_F(CInstCopyTest, CopyNullSrcs)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS);
 }
@@ -102,7 +102,7 @@ TEST_F(CInstCopyTest, CopyNullDsts)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS);
 }
@@ -120,7 +120,7 @@ TEST_F(CInstCopyTest, CopySrcsInvalidInstance)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_INSTANCE);
 }
@@ -138,7 +138,7 @@ TEST_F(CInstCopyTest, CopyDstsInvalidInstance)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_INSTANCE);
 }
@@ -157,7 +157,7 @@ TEST_F(CInstCopyTest, CopySrcsInvalidFieldSize)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS);
 }
@@ -176,7 +176,7 @@ TEST_F(CInstCopyTest, CopyDstsInvalidFieldSize)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS);
 }
@@ -195,7 +195,7 @@ TEST_F(CInstCopyTest, CopyZeroNumFields)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_FIELDS);
 }
@@ -217,7 +217,7 @@ TEST_F(CInstCopyTest, CopyInvalidLowerBound)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
 }
@@ -239,7 +239,7 @@ TEST_F(CInstCopyTest, CopyInvalidUpperBound)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
 }
@@ -262,7 +262,7 @@ TEST_F(CInstCopyTest, CopyZeroDim)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
 }
@@ -285,7 +285,7 @@ TEST_F(CInstCopyTest, CopyOverMaxDim)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_DIMS);
 }
@@ -312,7 +312,7 @@ TEST_F(CInstCopyTest, CopyInvalidCoordType)
   realm_event_t event;
 
   realm_status_t status =
-      realm_region_instance_copy(runtime, &params, nullptr, REALM_NO_EVENT, 0, &event);
+      realm_region_instance_copy(runtime, &params, nullptr, 0, REALM_NO_EVENT, 0, &event);
 
   EXPECT_EQ(status, REALM_REGION_INSTANCE_ERROR_INVALID_COORD_TYPE);
 }
@@ -426,7 +426,7 @@ TYPED_TEST(CInstCopyTestN, CopySuccess)
 
   CopyImplRouter<N, int>::impl = &mock_copy_redirect_N<N>;
 
-  realm_status_t status = realm_region_instance_copy(runtime, &params, nullptr,
+  realm_status_t status = realm_region_instance_copy(runtime, &params, nullptr, 0,
                                                      REALM_NO_EVENT, priority, &event);
 
   EXPECT_EQ(status, REALM_SUCCESS);
