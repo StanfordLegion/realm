@@ -1383,6 +1383,8 @@ namespace Realm {
       ((ProcessorQueryImpl *)impl)->set_cached_mem(m);
     else
       ((ProcessorQueryImpl *)impl)->reset_cached_mem();
+    // and otherwise the memory's own affinity map
+    ((ProcessorQueryImpl *)impl)->set_anchor_mem(m);
     return *this;
   }
 
@@ -1679,6 +1681,7 @@ namespace Realm {
     , best_affinity_cost(copy_from.best_affinity_cost)
     , cached_mem(copy_from.cached_mem)
     , is_cached_mem(copy_from.is_cached_mem)
+    , anchor_mem(copy_from.anchor_mem)
     , attached(nullptr)
   {
     predicates.reserve(copy_from.predicates.size());
@@ -1931,7 +1934,8 @@ namespace Realm {
   const ProcessorQueryImpl::CachedList *
   ProcessorQueryImpl::list_in(const AffinityCache *ac) const
   {
-    const std::map<Memory, CachedList> &by_mem = ac->by_kind_and_mem[restricted_kind];
+    const std::map<Memory, CachedList> &by_mem =
+        is_restricted_kind ? ac->by_kind_and_mem[restricted_kind] : ac->by_mem;
     std::map<Memory, CachedList>::const_iterator it = by_mem.find(cached_mem);
     return (it != by_mem.end()) ? &it->second : &ac->none;
   }
@@ -2009,7 +2013,7 @@ namespace Realm {
       StripedRWLock::AutoReaderLock al(machine->mutex);
       for(std::map<NodeID, MachineNodeInfo *>::const_iterator it =
               machine->nodeinfos.begin();
-          it != machine->nodeinfos.end(); ++it)
+          it != machine->nodeinfos.end(); ++it) {
         for(std::map<Processor::Kind,
                      std::map<Processor, MachineProcInfo *>>::const_iterator it2 =
                 it->second->proc_by_kind.begin();
@@ -2028,6 +2032,19 @@ namespace Realm {
               by_mem[it4->first].items.push_back(it3->first);
           }
         }
+        // and every processor of the node whatever its kind, as a walk with
+        //  no kind restriction visits them
+        for(std::map<Processor, MachineProcInfo *>::const_iterator it2 =
+                it->second->procs.begin();
+            it2 != it->second->procs.end(); ++it2) {
+          const std::map<Memory, Machine::ProcessorMemoryAffinity *> &pmas =
+              it2->second->pmas.all;
+          for(std::map<Memory, Machine::ProcessorMemoryAffinity *>::const_iterator it3 =
+                  pmas.begin();
+              it3 != pmas.end(); ++it3)
+            ac->by_mem[it3->first].items.push_back(it2->first);
+        }
+      }
     }
     for(unsigned k = 0; k < NUM_PROCESSOR_KINDS; k++)
       for(std::map<Memory, CachedList>::iterator it = ac->by_kind_and_mem[k].begin();
@@ -2035,6 +2052,11 @@ namespace Realm {
         it->second.generation = generation;
         std::sort(it->second.items.begin(), it->second.items.end());
       }
+    for(std::map<Memory, CachedList>::iterator it = ac->by_mem.begin();
+        it != ac->by_mem.end(); ++it) {
+      it->second.generation = generation;
+      std::sort(it->second.items.begin(), it->second.items.end());
+    }
     return ac;
   }
 
@@ -2207,6 +2229,133 @@ namespace Realm {
     result = std::move(candidates_with_best_score);
   }
 
+  // the caller holds the machine's reader lock (and keeps holding it while it
+  //  uses the returned map)
+  const std::map<Processor, Machine::ProcessorMemoryAffinity *> *
+  ProcessorQueryImpl::anchor_affinities(Memory m) const
+  {
+    if(!m.exists())
+      return NULL;
+    std::map<NodeID, MachineNodeInfo *>::const_iterator nit =
+        machine->nodeinfos.find(ID(m).memory_owner_node());
+    if(nit == machine->nodeinfos.end())
+      return NULL;
+    std::map<Memory, MachineMemInfo *>::const_iterator mit = nit->second->mems.find(m);
+    if(mit == nit->second->mems.end())
+      return NULL;
+    return &(mit->second->pmas.all);
+  }
+
+  // the caller holds the machine's reader lock
+  const std::map<Processor, MachineProcInfo *> *
+  ProcessorQueryImpl::candidate_list(NodeID node) const
+  {
+    if(is_restricted_node && (node != NodeID(restricted_node_id)))
+      return NULL;
+    std::map<NodeID, MachineNodeInfo *>::const_iterator nit =
+        machine->nodeinfos.find(node);
+    if(nit == machine->nodeinfos.end())
+      return NULL;
+    if(!is_restricted_kind)
+      return &(nit->second->procs);
+    std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
+        kit = nit->second->proc_by_kind.find(restricted_kind);
+    return (kit != nit->second->proc_by_kind.end()) ? &(kit->second) : NULL;
+  }
+
+  template <typename Fn>
+  void ProcessorQueryImpl::for_each_anchored(Processor after, Fn &&fn) const
+  {
+    const std::map<Processor, Machine::ProcessorMemoryAffinity *> *pmas =
+        anchor_affinities(*anchor_mem);
+    if(!pmas)
+      return;
+    // the candidates come in id order, so one node's candidates are
+    //  contiguous: the node's list is looked up once per node, and each
+    //  candidate costs one lookup in it plus the predicates
+    bool have_node = false;
+    NodeID node = 0;
+    const std::map<Processor, MachineProcInfo *> *plist = NULL;
+    for(std::map<Processor, Machine::ProcessorMemoryAffinity *>::const_iterator it =
+            after.exists() ? pmas->upper_bound(after) : pmas->begin();
+        it != pmas->end(); ++it) {
+      const Processor p = it->first;
+      const NodeID n = ID(p).proc_owner_node();
+      if(!have_node || (n != node)) {
+        have_node = true;
+        node = n;
+        plist = candidate_list(n);
+      }
+      if(!plist)
+        continue; // not this query's node, or none of its kind there
+      std::map<Processor, MachineProcInfo *>::const_iterator pit = plist->find(p);
+      if(pit == plist->end())
+        continue; // not of the kind
+      bool ok = true;
+      for(std::vector<ProcQueryPredicate *>::const_iterator it2 = predicates.begin();
+          ok && (it2 != predicates.end()); ++it2)
+        ok = (*it2)->matches_predicate(machine, p, pit->second);
+      if(ok && !fn(p))
+        return;
+    }
+  }
+
+  Processor ProcessorQueryImpl::anchored_first(void) const
+  {
+    proc_anchored++;
+    StripedRWLock::AutoReaderLock al(machine->mutex);
+    Processor found = Processor::NO_PROC;
+    for_each_anchored(Processor::NO_PROC, [&found](Processor p) {
+      found = p;
+      return false;
+    });
+    return found;
+  }
+
+  Processor ProcessorQueryImpl::anchored_next(Processor after) const
+  {
+    proc_anchored++;
+    // nothing on this node follows a processor of another node, as in the
+    //  walk and in next_in_run()
+    if(is_restricted_node &&
+       (NodeID(ID(after).proc_owner_node()) != NodeID(restricted_node_id)))
+      return Processor::NO_PROC;
+    StripedRWLock::AutoReaderLock al(machine->mutex);
+    Processor found = Processor::NO_PROC;
+    for_each_anchored(after, [&found](Processor p) {
+      found = p;
+      return false;
+    });
+    return found;
+  }
+
+  size_t ProcessorQueryImpl::anchored_count_matches(void) const
+  {
+    proc_anchored++;
+    StripedRWLock::AutoReaderLock al(machine->mutex);
+    size_t count = 0;
+    for_each_anchored(Processor::NO_PROC, [&count](Processor) {
+      count++;
+      return true;
+    });
+    return count;
+  }
+
+  Processor ProcessorQueryImpl::anchored_random(void) const
+  {
+    proc_anchored++;
+    StripedRWLock::AutoReaderLock al(machine->mutex);
+    Processor chosen = Processor::NO_PROC;
+    int count = 0;
+    for_each_anchored(Processor::NO_PROC, [&](Processor p) {
+      count++;
+      if((count == 1) || ((lrand48() % count) == 0))
+        chosen = p;
+      return true;
+    });
+    return chosen;
+  }
+
   Processor ProcessorQueryImpl::first_match(void) const
   {
 #ifdef USE_OLD_AFFINITIES
@@ -2247,10 +2396,16 @@ namespace Realm {
     }
 
     // optimize if restricted kind without predicates and restricted_node attached to the
-    // query
+    // query (this also serves a list the query built for itself, see cache_next)
     Processor pval = Processor::NO_PROC;
     if(cached_query(pval, QUERY_FIRST))
       return pval;
+
+    // a query with an affinity predicate that the shared cache does not
+    //  serve: the candidates are the processors in that memory's affinity
+    //  map, in id order like the walk's
+    if(anchor_mem)
+      return anchored_first();
 
     // general case where restricted_node_id or predicates are defined
     proc_walks++;
@@ -2339,6 +2494,9 @@ namespace Realm {
     // best affinity: the successor of 'after' in the query's own list
     if(best_affinity_cost.has_value())
       return best_affinity_next(after);
+
+    if(anchor_mem)
+      return anchored_next(after);
 
     proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
@@ -2438,6 +2596,8 @@ namespace Realm {
     size_t count = 0;
     if(cached_query(count))
       return count;
+    if(anchor_mem)
+      return anchored_count_matches(); // see first_match
 
     proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
@@ -2542,6 +2702,8 @@ namespace Realm {
     Processor pval = Processor::NO_PROC;
     if(cached_query(pval, QUERY_RANDOM))
       return pval;
+    if(anchor_mem)
+      return anchored_random(); // see first_match
     proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     int count = 0;

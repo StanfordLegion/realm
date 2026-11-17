@@ -357,13 +357,15 @@ namespace Realm {
     typedef QueryResultList<Processor> CachedList;
     typedef QueryKindCache<Processor, NUM_PROCESSOR_KINDS> KindCache;
 
-    // the processors of each kind with an affinity to each memory - any
-    //  affinity in the model, local or not, exactly as the walk sees them. A
-    //  kind and memory that are not in the map have no such processors (and
-    //  are served the empty list), so a miss costs no more than a hit.
+    // the processors of each kind, and of every kind, with an affinity to
+    //  each memory - any affinity in the model, local or not, exactly as the
+    //  walk sees them. A kind and memory that are not in the map have no such
+    //  processors (and are served the empty list), so a miss costs no more
+    //  than a hit.
     struct AffinityCache {
       unsigned generation = 0;
       std::map<Memory, CachedList> by_kind_and_mem[NUM_PROCESSOR_KINDS];
+      std::map<Memory, CachedList> by_mem;
       CachedList none;
     };
 
@@ -410,6 +412,16 @@ namespace Realm {
       cached_mem = Memory::NO_MEMORY;
       is_cached_mem = false;
     };
+    // records the memory of a has_affinity_to(Memory) predicate: a query the
+    //  shared cache does not serve enumerates that memory's affinity map (the
+    //  first such predicate's; every predicate is applied to each candidate)
+    //  instead of every processor in the machine. "No memory" anchors too: it
+    //  has no map, and no processor has an affinity to it
+    void set_anchor_mem(Memory m)
+    {
+      if(!anchor_mem)
+        anchor_mem = m;
+    }
     Processor cache_next(Processor after);
 
   public:
@@ -439,6 +451,7 @@ namespace Realm {
 
     Memory cached_mem;
     bool is_cached_mem;
+    std::optional<Memory> anchor_mem; // see set_anchor_mem
 
     // the list this query last used: one in a shared snapshot, or one of
     //  the best-affinity lists it built itself. It is current while its
@@ -461,13 +474,12 @@ namespace Realm {
 
     // whether the shared cache can serve this query at all: at most one kind
     //  and one node, no best-affinity cost, and no predicate other than the one
-    //  memory affinity the by-kind-and-memory lists cover (those need the
-    //  kind); anything else walks the machine
+    //  memory affinity the by-memory lists cover; anything else enumerates
+    //  the anchor memory's affinity map, or walks the machine without one
     bool shared_cache_covers() const
     {
       return !(is_restricted_node && (restricted_node_id < 0)) &&
-             !best_affinity_cost.has_value() &&
-             (predicates.empty() || (is_cached_mem && is_restricted_kind)) &&
+             !best_affinity_cost.has_value() && (predicates.empty() || is_cached_mem) &&
              (!is_restricted_kind || (unsigned(restricted_kind) < NUM_PROCESSOR_KINDS));
     }
     // the shared list that serves this query (attaching to it as a side
@@ -519,6 +531,24 @@ namespace Realm {
     bool cached_query(Processor p, Processor &pval);
     bool cached_query(Processor &pval, QueryType q) const;
     bool cached_query(size_t &count) const;
+    // the affinity map of the memory the query is anchored to (every
+    //  processor with an affinity to it), or NULL if it is not in the model
+    const std::map<Processor, Machine::ProcessorMemoryAffinity *> *
+    anchor_affinities(Memory m) const;
+    // the processors of 'node' this query may return (its node and kind
+    //  restrictions applied), or NULL if there are none
+    const std::map<Processor, MachineProcInfo *> *candidate_list(NodeID node) const;
+    // the matches of an anchored query after 'after' (all of them for "no
+    //  processor"), in id order, each handed to fn until it returns false;
+    //  the caller holds the machine's reader lock
+    template <typename Fn>
+    void for_each_anchored(Processor after, Fn &&fn) const;
+    // the accessors over the anchor's map, for a query the shared cache does
+    //  not serve (see first_match)
+    Processor anchored_first(void) const;
+    Processor anchored_next(Processor after) const;
+    size_t anchored_count_matches(void) const;
+    Processor anchored_random(void) const;
   };
 
   typedef QueryPredicate<Memory, MachineMemInfo> MemoryQueryPredicate;
