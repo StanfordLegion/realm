@@ -42,7 +42,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+b94d1a1b</button>
+     <button class="dropbtn">Version 26.9.1+f46f6b95</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -146,7 +146,7 @@ Collaboration diagram for Realm::RWLock::Writer:</div>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a73c86f6138201b0a0ce92452cc76d812" id="r_a73c86f6138201b0a0ce92452cc76d812"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a73c86f6138201b0a0ce92452cc76d812">Writer</a> (<a class="el" href="classRealm_1_1RWLock.html#ad7e19985be2d27c8277f54ee8bc2146c">RWLock</a> &amp;_rwlock)</td></tr>
 <tr class="memitem:acee3ea0277a809cc4727cf00044a5121" id="r_acee3ea0277a809cc4727cf00044a5121"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#acee3ea0277a809cc4727cf00044a5121">lock</a> ()</td></tr>
-<tr class="memitem:a5da73d7522f125ed11fec47d9795b0e9" id="r_a5da73d7522f125ed11fec47d9795b0e9"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a5da73d7522f125ed11fec47d9795b0e9">trylock</a> ()</td></tr>
+<tr class="memitem:a10a35eac20a47f4a51172f728c042c77" id="r_a10a35eac20a47f4a51172f728c042c77"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a10a35eac20a47f4a51172f728c042c77">trylock</a> ()</td></tr>
 <tr class="memitem:a213a119fe509da8b4844c6bf7c1cfc75" id="r_a213a119fe509da8b4844c6bf7c1cfc75"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a213a119fe509da8b4844c6bf7c1cfc75">unlock</a> ()</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pro-attribs" class="groupheader"><a id="pro-attribs" name="pro-attribs"></a>
@@ -205,8 +205,8 @@ Protected Attributes</h2></td></tr>
 
 </div>
 </div>
-<a id="a5da73d7522f125ed11fec47d9795b0e9" name="a5da73d7522f125ed11fec47d9795b0e9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5da73d7522f125ed11fec47d9795b0e9">&#9670;&#160;</a></span>trylock()</h2>
+<a id="a10a35eac20a47f4a51172f728c042c77" name="a10a35eac20a47f4a51172f728c042c77"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a10a35eac20a47f4a51172f728c042c77">&#9670;&#160;</a></span>trylock()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -215,7 +215,7 @@ Protected Attributes</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void Realm::RWLock::Writer::trylock </td>
+          <td class="memname">bool Realm::RWLock::Writer::trylock </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
