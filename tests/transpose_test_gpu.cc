@@ -437,10 +437,10 @@ void do_single_dim(Memory src_mem, Memory dst_mem, int log2_size, size_t narrow_
       dump_and_verify<N, T, FT>(dst_inst, /*field_id=*/0, is, test_data,
                                 TestConfig::verbose, TestConfig::verify);
 
-      dst_inst.destroy(wait_for);
+      dst_inst.destroy(wait_for).wait();
     }
 
-    src_inst.destroy(wait_for);
+    src_inst.destroy(wait_for).wait();
   }
 
   // wait for copies to finish

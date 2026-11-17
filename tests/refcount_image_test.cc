@@ -81,6 +81,11 @@ void node_task(const void *args, size_t arglen, const void *userdata, size_t use
     }
     e2.wait();
   }
+  Event destroy_events[NUM_INSTS];
+  for(size_t i = 0; i < NUM_INSTS; i++) {
+    destroy_events[i] = task_args.ptr_data[i].inst.destroy();
+  }
+  Event::merge_events(destroy_events, NUM_INSTS).wait();
 }
 
 void main_task(const void *args, size_t arglen, const void *userdata, size_t userlen,
@@ -147,7 +152,6 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
   }
 
   Event::merge_events(events).wait();
-  usleep(100000);
   Runtime::get_runtime().shutdown(Processor::get_current_finish_event(), 0);
 }
 

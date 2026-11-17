@@ -500,7 +500,7 @@ namespace Realm {
         inst, get_runtime()->get_memory_impl(memory), ilg, &res, prs, wait_on);
   }
 
-  void RegionInstance::destroy(Event wait_on /*= Event::NO_EVENT*/) const
+  Event RegionInstance::destroy(Event wait_on /*= Event::NO_EVENT*/) const
   {
     // we can immediately turn this into a (possibly-preconditioned) request to
     //  deallocate the instance's storage - the eventual callback from that
@@ -824,10 +824,21 @@ namespace Realm {
     return ready_event;
   }
 
-  void RegionInstanceImpl::release(Event wait_on)
+  Event RegionInstanceImpl::release(Event wait_on)
   {
-    // TODO(cperry): return destroy event
+    Event destroy_event = Event::NO_EVENT;
+
+    // Only create a destroy event to trigger if the destruction is possibly deferred
+    if((wait_on != Event::NO_EVENT) ||
+       (NodeID(ID(me).instance_owner_node()) != Network::my_node_id)) {
+      GenEventImpl *ev = GenEventImpl::create_genevent();
+      assert(ev != nullptr && "Failed to retrieve event");
+      destroy_event = ev->current_event();
+    }
+
+    metadata.destroy_event = destroy_event;
     mem_impl->release_storage_deferrable(this, wait_on);
+    return destroy_event;
   }
 
   Event RegionInstanceImpl::redistrict(RegionInstance *instances,
@@ -1220,6 +1231,7 @@ namespace Realm {
     if(creator_node != Network::my_node_id) {
       ActiveMessage<MemStorageReleaseResponse> amsg(creator_node);
       amsg->inst = me;
+      amsg->destroy_event = metadata.destroy_event;
       amsg.commit();
 
       return;
@@ -1266,6 +1278,11 @@ namespace Realm {
     {
       AutoLock<> al(mutex);
       prefetch_events.clear();
+    }
+
+    if(metadata.destroy_event.exists()) {
+      GenEventImpl::trigger(metadata.destroy_event,
+                            metadata.inst_offset == INSTOFFSET_FAILED);
     }
 
     // send any required invalidation messages for metadata
@@ -1576,6 +1593,7 @@ namespace Realm {
   RegionInstanceImpl::Metadata::Metadata(ReplicatedHeap *repl_heap)
     : inst_offset(INSTOFFSET_UNALLOCATED)
     , ready_event(Event::NO_EVENT)
+    , destroy_event(Event::NO_EVENT)
     , layout(0)
     , ext_resource(0)
     , mem_specific(0)
