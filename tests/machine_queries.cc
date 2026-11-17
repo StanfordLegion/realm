@@ -742,6 +742,142 @@ void test_same_address_space(Machine machine, int &errors)
   log_app.print() << "  same_address_space tests: " << (errors == 0 ? "PASS" : "FAIL");
 }
 
+// Test query with address_space
+void test_address_space(Machine machine, int &errors)
+{
+  log_app.print() << "Testing address_space...";
+  int initial_errors = errors;
+
+  // every address space's processors and memories belong to it, and together
+  //  the address spaces partition the whole machine
+  size_t num_spaces = machine.get_address_space_count();
+  size_t total_procs = 0, total_mems = 0;
+  for(AddressSpace a = 0; a < num_spaces; a++) {
+    Machine::ProcessorQuery space_pq(machine);
+    space_pq.address_space(a);
+    size_t proc_count = 0;
+    for(Processor p = space_pq.first(); p.exists(); p = space_pq.next(p)) {
+      if(p.address_space() != a) {
+        log_app.error() << "ERROR: Processor " << p << " in address space "
+                        << p.address_space() << " returned for address space " << a;
+        errors++;
+      }
+      proc_count++;
+    }
+    if(proc_count != space_pq.count()) {
+      log_app.error() << "ERROR: address_space(" << a << ") iterated " << proc_count
+                      << " processors but count() is " << space_pq.count();
+      errors++;
+    }
+    total_procs += proc_count;
+
+    Machine::MemoryQuery space_mq(machine);
+    space_mq.address_space(a);
+    size_t mem_count = 0;
+    for(Memory m = space_mq.first(); m.exists(); m = space_mq.next(m)) {
+      if(m.address_space() != a) {
+        log_app.error() << "ERROR: Memory " << m << " in address space "
+                        << m.address_space() << " returned for address space " << a;
+        errors++;
+      }
+      mem_count++;
+    }
+    if(mem_count != space_mq.count()) {
+      log_app.error() << "ERROR: address_space(" << a << ") iterated " << mem_count
+                      << " memories but count() is " << space_mq.count();
+      errors++;
+    }
+    total_mems += mem_count;
+
+    log_app.print() << "  Address space " << a << ": " << proc_count << " processors, "
+                    << mem_count << " memories";
+  }
+
+  if(total_procs != Machine::ProcessorQuery(machine).count()) {
+    log_app.error() << "ERROR: address_space queries found " << total_procs
+                    << " processors, but the machine has "
+                    << Machine::ProcessorQuery(machine).count();
+    errors++;
+  }
+  if(total_mems != Machine::MemoryQuery(machine).count()) {
+    log_app.error() << "ERROR: address_space queries found " << total_mems
+                    << " memories, but the machine has "
+                    << Machine::MemoryQuery(machine).count();
+    errors++;
+  }
+
+  // address_space(a) agrees with same_address_space_as and local_address_space
+  Machine::ProcessorQuery pq(machine);
+  pq.only_kind(Processor::LOC_PROC);
+  Processor cpu = pq.first();
+  if(cpu.exists()) {
+    Machine::ProcessorQuery by_space(machine);
+    by_space.only_kind(Processor::LOC_PROC).address_space(cpu.address_space());
+    Machine::ProcessorQuery by_proc(machine);
+    by_proc.only_kind(Processor::LOC_PROC).same_address_space_as(cpu);
+    std::vector<Processor> space_procs(by_space.begin(), by_space.end());
+    std::vector<Processor> same_procs(by_proc.begin(), by_proc.end());
+    if(space_procs != same_procs) {
+      log_app.error() << "ERROR: address_space(" << cpu.address_space()
+                      << ") and same_address_space_as(" << cpu
+                      << ") return different processors!";
+      errors++;
+    }
+    if(std::find(space_procs.begin(), space_procs.end(), cpu) == space_procs.end()) {
+      log_app.error() << "ERROR: Processor not found in its own address space!";
+      errors++;
+    }
+  }
+
+  Machine::ProcessorQuery local_pq(machine);
+  local_pq.local_address_space();
+  Machine::ProcessorQuery space_pq(machine);
+  space_pq.address_space(Processor::get_executing_processor().address_space());
+  if(std::vector<Processor>(local_pq.begin(), local_pq.end()) !=
+     std::vector<Processor>(space_pq.begin(), space_pq.end())) {
+    log_app.error() << "ERROR: address_space and local_address_space return different "
+                       "processors!";
+    errors++;
+  }
+
+  Machine::MemoryQuery mq(machine);
+  mq.only_kind(Memory::SYSTEM_MEM);
+  Memory mem = mq.first();
+  if(mem.exists()) {
+    Machine::MemoryQuery by_space(machine);
+    by_space.only_kind(Memory::SYSTEM_MEM).address_space(mem.address_space());
+    Machine::MemoryQuery by_mem(machine);
+    by_mem.only_kind(Memory::SYSTEM_MEM).same_address_space_as(mem);
+    std::vector<Memory> space_mems(by_space.begin(), by_space.end());
+    std::vector<Memory> same_mems(by_mem.begin(), by_mem.end());
+    if(space_mems != same_mems) {
+      log_app.error() << "ERROR: address_space(" << mem.address_space()
+                      << ") and same_address_space_as(" << mem
+                      << ") return different memories!";
+      errors++;
+    }
+    if(std::find(space_mems.begin(), space_mems.end(), mem) == space_mems.end()) {
+      log_app.error() << "ERROR: Memory not found in its own address space!";
+      errors++;
+    }
+  }
+
+  // an address space past the end of the machine matches nothing
+  AddressSpace past_end = AddressSpace(num_spaces);
+  if(Machine::ProcessorQuery(machine).address_space(past_end).count() != 0) {
+    log_app.error() << "ERROR: Processors found in nonexistent address space "
+                    << past_end;
+    errors++;
+  }
+  if(Machine::MemoryQuery(machine).address_space(past_end).count() != 0) {
+    log_app.error() << "ERROR: Memories found in nonexistent address space " << past_end;
+    errors++;
+  }
+
+  log_app.print() << "  address_space tests: "
+                  << (errors == initial_errors ? "PASS" : "FAIL");
+}
+
 // Test combining multiple constraints
 void test_combined_constraints(Machine machine, int &errors)
 {
@@ -821,6 +957,7 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
   test_memory_best_affinity_multiple_targets(machine, errors);
   test_best_affinity_ties(machine, errors);
   test_same_address_space(machine, errors);
+  test_address_space(machine, errors);
   test_combined_constraints(machine, errors);
 
   // Summary

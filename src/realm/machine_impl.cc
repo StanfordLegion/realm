@@ -1357,6 +1357,13 @@ namespace Realm {
     return *this;
   }
 
+  Machine::ProcessorQuery &Machine::ProcessorQuery::address_space(AddressSpace a)
+  {
+    impl = ((ProcessorQueryImpl *)impl)->writeable_reference();
+    ((ProcessorQueryImpl *)impl)->restrict_to_node(a);
+    return *this;
+  }
+
   Machine::ProcessorQuery &Machine::ProcessorQuery::same_address_space_as(Processor p)
   {
     impl = ((ProcessorQueryImpl *)impl)->writeable_reference();
@@ -1479,6 +1486,13 @@ namespace Realm {
   {
     impl = ((MemoryQueryImpl *)impl)->writeable_reference();
     ((MemoryQueryImpl *)impl)->restrict_to_node(Network::my_node_id);
+    return *this;
+  }
+
+  Machine::MemoryQuery &Machine::MemoryQuery::address_space(AddressSpace a)
+  {
+    impl = ((MemoryQueryImpl *)impl)->writeable_reference();
+    ((MemoryQueryImpl *)impl)->restrict_to_node(a);
     return *this;
   }
 

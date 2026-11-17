@@ -175,8 +175,9 @@ namespace Realm {
     // restrict to just those of the specified 'kind'
     ProcessorQuery &only_kind(Processor::Kind kind);
 
-    // restrict to those managed by this address space
+    // restrict to an address space
     ProcessorQuery &local_address_space(void);
+    ProcessorQuery &address_space(AddressSpace a);
 
     // restrict to those in same address space as specified Processor or Memory
     ProcessorQuery &same_address_space_as(Processor p);
@@ -235,8 +236,9 @@ namespace Realm {
     // restrict to just those of the specified 'kind'
     MemoryQuery &only_kind(Memory::Kind kind);
 
-    // restrict to those managed by this address space
+    // restrict to an address space
     MemoryQuery &local_address_space(void);
+    MemoryQuery &address_space(AddressSpace a);
 
     // restrict to those in same address space as specified Processor or Memory
     MemoryQuery &same_address_space_as(Processor p);
