@@ -2198,8 +2198,15 @@ public:
 
   void run() override
   {
-    Event graph_done = sg.instantiate(nullptr, 0, ProfilingRequestSet(), Event::NO_EVENT,
-                                      1 /*priority*/);
+    // The graph may not start until the competing tasks are registered on
+    // `started`: otherwise, on a slow or oversubscribed machine, the whole
+    // graph (about a millisecond) can finish before this task gets to spawn
+    // them, and all three then run after it (seen on the Windows CI runner).
+    // The first graph task triggers `started` from its body, which enqueues
+    // the three tasks before that task returns, while the graph is active.
+    UserEvent go = UserEvent::create_user_event();
+    Event graph_done =
+        sg.instantiate(nullptr, 0, ProfilingRequestSet(), go, 1 /*priority*/);
     // Competing normal tasks, gated on the graph having started.
     SeqTaskArgs low{&seq, &outs[0], UserEvent::NO_USER_EVENT, 0};
     SeqTaskArgs equal{&seq, &outs[1], UserEvent::NO_USER_EVENT, 0};
@@ -2208,6 +2215,7 @@ public:
         graph_done, procs[0].spawn(seq_task_id, &low, sizeof(low), started, 0),
         procs[1].spawn(seq_task_id, &equal, sizeof(equal), started, 1),
         procs[0].spawn(seq_task_id, &high, sizeof(high), started, 2)};
+    go.trigger();
     completed = wait_with_timeout(Event::merge_events(evs), config.hang_timeout);
   }
 
@@ -2265,9 +2273,13 @@ public:
 
   void run() override
   {
-    Event low_done =
-        sg_low.instantiate(nullptr, 0, ProfilingRequestSet(), Event::NO_EVENT, 0);
+    // The low graph may not start until the high one is registered on
+    // `started` (see GraphPriorityTest::run): otherwise the low graph can
+    // finish first and the check passes vacuously.
+    UserEvent go = UserEvent::create_user_event();
+    Event low_done = sg_low.instantiate(nullptr, 0, ProfilingRequestSet(), go, 0);
     Event high_done = sg_high.instantiate(nullptr, 0, ProfilingRequestSet(), started, 2);
+    go.trigger();
     completed =
         wait_with_timeout(Event::merge_events(low_done, high_done), config.hang_timeout);
   }
@@ -2285,12 +2297,18 @@ public:
     for(auto &s : slots_low)
       if((s.load() > high_min) && (s.load() < high_max))
         interleaved++;
-    bool ok = (high_min > slots_low[0].load()) && (interleaved <= procs.size());
+    // the high graph must also have run before the low one ended: with the
+    // gate in run() that is deterministic, and without it this check could
+    // pass vacuously with the high graph running after the low one
+    const int64_t low_last = slots_low.back().load();
+    bool ok = (high_min > slots_low[0].load()) && (high_max < low_last) &&
+              (interleaved <= procs.size());
     if(!ok)
-      log_app.error() << name() << ": low_first=" << slots_low[0].load() << " high=["
-                      << high_min << "," << high_max << "] low tasks interleaved during "
-                      << "the high graph: " << interleaved << " (allowed " << procs.size()
-                      << ")";
+      log_app.error() << name() << ": low_first=" << slots_low[0].load()
+                      << " low_last=" << low_last << " high=[" << high_min << ","
+                      << high_max
+                      << "] low tasks interleaved during the high graph: " << interleaved
+                      << " (allowed " << procs.size() << ")";
     return ok;
   }
 
