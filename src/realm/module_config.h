@@ -68,13 +68,7 @@ namespace Realm {
   //  get_...() accessors, or by name through get_resource().
   //
   // NOTE for module authors: this class, and therefore every subclass, has
-  //  no virtual functions - a class with no non-inline virtual functions has
-  //  no "key function", so the compiler emits whatever vtable and typeinfo it
-  //  needs with vague linkage in every translation unit that uses the class.
-  //  That is what lets an application name the configuration class of a
-  //  module that is not compiled into this build of Realm - including under
-  //  -fsanitize=vptr, which references the typeinfo - without an unresolved
-  //  symbol at link time.  Subclasses must not add virtual functions either.
+  //  no virtual functions  Subclasses must not add virtual functions either.
   //  Module-specific behavior is instead reached through a process-wide
   //  registry of per-module function pointers and tables, keyed by module
   //  name, that the module's factory fills in with bind<>() below.
