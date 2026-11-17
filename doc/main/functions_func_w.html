@@ -42,7 +42,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+8e248ba4</button>
+     <button class="dropbtn">Version 26.9.1+cd89aade</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -183,6 +183,7 @@ $(function(){initNavTree('functions_func_w.html','',''); });
 <li>wait_for_full_poll_cycle()&#160;:&#160;<a class="el" href="classRealm_1_1GASNetEXPoller.html#ac5f4926c6cbbadfd716afd071f8dc806">Realm::GASNetEXPoller</a></li>
 <li>wait_for_shutdown()&#160;:&#160;<a class="el" href="classPRealm_1_1Runtime.html#a85cebe82415392e8da7b4fde4b3e620c">PRealm::Runtime</a>, <a class="el" href="classRealm_1_1Runtime.html#a5af602b42fffc1fdc8ef401be93398f2">Realm::Runtime</a>, <a class="el" href="classRealm_1_1RuntimeImpl.html#a007fa48aca9936015b9fcdb1a56f5d0f">Realm::RuntimeImpl</a></li>
 <li>wait_for_work()&#160;:&#160;<a class="el" href="classRealm_1_1KernelThreadTaskScheduler.html#a9a8082428a36227a0443dab535f92b94">Realm::KernelThreadTaskScheduler</a>, <a class="el" href="classRealm_1_1ThreadedTaskScheduler.html#a8d901ee69b987e224f4dc1611a297267">Realm::ThreadedTaskScheduler</a>, <a class="el" href="classRealm_1_1ThreadedTaskScheduler_1_1WorkCounter.html#a846d2e39d931379d677a20d33243edd6">Realm::ThreadedTaskScheduler::WorkCounter</a></li>
+<li>wait_for_writer()&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock.html#a97f57b19f908cf9825629fa5409be24b">Realm::StripedRWLock</a></li>
 <li>wait_on_streams()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUStream.html#aed822471aeeb9640bed6727f2fc78027">Realm::Cuda::GPUStream</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUStream.html#a59a94d392bacf359c82755985275c725">Realm::Hip::GPUStream</a></li>
 <li>wait_polling()&#160;:&#160;<a class="el" href="classRealm_1_1UCP_1_1UCPPoller.html#a1145a5e9c949d1f0d2776a514e42f60b">Realm::UCP::UCPPoller</a></li>
 <li>wait_slow()&#160;:&#160;<a class="el" href="classRealm_1_1Doorbell.html#ab13393d2e9f8c9a852d506c32733512e">Realm::Doorbell</a></li>
@@ -216,8 +217,9 @@ $(function(){initNavTree('functions_func_w.html','',''); });
 <li>write_untyped()&#160;:&#160;<a class="el" href="classRealm_1_1RegionInstance.html#a883b917b0db40235ff7930fd497545f8">Realm::RegionInstance</a>, <a class="el" href="classRealm_1_1RegionInstanceImpl.html#ad00456af57ce025b25ec9d217d377310">Realm::RegionInstanceImpl</a></li>
 <li>writeable_reference()&#160;:&#160;<a class="el" href="classRealm_1_1MemoryQueryImpl.html#afc1ddc6b78af6c29896a1ea5556940c3">Realm::MemoryQueryImpl</a>, <a class="el" href="classRealm_1_1ProcessorQueryImpl.html#a6388e0c620618707f6999e2db7e691c1">Realm::ProcessorQueryImpl</a></li>
 <li>Writer()&#160;:&#160;<a class="el" href="structRealm_1_1RWLock_1_1Writer.html#a73c86f6138201b0a0ce92452cc76d812">Realm::RWLock::Writer</a></li>
-<li>wrlock()&#160;:&#160;<a class="el" href="classRealm_1_1FastReservation.html#a18fc0511968b7fa44641be321554ad78">Realm::FastReservation</a>, <a class="el" href="classRealm_1_1RWLock.html#aa08734ebf2beef4ac68919c8b37833d5">Realm::RWLock</a></li>
+<li>wrlock()&#160;:&#160;<a class="el" href="classRealm_1_1FastReservation.html#a18fc0511968b7fa44641be321554ad78">Realm::FastReservation</a>, <a class="el" href="classRealm_1_1RWLock.html#aa08734ebf2beef4ac68919c8b37833d5">Realm::RWLock</a>, <a class="el" href="classRealm_1_1StripedRWLock.html#a87f490f7fd56c752f02d4bb197caf4f9">Realm::StripedRWLock</a></li>
 <li>wrlock_slow()&#160;:&#160;<a class="el" href="classRealm_1_1FastReservation.html#a30bef6aa250d61e8c489e2079f0aeea1">Realm::FastReservation</a></li>
+<li>wrunlock()&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock.html#a5e81d84969eb802ce68fdcd8349f72ed">Realm::StripedRWLock</a></li>
 </ul>
 </div><!-- contents -->
 </div><!-- doc-content -->

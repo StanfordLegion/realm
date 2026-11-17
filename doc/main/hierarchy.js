@@ -60,6 +60,7 @@ var hierarchy =
     [ "Realm::Cuda::AffineSubRect&lt; N, Offset_t &gt;", "structRealm_1_1Cuda_1_1AffineSubRect.html", null ],
     [ "Realm::Hip::AffineSubRect&lt; N, Offset_t &gt;", "structRealm_1_1Hip_1_1AffineSubRect.html", null ],
     [ "Realm::AffineTransform&lt; M, N, T &gt;", "classRealm_1_1AffineTransform.html", null ],
+    [ "Realm::ProcessorQueryImpl::AffinityCache", "structRealm_1_1ProcessorQueryImpl_1_1AffinityCache.html", null ],
     [ "Realm::AsyncFileIOContext::AIOOperation", "classRealm_1_1AsyncFileIOContext_1_1AIOOperation.html", null ],
     [ "Realm::MPI::AM_msg", "structRealm_1_1MPI_1_1AM__msg.html", null ],
     [ "Realm::ApproxImageResponseMessage&lt; T &gt;", "structRealm_1_1ApproxImageResponseMessage.html", null ],
@@ -79,6 +80,8 @@ var hierarchy =
     [ "Realm::Cuda::AutoGPUContext", "classRealm_1_1Cuda_1_1AutoGPUContext.html", null ],
     [ "Realm::Hip::AutoGPUContext", "classRealm_1_1Hip_1_1AutoGPUContext.html", null ],
     [ "Realm::AutoLock&lt; LT &gt;", "classRealm_1_1AutoLock.html", null ],
+    [ "Realm::StripedRWLock::AutoReaderLock", "classRealm_1_1StripedRWLock_1_1AutoReaderLock.html", null ],
+    [ "Realm::StripedRWLock::AutoWriterLock", "classRealm_1_1StripedRWLock_1_1AutoWriterLock.html", null ],
     [ "Realm::BackgroundWorkItem", "classRealm_1_1BackgroundWorkItem.html", [
       [ "Realm::XDQueue< AddressSplitChannel, AddressSplitXferDesBase >", "classRealm_1_1XDQueue.html", null ],
       [ "Realm::XDQueue< GPUChannel, GPUXferDes >", "classRealm_1_1XDQueue.html", null ],
@@ -940,6 +943,8 @@ var hierarchy =
     [ "Realm::PythonAPI", "classRealm_1_1PythonAPI.html", null ],
     [ "Realm::PythonInterpreter", "classRealm_1_1PythonInterpreter.html", null ],
     [ "Realm::PyThreadState", "structRealm_1_1PyThreadState.html", null ],
+    [ "Realm::QueryCacheSlot&lt; S &gt;", "classRealm_1_1QueryCacheSlot.html", null ],
+    [ "Realm::QueryKindCache&lt; T, NUM_KINDS &gt;", "structRealm_1_1QueryKindCache.html", null ],
     [ "Realm::QueryPredicate&lt; T, T2 &gt;", "classRealm_1_1QueryPredicate.html", null ],
     [ "Realm::QueryPredicate&lt; Memory, MachineMemInfo &gt;", "classRealm_1_1QueryPredicate.html", [
       [ "Realm::MemoryHasMemAffinityPredicate", "classRealm_1_1MemoryHasMemAffinityPredicate.html", null ],
@@ -948,6 +953,7 @@ var hierarchy =
     [ "Realm::QueryPredicate&lt; Processor, MachineProcInfo &gt;", "classRealm_1_1QueryPredicate.html", [
       [ "Realm::ProcessorHasAffinityPredicate", "classRealm_1_1ProcessorHasAffinityPredicate.html", null ]
     ] ],
+    [ "Realm::QueryResultList&lt; T &gt;", "structRealm_1_1QueryResultList.html", null ],
     [ "QuiescenceChecker", "classQuiescenceChecker.html", null ],
     [ "Realm::NetworkModule::QuiescenceState", "structRealm_1_1NetworkModule_1_1QuiescenceState.html", null ],
     [ "Realm::BasicRangeAllocator&lt; RT, TT &gt;::Range", "structRealm_1_1BasicRangeAllocator_1_1Range.html", null ],
@@ -1045,6 +1051,7 @@ var hierarchy =
     [ "Realm::SparsityMapImpl&lt; N, T &gt;::SetContribCountMessage", "structRealm_1_1SparsityMapImpl_1_1SetContribCountMessage.html", null ],
     [ "Realm::SharedMemoryInfo", "classRealm_1_1SharedMemoryInfo.html", null ],
     [ "Realm::SimpleSerdez&lt; T, MAX_SER_SIZE &gt;", "classRealm_1_1SimpleSerdez.html", null ],
+    [ "Realm::StripedRWLock::Slot", "structRealm_1_1StripedRWLock_1_1Slot.html", null ],
     [ "Realm::span&lt; T, Extent &gt;", "classRealm_1_1span.html", null ],
     [ "Realm::span&lt; T, dynamic_extent &gt;", "classRealm_1_1span_3_01T_00_01dynamic__extent_01_4.html", null ],
     [ "SparistyMap", "classSparistyMap.html", null ],
@@ -1070,6 +1077,7 @@ var hierarchy =
       [ "Realm::shortstringbuf< _INTERNAL_BUFFER_SIZE, _INITIAL_EXTERNAL_SIZE >", "classRealm_1_1shortstringbuf.html", null ]
     ] ],
     [ "Realm::stringbuilder", "classRealm_1_1stringbuilder.html", null ],
+    [ "Realm::StripedRWLock", "classRealm_1_1StripedRWLock.html", null ],
     [ "Realm::StructuredTransform&lt; N, T, N2, T2 &gt;", "classRealm_1_1StructuredTransform.html", null ],
     [ "Realm::Serialization::PolymorphicSerdezHelper&lt; T &gt;::SubclassMap", "structRealm_1_1Serialization_1_1PolymorphicSerdezHelper_1_1SubclassMap.html", null ],
     [ "PRealm::Subgraph", "classPRealm_1_1Subgraph.html", null ],

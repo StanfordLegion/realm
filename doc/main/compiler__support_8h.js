@@ -5,6 +5,7 @@ var compiler__support_8h =
     [ "REALM_ALIGNOF", "compiler__support_8h.html#a297f51c2b0062d2e4711aa3346a16135", null ],
     [ "REALM_ATTR_DEPRECATED", "compiler__support_8h.html#a920bf9a4430b09ed5c9bf55b2128f79b", null ],
     [ "REALM_ATTR_DEPRECATED2", "compiler__support_8h.html#abf9f7ea44d1cb1bdfd534995e4c84bdf", null ],
+    [ "REALM_ATTR_NOINLINE", "compiler__support_8h.html#afd8ae745c76a6d298172f9714cb23211", null ],
     [ "REALM_ATTR_NORETURN", "compiler__support_8h.html#a127f2afe94736c06b1d7d9740217bb96", null ],
     [ "REALM_ATTR_PRINTF_FORMAT", "compiler__support_8h.html#ae45607c35fc9579dd60fe7432653d02d", null ],
     [ "REALM_ATTR_UNUSED", "compiler__support_8h.html#a714dc8d038867871b4224de6035a143d", null ],

@@ -42,7 +42,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+8e248ba4</button>
+     <button class="dropbtn">Version 26.9.1+cd89aade</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -106,7 +106,6 @@ $(function() { codefold.init(); });
   <div id="navrow4" class="tabs3">
     <ul class="tablist">
       <li><a href="functions.html#index__3A"><span>:</span></a></li>
-      <li><a href="functions__.html#index__5F"><span>_</span></a></li>
       <li><a href="functions_a.html#index_a"><span>a</span></a></li>
       <li><a href="functions_b.html#index_b"><span>b</span></a></li>
       <li><a href="functions_c.html#index_c"><span>c</span></a></li>
@@ -248,6 +247,7 @@ $(function(){initNavTree('functions_s.html','',''); });
 <li>set()&#160;:&#160;<a class="el" href="classPRealm_1_1Clock_1_1TimescaleConverter.html#a17609e4df0f46405824619d7c948bad0">PRealm::Clock::TimescaleConverter</a>, <a class="el" href="classRealm_1_1ByteArray.html#a7895c70db5ea142db5f7f632db0f41eb">Realm::ByteArray</a>, <a class="el" href="classRealm_1_1Clock_1_1TimescaleConverter.html#a17609e4df0f46405824619d7c948bad0">Realm::Clock::TimescaleConverter</a></li>
 <li>set_addrlist()&#160;:&#160;<a class="el" href="classRealm_1_1AddressListCursor.html#a43373d976ba1187cac60126f8864dfef">Realm::AddressListCursor</a></li>
 <li>set_affinity()&#160;:&#160;<a class="el" href="classRealm_1_1CoreReservation.html#ab9727d1d7ef5b9c434e347c0adcf460f">Realm::CoreReservation</a></li>
+<li>set_affinity_proc()&#160;:&#160;<a class="el" href="classRealm_1_1MemoryQueryImpl.html#a768cadf54967b5b00662c80fcc4a95b7">Realm::MemoryQueryImpl</a></li>
 <li>set_alt_stack_size()&#160;:&#160;<a class="el" href="classRealm_1_1CoreReservationParameters.html#a1d9908802e7695151d90ce0a5cd7a84b">Realm::CoreReservationParameters</a>, <a class="el" href="classRealm_1_1ThreadLaunchParameters.html#ac30565d6debbf7bb9018644cc9ef3648">Realm::ThreadLaunchParameters</a></li>
 <li>set_alu_usage()&#160;:&#160;<a class="el" href="classRealm_1_1CoreReservationParameters.html#ad6279fa77490c9926ba47338af3a468f">Realm::CoreReservationParameters</a></li>
 <li>set_am_handler()&#160;:&#160;<a class="el" href="classRealm_1_1UCP_1_1UCPWorker.html#a271a52858b55e9b7dc4091c8681ee83c">Realm::UCP::UCPWorker</a></li>
@@ -315,7 +315,7 @@ $(function(){initNavTree('functions_s.html','',''); });
 <li>setup_redop_kernel()&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUreduceXferDes.html#af21aeed2a7f84c0fdd31b0d3c0be4ec8">Realm::Cuda::GPUreduceXferDes</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUreduceXferDes.html#ab98b0430677ae703088249236edfc857">Realm::Hip::GPUreduceXferDes</a></li>
 <li>sfx&#160;:&#160;<a class="el" href="classRealm_1_1PrettyVector.html#a9468a584fe58449d6c09e8d5af84b01b">Realm::PrettyVector&lt; T &gt;</a></li>
 <li>share_memories()&#160;:&#160;<a class="el" href="classRealm_1_1RuntimeImpl.html#ab497f253a4391954e94d298ec7eabdbe">Realm::RuntimeImpl</a></li>
-<li>shared_cached_list&#160;:&#160;<a class="el" href="classRealm_1_1MemoryQueryImpl.html#a78699c1020f38029e2e65e46a05be74b">Realm::MemoryQueryImpl</a>, <a class="el" href="classRealm_1_1ProcessorQueryImpl.html#a1aac3c207196c25f739ac13b996219f4">Realm::ProcessorQueryImpl</a></li>
+<li>shared_cache_covers()&#160;:&#160;<a class="el" href="classRealm_1_1MemoryQueryImpl.html#a4dc3f9107348320981e7b2c14eb0ef1a">Realm::MemoryQueryImpl</a>, <a class="el" href="classRealm_1_1ProcessorQueryImpl.html#abdc7894eaced502c5110daec02779861">Realm::ProcessorQueryImpl</a></li>
 <li>shared_peers_use_network_module&#160;:&#160;<a class="el" href="classRealm_1_1RuntimeImpl.html#a9383367e562010f04c4277a23a3708c5">Realm::RuntimeImpl</a></li>
 <li>shared_ranks&#160;:&#160;<a class="el" href="structbootstrap__handle.html#a1d284bdf0569f1dc6b057dadcd22eb9b">bootstrap_handle</a></li>
 <li>shared_worker&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1CudaModule.html#aa105540c0d71f627d412d5126f9149d6">Realm::Cuda::CudaModule</a>, <a class="el" href="classRealm_1_1Hip_1_1HipModule.html#a1cfa03cc3da1de9fa395070a30ba08b0">Realm::Hip::HipModule</a></li>
@@ -378,8 +378,12 @@ $(function(){initNavTree('functions_s.html','',''); });
 <li>slice()&#160;:&#160;<a class="el" href="classRealm_1_1bitpack.html#a329820d06bf7f421f933fcca71def557">Realm::bitpack&lt; T &gt;</a></li>
 <li>slope_a_to_b&#160;:&#160;<a class="el" href="classPRealm_1_1Clock_1_1TimescaleConverter.html#a6c3fc66ee5360875e3e653a88ebf811d">PRealm::Clock::TimescaleConverter</a>, <a class="el" href="classRealm_1_1Clock_1_1TimescaleConverter.html#a6c3fc66ee5360875e3e653a88ebf811d">Realm::Clock::TimescaleConverter</a></li>
 <li>slope_b_to_a&#160;:&#160;<a class="el" href="classPRealm_1_1Clock_1_1TimescaleConverter.html#a6478ec30b2264e6a5fecc4c69d7e4fab">PRealm::Clock::TimescaleConverter</a>, <a class="el" href="classRealm_1_1Clock_1_1TimescaleConverter.html#a6478ec30b2264e6a5fecc4c69d7e4fab">Realm::Clock::TimescaleConverter</a></li>
+<li>Slot()&#160;:&#160;<a class="el" href="structRealm_1_1StripedRWLock_1_1Slot.html#ac8066b3a9d81c6ca88005244b0ed2d42">Realm::StripedRWLock::Slot</a></li>
+<li>slot&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock_1_1AutoReaderLock.html#a88887ba535c0fffd7b440652835691a1">Realm::StripedRWLock::AutoReaderLock</a></li>
 <li>SLOT_BASE&#160;:&#160;<a class="el" href="classRealm_1_1AddressList.html#a6c38d32b8ad17873c07fd073dc52d8df">Realm::AddressList</a></li>
 <li>SLOT_HEADER&#160;:&#160;<a class="el" href="classRealm_1_1AddressList.html#a8c23fd6114a64d828c44fc13f331ece4">Realm::AddressList</a></li>
+<li>slots&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock.html#a144a5401b095477b88f4ed9998861e2f">Realm::StripedRWLock</a></li>
+<li>slots_pad&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock.html#a7d331c4c2fed25ae77ea6398df365a38">Realm::StripedRWLock</a></li>
 <li>sofile_loaded&#160;:&#160;<a class="el" href="classRealm_1_1ModuleRegistrar.html#aa8c0797d3fe6e753dce98284a92767ee">Realm::ModuleRegistrar</a></li>
 <li>sorted_by_end&#160;:&#160;<a class="el" href="structRealm_1_1IntervalTree_1_1TreeNode.html#a75befa66502264d47a4cb157a012a8cc">Realm::IntervalTree&lt; IT, LT &gt;::TreeNode</a></li>
 <li>sorted_by_start&#160;:&#160;<a class="el" href="structRealm_1_1IntervalTree_1_1TreeNode.html#a4567433d0f9527480481854239e91a60">Realm::IntervalTree&lt; IT, LT &gt;::TreeNode</a></li>
@@ -562,6 +566,7 @@ $(function(){initNavTree('functions_s.html','',''); });
 <li>stringbuilder()&#160;:&#160;<a class="el" href="classRealm_1_1stringbuilder.html#a91cbccdb8d3cdfd5a613e8f910736def">Realm::stringbuilder</a></li>
 <li>StringCommandLineOption()&#160;:&#160;<a class="el" href="classRealm_1_1StringCommandLineOption.html#a42a4697fedadfea3502e42a941b519e7">Realm::StringCommandLineOption</a></li>
 <li>StringListCommandLineOption()&#160;:&#160;<a class="el" href="classRealm_1_1StringListCommandLineOption.html#a43a1607701858d1cdb135dcb4aaeedad">Realm::StringListCommandLineOption</a></li>
+<li>StripedRWLock()&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock.html#a03790d044d731ce746a3afba463eb893">Realm::StripedRWLock</a></li>
 <li>STRUCTURED&#160;:&#160;<a class="el" href="classRealm_1_1DomainTransform.html#af6b856888bfc002e31c41c4ac566a501a21e7ace1e4beb13b029cee063e3a86a8">Realm::DomainTransform&lt; N, T, N2, T2 &gt;</a></li>
 <li>structured&#160;:&#160;<a class="el" href="classRealm_1_1IndirectionInfoBase.html#a08f636b9acb4c671d87b3931b276b073">Realm::IndirectionInfoBase</a></li>
 <li>structured_transform&#160;:&#160;<a class="el" href="classRealm_1_1DomainTransform.html#a2aea7e41772e03b87cf5ced85ddedf6a">Realm::DomainTransform&lt; N, T, N2, T2 &gt;</a></li>

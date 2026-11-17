@@ -1,6 +1,5 @@
 var searchData=
 [
-  ['xferdesid_0',['XferDesID',['../namespaceRealm.html#abed5575be9e112dd2dc723c61bc2137b',1,'Realm']]],
-  ['xferdeslist_1',['XferDesList',['../classRealm_1_1XferDes.html#ad04088e965a5d9b65dc2d7932c08f23b',1,'Realm::XferDes']]],
-  ['xmitpairlist_2',['XmitPairList',['../classRealm_1_1XmitSrcDestPair.html#a580fa65b80ffc95855547d5c2260a442',1,'Realm::XmitSrcDestPair']]]
+  ['waiterlist_0',['WaiterList',['../classRealm_1_1ReservationImpl.html#a4c10136d90a9560cb9b32998f483afeb',1,'Realm::ReservationImpl']]],
+  ['writesequencecache_1',['WriteSequenceCache',['../classRealm_1_1XferDes.html#a2871bd59f368ef57d24e9df41cbb490b',1,'Realm::XferDes']]]
 ];

@@ -1,9 +1,6 @@
 var searchData=
 [
-  ['obj_5fcleanup_5ft_0',['obj_cleanup_t',['../namespaceRealm_1_1UCP.html#a5c32fa81fd3152041c97671ab2e04f5a',1,'Realm::UCP']]],
-  ['obj_5finit_5ft_1',['obj_init_t',['../namespaceRealm_1_1UCP.html#a19c140777e441518abb855f4d028d3d5',1,'Realm::UCP']]],
-  ['opcode_2',['Opcode',['../namespaceRealm_1_1PieceLookup_1_1Opcodes.html#a1092f39d62bce782199fde92371feff8',1,'Realm::PieceLookup::Opcodes']]],
-  ['oplist_3',['OpList',['../classRealm_1_1PartitioningOperation.html#aeaf74a43441349040cc18a2e27f64940',1,'Realm::PartitioningOperation']]],
-  ['oshandle_4',['OsHandle',['../namespaceRealm.html#a8c42fde3833e3c3a8c2617eed98def35',1,'Realm']]],
-  ['owner_5fnode_5',['owner_node',['../structRealm_1_1ID_1_1FMT__Memory.html#a9e1f2cb20a93c9a516d85685024bece3',1,'Realm::ID::FMT_Memory::owner_node'],['../structRealm_1_1ID_1_1FMT__Instance.html#ad395fac4527c2c84edf37403cc6bb91e',1,'Realm::ID::FMT_Instance::owner_node'],['../structRealm_1_1ID_1_1FMT__Processor.html#af936dfbf499ee1a88dde2cfa91824f92',1,'Realm::ID::FMT_Processor::owner_node'],['../structRealm_1_1ID_1_1FMT__ProcGroup.html#a341e84fc0fcda5a68d08fe8fc344aef4',1,'Realm::ID::FMT_ProcGroup::owner_node'],['../structRealm_1_1ID_1_1FMT__Sparsity.html#a96d7996b488ade8d35294fa65efbf4cd',1,'Realm::ID::FMT_Sparsity::owner_node'],['../structRealm_1_1ID_1_1FMT__CompQueue.html#a1c74237c26e8fb7b56ed47b5a9110569',1,'Realm::ID::FMT_CompQueue::owner_node'],['../structRealm_1_1ID_1_1FMT__Subgraph.html#a5b2975e75d1f4bd52b3b37fcbc6a68cc',1,'Realm::ID::FMT_Subgraph::owner_node']]]
+  ['nodebase_0',['NodeBase',['../classRealm_1_1DynamicTable.html#a3e8338eefb191826bb49d1139a8226da',1,'Realm::DynamicTable']]],
+  ['nodeid_1',['NodeID',['../namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd',1,'Realm']]],
+  ['nvmlintnvlinkdevicetype_5ft_2',['nvmlIntNvLinkDeviceType_t',['../namespaceRealm_1_1Cuda.html#ad3f2b6de76383898e56a4823d7c3a99e',1,'Realm::Cuda']]]
 ];

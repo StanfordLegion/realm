@@ -15,5 +15,9 @@ var mutex_8h =
     [ "Realm::RWLock", "classRealm_1_1RWLock.html", "classRealm_1_1RWLock" ],
     [ "Realm::RWLock::Writer", "structRealm_1_1RWLock_1_1Writer.html", "structRealm_1_1RWLock_1_1Writer" ],
     [ "Realm::RWLock::Reader", "structRealm_1_1RWLock_1_1Reader.html", "structRealm_1_1RWLock_1_1Reader" ],
+    [ "Realm::StripedRWLock", "classRealm_1_1StripedRWLock.html", "classRealm_1_1StripedRWLock" ],
+    [ "Realm::StripedRWLock::AutoReaderLock", "classRealm_1_1StripedRWLock_1_1AutoReaderLock.html", "classRealm_1_1StripedRWLock_1_1AutoReaderLock" ],
+    [ "Realm::StripedRWLock::AutoWriterLock", "classRealm_1_1StripedRWLock_1_1AutoWriterLock.html", "classRealm_1_1StripedRWLock_1_1AutoWriterLock" ],
+    [ "Realm::StripedRWLock::Slot", "structRealm_1_1StripedRWLock_1_1Slot.html", "structRealm_1_1StripedRWLock_1_1Slot" ],
     [ "Realm::Mutex", "namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe", null ]
 ];

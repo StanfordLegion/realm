@@ -1,15 +1,15 @@
 var searchData=
 [
-  ['machinequeryiterator_0',['MachineQueryIterator',['../namespacePRealm.html#a64d0eb6c35ba5019b4d5e3803892ce13',1,'PRealm']]],
-  ['matrix_1',['Matrix',['../namespacePRealm.html#a9b998e8e6a0c00f254c62621fb372ce6',1,'PRealm']]],
-  ['mem_5fidx_2',['mem_idx',['../structRealm_1_1ID_1_1FMT__Memory.html#a08bcabb30b0dce57b358a5998f824a45',1,'Realm::ID::FMT_Memory::mem_idx'],['../structRealm_1_1ID_1_1FMT__Instance.html#a051d29f737ee69ed2fa4ac9cd82ebebf',1,'Realm::ID::FMT_Instance::mem_idx']]],
-  ['memoryquerypredicate_3',['MemoryQueryPredicate',['../namespaceRealm.html#af5685ecad651601b884c7805ff713eb6',1,'Realm']]],
-  ['memorytype_4',['MemoryType',['../namespaceRealm_1_1NetworkSegmentInfo.html#a3f344941ce4ec946242d8c49e3361d61',1,'Realm::NetworkSegmentInfo']]],
-  ['memorytypeextradata_5',['MemoryTypeExtraData',['../namespaceRealm_1_1NetworkSegmentInfo.html#a64e7245ffba2278055c7b9b8d0220060',1,'Realm::NetworkSegmentInfo']]],
-  ['messagehandler_6',['MessageHandler',['../classRealm_1_1ActiveMessageHandlerTable.html#ac19c2103d2ff1deff5b4d61c1732ec08',1,'Realm::ActiveMessageHandlerTable']]],
-  ['messagehandlerinline_7',['MessageHandlerInline',['../classRealm_1_1ActiveMessageHandlerTable.html#a05a6c1ad0a01ebc2703829c418c03aeb',1,'Realm::ActiveMessageHandlerTable']]],
-  ['messagehandlernotimeout_8',['MessageHandlerNoTimeout',['../classRealm_1_1ActiveMessageHandlerTable.html#a4f9d276a6750a008470010fe17bb1705',1,'Realm::ActiveMessageHandlerTable']]],
-  ['messageid_9',['MessageID',['../classRealm_1_1ActiveMessageHandlerTable.html#a0c3032cd9c31cb3dbba884b955c608c5',1,'Realm::ActiveMessageHandlerTable']]],
-  ['microoplist_10',['MicroOpList',['../classRealm_1_1PartitioningMicroOp.html#a4fb37f502473a701cae39eadae1cd640',1,'Realm::PartitioningMicroOp']]],
-  ['mutex_11',['Mutex',['../namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe',1,'Realm']]]
+  ['l1dcacheperfcounters_0',['L1DCachePerfCounters',['../namespaceRealm_1_1ProfilingMeasurements.html#a85045a8c1b4e33b846311f5c10230dbb',1,'Realm::ProfilingMeasurements']]],
+  ['l1icacheperfcounters_1',['L1ICachePerfCounters',['../namespaceRealm_1_1ProfilingMeasurements.html#a5caeaab0524172211c91bbbe95fc03e0',1,'Realm::ProfilingMeasurements']]],
+  ['l2cacheperfcounters_2',['L2CachePerfCounters',['../namespaceRealm_1_1ProfilingMeasurements.html#a02febe6eec2bbc98588cc4e562328b12',1,'Realm::ProfilingMeasurements']]],
+  ['l3cacheperfcounters_3',['L3CachePerfCounters',['../namespaceRealm_1_1ProfilingMeasurements.html#abcafc5c96ab2cc13b45a80362f113a0a',1,'Realm::ProfilingMeasurements']]],
+  ['layouttype_4',['LayoutType',['../namespaceRealm_1_1PieceLayoutTypes.html#ab87fe83f3c42381f6667a21b10f804e8',1,'Realm::PieceLayoutTypes']]],
+  ['leaf_5ftype_5',['LEAF_TYPE',['../classRealm_1_1DynamicTableAllocator.html#a91f8c2477b4ea8ce71cdd70c91c5459b',1,'Realm::DynamicTableAllocator']]],
+  ['llvmcontextref_6',['LLVMContextRef',['../llvmjit__internal_8h.html#a9c43e01525516ff6b4feab5166c5b1da',1,'llvmjit_internal.h']]],
+  ['llvmexecutionengineref_7',['LLVMExecutionEngineRef',['../llvmjit__internal_8h.html#a6b6396d4d249f6d63508014b66c3507e',1,'llvmjit_internal.h']]],
+  ['llvmtargetref_8',['LLVMTargetRef',['../llvmjit__internal_8h.html#a1ec4bda112ca57f7eb2ac766ce0ca54f',1,'llvmjit_internal.h']]],
+  ['localeventtableallocator_9',['LocalEventTableAllocator',['../namespaceRealm.html#af5e9edc225767597d9f32ecb19c61130',1,'Realm']]],
+  ['locktype_10',['LOCKTYPE',['../classRealm_1_1IntrusiveList.html#ad3b471d076bae90ca6687c16607324a8',1,'Realm::IntrusiveList::LOCKTYPE'],['../classRealm_1_1IntrusivePriorityList.html#abd4da4784be579a2d47c19bee5b4eaa1',1,'Realm::IntrusivePriorityList::LOCKTYPE']]],
+  ['lt_11',['LT',['../classRealm_1_1DynamicTable.html#a01069a937704d0f8bcec0b88ff31f0d8',1,'Realm::DynamicTable::LT'],['../classRealm_1_1DynamicTableFreeList.html#a844bb9f05f5765872167d2e2468c7e1f',1,'Realm::DynamicTableFreeList::LT'],['../classRealm_1_1DynamicTableAllocator.html#a2a7a76cbdd22a55bae5ffd1d63ce0fa2',1,'Realm::DynamicTableAllocator::LT']]]
 ];

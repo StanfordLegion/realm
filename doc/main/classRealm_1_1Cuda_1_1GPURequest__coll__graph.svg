@@ -17,20 +17,20 @@
 </a>
 </g>
 </g>
-<!-- Node144 -->
-<g id="Node000144" class="node">
-<title>Node144</title>
-<g id="a_Node000144"><a xlink:href="classRealm_1_1Cuda_1_1GPUCompletionEvent.html" target="_top" xlink:title=" ">
+<!-- Node146 -->
+<g id="Node000146" class="node">
+<title>Node146</title>
+<g id="a_Node000146"><a xlink:href="classRealm_1_1Cuda_1_1GPUCompletionEvent.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="2330.25,-1042.75 2168.75,-1042.75 2168.75,-1009.25 2330.25,-1009.25 2330.25,-1042.75"/>
 <text xml:space="preserve" text-anchor="start" x="2176.75" y="-1029.25" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::Cuda::GPUCompletion</text>
 <text xml:space="preserve" text-anchor="middle" x="2249.5" y="-1016.5" font-family="Helvetica,sans-Serif" font-size="10.00">Event</text>
 </a>
 </g>
 </g>
-<!-- Node1&#45;&gt;Node144 -->
-<g id="edge93_Node000144_Node000001" class="edge">
-<title>Node1&#45;&gt;Node144</title>
-<g id="a_edge93_Node000144_Node000001"><a xlink:title=" ">
+<!-- Node1&#45;&gt;Node146 -->
+<g id="edge93_Node000146_Node000001" class="edge">
+<title>Node1&#45;&gt;Node146</title>
+<g id="a_edge93_Node000146_Node000001"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M2082.44,-1051.49C2104.7,-1050.45 2128.69,-1048.75 2150.75,-1046 2156.94,-1045.23 2163.32,-1044.28 2169.72,-1043.22"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="2082.34,-1047.99 2072.5,-1051.91 2082.64,-1054.98 2082.34,-1047.99"/>
 </a>
@@ -330,76 +330,76 @@
 </g>
 <text xml:space="preserve" text-anchor="start" x="764" y="-282.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">instance_map_mutex</text>
 </g>
-<!-- Node137 -->
-<g id="Node000137" class="node">
-<title>Node137</title>
-<g id="a_Node000137"><a xlink:href="classRealm_1_1Cuda_1_1GPUDynamicFBMemory.html" target="_top" xlink:title=" ">
+<!-- Node139 -->
+<g id="Node000139" class="node">
+<title>Node139</title>
+<g id="a_Node000139"><a xlink:href="classRealm_1_1Cuda_1_1GPUDynamicFBMemory.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="2099,-111.38 1897,-111.38 1897,-90.62 2099,-90.62 2099,-111.38"/>
 <text xml:space="preserve" text-anchor="middle" x="1998" y="-97.88" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::Cuda::GPUDynamicFBMemory</text>
 </a>
 </g>
 </g>
-<!-- Node5&#45;&gt;Node137 -->
-<g id="edge74_Node000137_Node000005" class="edge">
-<title>Node5&#45;&gt;Node137</title>
-<g id="a_edge74_Node000137_Node000005"><a xlink:title=" ">
+<!-- Node5&#45;&gt;Node139 -->
+<g id="edge74_Node000139_Node000005" class="edge">
+<title>Node5&#45;&gt;Node139</title>
+<g id="a_edge74_Node000139_Node000005"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M317.35,-431.9C335.5,-402.65 367.95,-346.03 383,-293 394.64,-251.99 376.26,-136.72 401,-102 464.6,-12.75 515.91,0 625.5,0 625.5,0 625.5,0 1645.5,0 1775.03,0 1921.33,-64.14 1975.42,-90.19"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="314.55,-429.78 312.17,-440.1 320.47,-433.51 314.55,-429.78"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="1130.38" y="-6.25" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">mutex</text>
 </g>
-<!-- Node139 -->
-<g id="Node000139" class="node">
-<title>Node139</title>
-<g id="a_Node000139"><a xlink:href="classRealm_1_1IBMemory.html" target="_top" xlink:title=" ">
+<!-- Node141 -->
+<g id="Node000141" class="node">
+<title>Node141</title>
+<g id="a_Node000141"><a xlink:href="classRealm_1_1IBMemory.html" target="_top" xlink:title=" ">
 <polygon fill="#fff0f0" stroke="red" points="1696.38,-280.38 1592.62,-280.38 1592.62,-259.62 1696.38,-259.62 1696.38,-280.38"/>
 <text xml:space="preserve" text-anchor="middle" x="1644.5" y="-266.88" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::IBMemory</text>
 </a>
 </g>
 </g>
-<!-- Node5&#45;&gt;Node139 -->
-<g id="edge79_Node000139_Node000005" class="edge">
-<title>Node5&#45;&gt;Node139</title>
-<g id="a_edge79_Node000139_Node000005"><a xlink:title=" ">
+<!-- Node5&#45;&gt;Node141 -->
+<g id="edge79_Node000141_Node000005" class="edge">
+<title>Node5&#45;&gt;Node141</title>
+<g id="a_edge79_Node000141_Node000005"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M315.6,-431.52C331.59,-403.83 363.22,-354.21 401,-322 486.62,-249 512.99,-205 625.5,-205 625.5,-205 625.5,-205 1299.5,-205 1357.16,-205 1518.34,-240.71 1597.89,-259.19"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="312.69,-429.55 310.82,-439.98 318.79,-432.99 312.69,-429.55"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="980.25" y="-211.25" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">mutex</text>
 </g>
-<!-- Node142 -->
-<g id="Node000142" class="node">
-<title>Node142</title>
-<g id="a_Node000142"><a xlink:href="classRealm_1_1Cuda_1_1GPUStream.html" target="_top" xlink:title=" ">
+<!-- Node144 -->
+<g id="Node000144" class="node">
+<title>Node144</title>
+<g id="a_Node000144"><a xlink:href="classRealm_1_1Cuda_1_1GPUStream.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="2068.25,-772.38 1927.75,-772.38 1927.75,-751.62 2068.25,-751.62 2068.25,-772.38"/>
 <text xml:space="preserve" text-anchor="middle" x="1998" y="-758.88" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::Cuda::GPUStream</text>
 </a>
 </g>
 </g>
-<!-- Node5&#45;&gt;Node142 -->
-<g id="edge86_Node000142_Node000005" class="edge">
-<title>Node5&#45;&gt;Node142</title>
-<g id="a_edge86_Node000142_Node000005"><a xlink:title=" ">
+<!-- Node5&#45;&gt;Node144 -->
+<g id="edge86_Node000144_Node000005" class="edge">
+<title>Node5&#45;&gt;Node144</title>
+<g id="a_edge86_Node000144_Node000005"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M314.09,-473.12C328.7,-502.43 359.11,-554.98 401,-583 443.83,-611.65 480.39,-571.52 513.5,-611 550.86,-655.55 489,-832.33 531.5,-872 567.91,-905.98 211.62,-969.81 1540.5,-852 1692.11,-838.56 1730.87,-834.99 1879,-800 1909.79,-792.73 1944.13,-781.28 1967.79,-772.84"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="317.27,-471.65 309.78,-464.15 310.96,-474.68 317.27,-471.65"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="1130.38" y="-895.13" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">mutex</text>
 </g>
-<!-- Node143 -->
-<g id="Node000143" class="node">
-<title>Node143</title>
-<g id="a_Node000143"><a xlink:href="classRealm_1_1Cuda_1_1GPUEventPool.html" target="_top" xlink:title=" ">
+<!-- Node145 -->
+<g id="Node000145" class="node">
+<title>Node145</title>
+<g id="a_Node000145"><a xlink:href="classRealm_1_1Cuda_1_1GPUEventPool.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="893.5,-439.38 739.5,-439.38 739.5,-418.62 893.5,-418.62 893.5,-439.38"/>
 <text xml:space="preserve" text-anchor="middle" x="816.5" y="-425.88" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::Cuda::GPUEventPool</text>
 </a>
 </g>
 </g>
-<!-- Node5&#45;&gt;Node143 -->
-<g id="edge89_Node000143_Node000005" class="edge">
-<title>Node5&#45;&gt;Node143</title>
-<g id="a_edge89_Node000143_Node000005"><a xlink:title=" ">
+<!-- Node5&#45;&gt;Node145 -->
+<g id="edge89_Node000145_Node000005" class="edge">
+<title>Node5&#45;&gt;Node145</title>
+<g id="a_edge89_Node000145_Node000005"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M372.03,-442.96C381.74,-441.9 391.61,-440.95 401,-440.25 518.92,-431.5 656.15,-429.35 739.38,-428.93"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="371.79,-439.46 362.25,-444.07 372.58,-446.42 371.79,-439.46"/>
 </a>
@@ -788,39 +788,39 @@
 </g>
 <text xml:space="preserve" text-anchor="start" x="1804.75" y="-635.99" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">gpu</text>
 </g>
-<!-- Node21&#45;&gt;Node137 -->
-<g id="edge73_Node000137_Node000021" class="edge">
-<title>Node21&#45;&gt;Node137</title>
-<g id="a_edge73_Node000137_Node000021"><a xlink:title=" ">
+<!-- Node21&#45;&gt;Node139 -->
+<g id="edge73_Node000139_Node000021" class="edge">
+<title>Node21&#45;&gt;Node139</title>
+<g id="a_edge73_Node000139_Node000021"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M1658.06,-582.7C1677.27,-550.56 1713.49,-485.42 1730.5,-425 1741.02,-387.63 1724.18,-281.51 1748.5,-251.25 1786.78,-203.62 1830.09,-244.62 1879,-208 1890.25,-199.58 1887.44,-192.3 1897,-182 1923.44,-153.5 1960.13,-126.32 1980.93,-111.83"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="1655.23,-580.62 1653.04,-590.98 1661.22,-584.25 1655.23,-580.62"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="1804.75" y="-257.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">gpu</text>
 </g>
-<!-- Node138 -->
-<g id="Node000138" class="node">
-<title>Node138</title>
-<g id="a_Node000138"><a xlink:href="classRealm_1_1Cuda_1_1GPUFBIBMemory.html" target="_top" xlink:title=" ">
+<!-- Node140 -->
+<g id="Node000140" class="node">
+<title>Node140</title>
+<g id="a_Node000140"><a xlink:href="classRealm_1_1Cuda_1_1GPUFBIBMemory.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="2082.12,-417.38 1913.88,-417.38 1913.88,-396.62 2082.12,-396.62 2082.12,-417.38"/>
 <text xml:space="preserve" text-anchor="middle" x="1998" y="-403.88" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::Cuda::GPUFBIBMemory</text>
 </a>
 </g>
 </g>
-<!-- Node21&#45;&gt;Node138 -->
-<g id="edge80_Node000138_Node000021" class="edge">
-<title>Node21&#45;&gt;Node138</title>
-<g id="a_edge80_Node000138_Node000021"><a xlink:title=" ">
+<!-- Node21&#45;&gt;Node140 -->
+<g id="edge80_Node000140_Node000021" class="edge">
+<title>Node21&#45;&gt;Node140</title>
+<g id="a_edge80_Node000140_Node000021"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M1675.92,-587.25C1696.02,-577.49 1723.23,-565.47 1748.5,-558.25 1804.87,-542.15 1827.38,-566.79 1879,-539 1893.21,-531.35 1963.51,-447.43 1988.32,-417.51"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="1674.58,-584.01 1667.17,-591.59 1677.69,-590.28 1674.58,-584.01"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="1804.75" y="-564.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">gpu</text>
 </g>
-<!-- Node21&#45;&gt;Node142 -->
-<g id="edge84_Node000142_Node000021" class="edge">
-<title>Node21&#45;&gt;Node142</title>
-<g id="a_edge84_Node000142_Node000021"><a xlink:title=" ">
+<!-- Node21&#45;&gt;Node144 -->
+<g id="edge84_Node000144_Node000021" class="edge">
+<title>Node21&#45;&gt;Node144</title>
+<g id="a_edge84_Node000144_Node000021"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M1675.25,-619.12C1695.46,-629.58 1723.05,-642.91 1748.5,-652 1804.76,-672.1 1824.27,-660.3 1879,-684.25 1920.36,-702.34 1963.22,-734.59 1984.06,-751.3"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="1676.94,-616.06 1666.46,-614.51 1673.69,-622.26 1676.94,-616.06"/>
 </a>
@@ -966,10 +966,10 @@
 </g>
 <text xml:space="preserve" text-anchor="start" x="1455.38" y="-744.69" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">worker</text>
 </g>
-<!-- Node28&#45;&gt;Node142 -->
-<g id="edge85_Node000142_Node000028" class="edge">
-<title>Node28&#45;&gt;Node142</title>
-<g id="a_edge85_Node000142_Node000028"><a xlink:title=" ">
+<!-- Node28&#45;&gt;Node144 -->
+<g id="edge85_Node000144_Node000028" class="edge">
+<title>Node28&#45;&gt;Node144</title>
+<g id="a_edge85_Node000144_Node000028"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M1345.23,-747.94C1363.16,-752.87 1384.01,-757.94 1403.25,-761 1612.27,-794.23 1668.1,-799.75 1879,-782 1900.53,-780.19 1924.05,-776.55 1944.37,-772.86"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="1346.23,-744.59 1335.66,-745.24 1344.33,-751.33 1346.23,-744.59"/>
 </a>
@@ -1235,19 +1235,19 @@
 </a>
 </g>
 </g>
-<!-- Node95&#45;&gt;Node137 -->
-<g id="edge72_Node000137_Node000095" class="edge">
-<title>Node95&#45;&gt;Node137</title>
-<g id="a_edge72_Node000137_Node000095"><a xlink:title=" ">
+<!-- Node95&#45;&gt;Node139 -->
+<g id="edge72_Node000139_Node000095" class="edge">
+<title>Node95&#45;&gt;Node139</title>
+<g id="a_edge72_Node000139_Node000095"><a xlink:title=" ">
 <path fill="none" stroke="#63b8ff" d="M1333.14,-254.56C1381.84,-232.8 1475.28,-193.29 1558.5,-171 1672.62,-140.43 1807.25,-121.38 1896.94,-111.01"/>
 <polygon fill="#63b8ff" stroke="#63b8ff" points="1331.94,-251.26 1324.26,-258.55 1334.81,-257.64 1331.94,-251.26"/>
 </a>
 </g>
 </g>
-<!-- Node95&#45;&gt;Node139 -->
-<g id="edge78_Node000139_Node000095" class="edge">
-<title>Node95&#45;&gt;Node139</title>
-<g id="a_edge78_Node000139_Node000095"><a xlink:title=" ">
+<!-- Node95&#45;&gt;Node141 -->
+<g id="edge78_Node000141_Node000095" class="edge">
+<title>Node95&#45;&gt;Node141</title>
+<g id="a_edge78_Node000141_Node000095"><a xlink:title=" ">
 <path fill="none" stroke="#63b8ff" d="M1367.83,-270C1433.97,-270 1532.74,-270 1592.35,-270"/>
 <polygon fill="#63b8ff" stroke="#63b8ff" points="1368.2,-266.5 1358.2,-270 1368.2,-273.5 1368.2,-266.5"/>
 </a>
@@ -1282,68 +1282,68 @@
 </g>
 <text xml:space="preserve" text-anchor="start" x="1124.75" y="-288.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">segment</text>
 </g>
-<!-- Node97&#45;&gt;Node137 -->
-<g id="edge75_Node000137_Node000097" class="edge">
-<title>Node97&#45;&gt;Node137</title>
-<g id="a_edge75_Node000137_Node000097"><a xlink:title=" ">
+<!-- Node97&#45;&gt;Node139 -->
+<g id="edge75_Node000139_Node000097" class="edge">
+<title>Node97&#45;&gt;Node139</title>
+<g id="a_edge75_Node000139_Node000097"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M1017.1,-286.76C1034.1,-271.25 1059.06,-248.34 1080.5,-228 1139.62,-171.93 1136.28,-130.71 1211.75,-100 1475.98,7.51 1832.89,-61.4 1954.44,-90.16"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="1015.15,-283.8 1010.11,-293.12 1019.86,-288.98 1015.15,-283.8"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="1436.25" y="-56.84" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">local_segment</text>
 </g>
-<!-- Node97&#45;&gt;Node138 -->
-<g id="edge81_Node000138_Node000097" class="edge">
-<title>Node97&#45;&gt;Node138</title>
-<g id="a_edge81_Node000138_Node000097"><a xlink:title=" ">
+<!-- Node97&#45;&gt;Node140 -->
+<g id="edge81_Node000140_Node000097" class="edge">
+<title>Node97&#45;&gt;Node140</title>
+<g id="a_edge81_Node000140_Node000097"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M1076.96,-304C1279.94,-301.84 1804.35,-298.82 1879,-324 1924.09,-339.21 1967.25,-377.56 1986.51,-396.33"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="1076.99,-300.5 1067.02,-304.11 1077.06,-307.5 1076.99,-300.5"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="1436.25" y="-310.16" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">local_segment</text>
 </g>
-<!-- Node137&#45;&gt;Node21 -->
-<g id="edge71_Node000021_Node000137" class="edge">
-<title>Node137&#45;&gt;Node21</title>
-<g id="a_edge71_Node000021_Node000137"><a xlink:title=" ">
+<!-- Node139&#45;&gt;Node21 -->
+<g id="edge71_Node000021_Node000139" class="edge">
+<title>Node139&#45;&gt;Node21</title>
+<g id="a_edge71_Node000021_Node000139"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M1966.64,-117.62C1943.85,-131.73 1913.78,-154.11 1897,-182 1875.52,-217.7 1904.12,-240.76 1879,-274 1839.78,-325.9 1788.13,-288.67 1748.5,-340.25 1725.04,-370.78 1742.88,-388.54 1730.5,-425 1708.03,-491.15 1667.4,-564.91 1651.82,-592.14"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="1968.43,-120.63 1975.23,-112.51 1964.85,-114.62 1968.43,-120.63"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="1790.5" y="-346.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">fb_dmem</text>
 </g>
-<!-- Node138&#45;&gt;Node21 -->
-<g id="edge76_Node000021_Node000138" class="edge">
-<title>Node138&#45;&gt;Node21</title>
-<g id="a_edge76_Node000021_Node000138"><a xlink:title=" ">
+<!-- Node140&#45;&gt;Node21 -->
+<g id="edge76_Node000021_Node000140" class="edge">
+<title>Node140&#45;&gt;Node21</title>
+<g id="a_edge76_Node000021_Node000140"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M1956.62,-421.8C1906.12,-441.1 1817.88,-477.5 1748.5,-520.25 1712.57,-542.39 1675.08,-575.45 1656.83,-592.3"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="1957.57,-425.18 1965.69,-418.37 1955.1,-418.63 1957.57,-425.18"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="1789" y="-526.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">fb_ibmem</text>
 </g>
-<!-- Node139&#45;&gt;Node138 -->
-<g id="edge77_Node000138_Node000139" class="edge">
-<title>Node139&#45;&gt;Node138</title>
-<g id="a_edge77_Node000138_Node000139"><a xlink:title=" ">
+<!-- Node141&#45;&gt;Node140 -->
+<g id="edge77_Node000140_Node000141" class="edge">
+<title>Node141&#45;&gt;Node140</title>
+<g id="a_edge77_Node000140_Node000141"><a xlink:title=" ">
 <path fill="none" stroke="#63b8ff" d="M1708.07,-273.48C1766.68,-277.51 1849.53,-285.4 1879,-299 1928.93,-322.04 1972.21,-374.05 1989.26,-396.43"/>
 <polygon fill="#63b8ff" stroke="#63b8ff" points="1708.41,-270 1698.2,-272.83 1707.95,-276.98 1708.41,-270"/>
 </a>
 </g>
 </g>
-<!-- Node141 -->
-<g id="Node000141" class="node">
-<title>Node141</title>
-<g id="a_Node000141"><a xlink:href="structRealm_1_1Cuda_1_1GPU_1_1GPUFuncInfo.html" target="_top" xlink:title=" ">
+<!-- Node143 -->
+<g id="Node000143" class="node">
+<title>Node143</title>
+<g id="a_Node000143"><a xlink:href="structRealm_1_1Cuda_1_1GPU_1_1GPUFuncInfo.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="1385.25,-551.38 1211.75,-551.38 1211.75,-530.62 1385.25,-530.62 1385.25,-551.38"/>
 <text xml:space="preserve" text-anchor="middle" x="1298.5" y="-537.88" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::Cuda::GPU::GPUFuncInfo</text>
 </a>
 </g>
 </g>
-<!-- Node141&#45;&gt;Node21 -->
-<g id="edge82_Node000021_Node000141" class="edge">
-<title>Node141&#45;&gt;Node21</title>
-<g id="a_edge82_Node000021_Node000141"><a xlink:title=" ">
+<!-- Node143&#45;&gt;Node21 -->
+<g id="edge82_Node000021_Node000143" class="edge">
+<title>Node143&#45;&gt;Node21</title>
+<g id="a_edge82_Node000021_Node000143"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M1360.85,-528.37C1410.44,-520.68 1481.45,-515.44 1540.5,-533.5 1578.46,-545.11 1615.06,-575.93 1632.65,-592.35"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="1360.46,-524.89 1351.16,-529.96 1361.59,-531.8 1360.46,-524.89"/>
 </a>
@@ -1355,10 +1355,10 @@
 <text xml:space="preserve" text-anchor="start" x="1406.25" y="-556.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">multi_batch_affine_kernels</text>
 <text xml:space="preserve" text-anchor="start" x="1406.25" y="-539.75" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">transpose_kernels</text>
 </g>
-<!-- Node142&#45;&gt;Node21 -->
-<g id="edge83_Node000021_Node000142" class="edge">
-<title>Node142&#45;&gt;Node21</title>
-<g id="a_edge83_Node000021_Node000142"><a xlink:title=" ">
+<!-- Node144&#45;&gt;Node21 -->
+<g id="edge83_Node000021_Node000144" class="edge">
+<title>Node144&#45;&gt;Node21</title>
+<g id="a_edge83_Node000021_Node000144"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M1949.99,-748.06C1928.47,-741.96 1902.56,-735.01 1879,-729.75 1821.54,-716.92 1800.68,-734.26 1748.5,-707 1704.35,-683.94 1667.43,-635.23 1652.55,-613.66"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="1948.78,-751.35 1959.35,-750.74 1950.7,-744.62 1948.78,-751.35"/>
 </a>
@@ -1367,40 +1367,40 @@
 <text xml:space="preserve" text-anchor="start" x="1751.5" y="-752.75" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">device_to_host_stream</text>
 <text xml:space="preserve" text-anchor="start" x="1751.5" y="-736" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">host_to_device_stream</text>
 </g>
-<!-- Node143&#45;&gt;Node21 -->
-<g id="edge88_Node000021_Node000143" class="edge">
-<title>Node143&#45;&gt;Node21</title>
-<g id="a_edge88_Node000021_Node000143"><a xlink:title=" ">
+<!-- Node145&#45;&gt;Node21 -->
+<g id="edge88_Node000021_Node000145" class="edge">
+<title>Node145&#45;&gt;Node21</title>
+<g id="a_edge88_Node000021_Node000145"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M905.09,-433.02C1085.19,-441.8 1484.9,-464.16 1540.5,-492 1587.28,-515.42 1623.57,-569.5 1637.41,-592.43"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="905.48,-429.53 895.32,-432.54 905.14,-436.52 905.48,-429.53"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="1119.12" y="-455.73" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">event_pool</text>
 </g>
-<!-- Node144&#45;&gt;Node1 -->
-<g id="edge91_Node000001_Node000144" class="edge">
-<title>Node144&#45;&gt;Node1</title>
-<g id="a_edge91_Node000001_Node000144"><a xlink:title=" ">
+<!-- Node146&#45;&gt;Node1 -->
+<g id="edge91_Node000001_Node000146" class="edge">
+<title>Node146&#45;&gt;Node1</title>
+<g id="a_edge91_Node000001_Node000146"><a xlink:title=" ">
 <path fill="none" stroke="#9a32cd" stroke-dasharray="5,2" d="M2157.12,-1024.45C2143.64,-1024.92 2129.94,-1025.79 2117,-1027.25 2090.64,-1030.22 2061.52,-1036.54 2038.8,-1042.18"/>
 <polygon fill="#9a32cd" stroke="#9a32cd" points="2156.96,-1027.96 2166.86,-1024.18 2156.76,-1020.96 2156.96,-1027.96"/>
 </a>
 </g>
 <text xml:space="preserve" text-anchor="start" x="2120" y="-1033.5" font-family="Helvetica,sans-Serif" font-size="10.00" fill="grey">event</text>
 </g>
-<!-- Node145 -->
-<g id="Node000145" class="node">
-<title>Node145</title>
-<g id="a_Node000145"><a xlink:href="classRealm_1_1Cuda_1_1GPUCompletionNotification.html" target="_top" xlink:title=" ">
+<!-- Node147 -->
+<g id="Node000147" class="node">
+<title>Node147</title>
+<g id="a_Node000147"><a xlink:href="classRealm_1_1Cuda_1_1GPUCompletionNotification.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="2078.75,-1009.75 1917.25,-1009.75 1917.25,-976.25 2078.75,-976.25 2078.75,-1009.75"/>
 <text xml:space="preserve" text-anchor="start" x="1925.25" y="-996.25" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::Cuda::GPUCompletion</text>
 <text xml:space="preserve" text-anchor="middle" x="1998" y="-983.5" font-family="Helvetica,sans-Serif" font-size="10.00">Notification</text>
 </a>
 </g>
 </g>
-<!-- Node145&#45;&gt;Node144 -->
-<g id="edge92_Node000144_Node000145" class="edge">
-<title>Node145&#45;&gt;Node144</title>
-<g id="a_edge92_Node000144_Node000145"><a xlink:title=" ">
+<!-- Node147&#45;&gt;Node146 -->
+<g id="edge92_Node000146_Node000147" class="edge">
+<title>Node147&#45;&gt;Node146</title>
+<g id="a_edge92_Node000146_Node000147"><a xlink:title=" ">
 <path fill="none" stroke="#63b8ff" d="M2090.22,-1005.06C2115.88,-1008.46 2143.6,-1012.13 2168.55,-1015.43"/>
 <polygon fill="#63b8ff" stroke="#63b8ff" points="2090.85,-1001.62 2080.47,-1003.78 2089.93,-1008.56 2090.85,-1001.62"/>
 </a>

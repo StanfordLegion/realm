@@ -42,7 +42,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+8e248ba4</button>
+     <button class="dropbtn">Version 26.9.1+cd89aade</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -139,7 +139,7 @@ $(function(){initNavTree('classRealm_1_1MachineImpl.html','','classRealm_1_1Mach
 <div class="dynheader">
 Collaboration diagram for Realm::MachineImpl:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" loading="lazy" frameborder="0" src="classRealm_1_1MachineImpl__coll__graph.svg" width="3234" height="2020"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><iframe scrolling="no" loading="lazy" frameborder="0" src="classRealm_1_1MachineImpl__coll__graph.svg" width="2868" height="1946"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
@@ -169,13 +169,15 @@ Public Member Functions</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
-<tr class="memitem:af3584e7c49c4fbe2668c7f54f4887407" id="r_af3584e7c49c4fbe2668c7f54f4887407"><td class="memItemLeft" align="right" valign="top"><a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#af3584e7c49c4fbe2668c7f54f4887407">mutex</a></td></tr>
+<tr class="memitem:a39f10a6378143d4c085566d03c121d9e" id="r_a39f10a6378143d4c085566d03c121d9e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1StripedRWLock.html">StripedRWLock</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a39f10a6378143d4c085566d03c121d9e">mutex</a></td></tr>
 <tr class="memitem:aa6a820fb6749dcc1d692040821a51d1a" id="r_aa6a820fb6749dcc1d692040821a51d1a"><td class="memItemLeft" align="right" valign="top">std::vector&lt; <a class="el" href="structRealm_1_1Machine_1_1ProcessorMemoryAffinity.html">Machine::ProcessorMemoryAffinity</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aa6a820fb6749dcc1d692040821a51d1a">proc_mem_affinities</a></td></tr>
 <tr class="memitem:aad8dba7adae3eac374c92bed2c35a882" id="r_aad8dba7adae3eac374c92bed2c35a882"><td class="memItemLeft" align="right" valign="top">std::set&lt; <a class="el" href="classRealm_1_1Machine_1_1MachineUpdateSubscriber.html">Machine::MachineUpdateSubscriber</a> * &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aad8dba7adae3eac374c92bed2c35a882">subscribers</a></td></tr>
 <tr class="memitem:a99da7174492873c36fd8980f30dc8fe7" id="r_a99da7174492873c36fd8980f30dc8fe7"><td class="memItemLeft" align="right" valign="top">std::map&lt; int, <a class="el" href="structRealm_1_1MachineNodeInfo.html">MachineNodeInfo</a> * &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a99da7174492873c36fd8980f30dc8fe7">nodeinfos</a></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pro-methods" class="groupheader"><a id="pro-methods" name="pro-methods"></a>
 Protected Member Functions</h2></td></tr>
+<tr class="memitem:a70715ed5372798806278d5f729c47619" id="r_a70715ed5372798806278d5f729c47619"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a70715ed5372798806278d5f729c47619">get_proc_mem_affinity_unlocked</a> (std::vector&lt; <a class="el" href="structRealm_1_1Machine_1_1ProcessorMemoryAffinity.html">Machine::ProcessorMemoryAffinity</a> &gt; &amp;result, <a class="el" href="classRealm_1_1Processor.html">Processor</a> restrict_proc, <a class="el" href="classRealm_1_1Memory.html">Memory</a> restrict_memory, bool local_only) const</td></tr>
+<tr class="memitem:a52f5a194399db6ec6e64bfea85d244ea" id="r_a52f5a194399db6ec6e64bfea85d244ea"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a52f5a194399db6ec6e64bfea85d244ea">get_mem_mem_affinity_unlocked</a> (std::vector&lt; <a class="el" href="structRealm_1_1Machine_1_1MemoryMemoryAffinity.html">Machine::MemoryMemoryAffinity</a> &gt; &amp;result, <a class="el" href="classRealm_1_1Memory.html">Memory</a> restrict_mem1, <a class="el" href="classRealm_1_1Memory.html">Memory</a> restrict_mem2, bool local_only) const</td></tr>
 <tr class="memitem:a6e0d35b769fe2a272b1c9f7096a4f74b" id="r_a6e0d35b769fe2a272b1c9f7096a4f74b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1MachineNodeInfo.html">MachineNodeInfo</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a6e0d35b769fe2a272b1c9f7096a4f74b">get_nodeinfo</a> (int node) const</td></tr>
 <tr class="memitem:ab38c100d7fdedd86fa5be3c0132ae562" id="r_ab38c100d7fdedd86fa5be3c0132ae562"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1MachineNodeInfo.html">MachineNodeInfo</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ab38c100d7fdedd86fa5be3c0132ae562">get_nodeinfo</a> (<a class="el" href="classRealm_1_1Processor.html">Processor</a> p) const</td></tr>
 <tr class="memitem:a4ab0952cb1ebe703402c95588e7f8351" id="r_a4ab0952cb1ebe703402c95588e7f8351"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1MachineNodeInfo.html">MachineNodeInfo</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a4ab0952cb1ebe703402c95588e7f8351">get_nodeinfo</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> m) const</td></tr>
@@ -184,6 +186,11 @@ Protected Member Functions</h2></td></tr>
 <tr class="heading"><td colspan="2"><h2 id="header-pro-attribs" class="groupheader"><a id="pro-attribs" name="pro-attribs"></a>
 Protected Attributes</h2></td></tr>
 <tr class="memitem:a6de3ae2892a1ef2cbf8e9f78ec860e72" id="r_a6de3ae2892a1ef2cbf8e9f78ec860e72"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1RuntimeImpl.html">RuntimeImpl</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a6de3ae2892a1ef2cbf8e9f78ec860e72">runtime_impl</a> {<a class="el" href="module__nullptr.html">nullptr</a>}</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-friends" class="groupheader"><a id="friends" name="friends"></a>
+Friends</h2></td></tr>
+<tr class="memitem:a0afb89618ec1f9d579deca2884c49ca8" id="r_a0afb89618ec1f9d579deca2884c49ca8"><td class="memItemLeft" align="right" valign="top">class&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a0afb89618ec1f9d579deca2884c49ca8">ProcessorQueryImpl</a></td></tr>
+<tr class="memitem:a077a99a9c8ac1d794fd7aebff261d79b" id="r_a077a99a9c8ac1d794fd7aebff261d79b"><td class="memItemLeft" align="right" valign="top">class&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a077a99a9c8ac1d794fd7aebff261d79b">MemoryQueryImpl</a></td></tr>
 </table>
 <a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a5135f5475f318d35789d9e25ffbbed69" name="a5135f5475f318d35789d9e25ffbbed69"></a>
@@ -405,6 +412,45 @@ Protected Attributes</h2></td></tr>
 
 </div>
 </div>
+<a id="a52f5a194399db6ec6e64bfea85d244ea" name="a52f5a194399db6ec6e64bfea85d244ea"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a52f5a194399db6ec6e64bfea85d244ea">&#9670;&#160;</a></span>get_mem_mem_affinity_unlocked()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">int Realm::MachineImpl::get_mem_mem_affinity_unlocked </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="structRealm_1_1Machine_1_1MemoryMemoryAffinity.html">Machine::MemoryMemoryAffinity</a> &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>result</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a></td>          <td class="paramname"><span class="paramname"><em>restrict_mem1</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a></td>          <td class="paramname"><span class="paramname"><em>restrict_mem2</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>local_only</em></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a6e0d35b769fe2a272b1c9f7096a4f74b" name="a6e0d35b769fe2a272b1c9f7096a4f74b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6e0d35b769fe2a272b1c9f7096a4f74b">&#9670;&#160;</a></span>get_nodeinfo() <span class="overload">[1/3]</span></h2>
 
@@ -507,6 +553,45 @@ Protected Attributes</h2></td></tr>
           <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>local_only</em></span><span class="paramdefsep"> = </span><span class="paramdefval">true</span>&#160;) const</td>
         </tr>
       </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a70715ed5372798806278d5f729c47619" name="a70715ed5372798806278d5f729c47619"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a70715ed5372798806278d5f729c47619">&#9670;&#160;</a></span>get_proc_mem_affinity_unlocked()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">int Realm::MachineImpl::get_proc_mem_affinity_unlocked </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="structRealm_1_1Machine_1_1ProcessorMemoryAffinity.html">Machine::ProcessorMemoryAffinity</a> &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>result</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Processor.html">Processor</a></td>          <td class="paramname"><span class="paramname"><em>restrict_proc</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a></td>          <td class="paramname"><span class="paramname"><em>restrict_memory</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">bool</td>          <td class="paramname"><span class="paramname"><em>local_only</em></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
 </div><div class="memdoc">
 
 </div>
@@ -769,9 +854,9 @@ Protected Attributes</h2></td></tr>
 
 </div>
 </div>
-<a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
-<a id="af3584e7c49c4fbe2668c7f54f4887407" name="af3584e7c49c4fbe2668c7f54f4887407"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af3584e7c49c4fbe2668c7f54f4887407">&#9670;&#160;</a></span>mutex</h2>
+<a name="doc-related-members" id="doc-related-members"></a><h2 id="header-doc-related-members" class="groupheader">Friends And Related Symbol Documentation</h2>
+<a id="a077a99a9c8ac1d794fd7aebff261d79b" name="a077a99a9c8ac1d794fd7aebff261d79b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a077a99a9c8ac1d794fd7aebff261d79b">&#9670;&#160;</a></span>MemoryQueryImpl</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -780,7 +865,52 @@ Protected Attributes</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a> Realm::MachineImpl::mutex</td>
+          <td class="memname">friend class MemoryQueryImpl</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel friend">friend</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a0afb89618ec1f9d579deca2884c49ca8" name="a0afb89618ec1f9d579deca2884c49ca8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0afb89618ec1f9d579deca2884c49ca8">&#9670;&#160;</a></span>ProcessorQueryImpl</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">friend class ProcessorQueryImpl</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel friend">friend</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
+<a id="a39f10a6378143d4c085566d03c121d9e" name="a39f10a6378143d4c085566d03c121d9e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a39f10a6378143d4c085566d03c121d9e">&#9670;&#160;</a></span>mutex</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="classRealm_1_1StripedRWLock.html">StripedRWLock</a> Realm::MachineImpl::mutex</td>
         </tr>
       </table>
   </td>

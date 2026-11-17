@@ -42,7 +42,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+8e248ba4</button>
+     <button class="dropbtn">Version 26.9.1+cd89aade</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -139,10 +139,11 @@ $(function(){initNavTree('machine__impl_8h.html','',''); });
 <code>#include &lt;vector&gt;</code><br />
 <code>#include &lt;set&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
+<code>#include &lt;memory&gt;</code><br />
 </div><div class="textblock"><div class="dynheader">
 Include dependency graph for machine_impl.h:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" loading="lazy" frameborder="0" src="machine__impl_8h__incl.svg" width="2426" height="603"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><iframe scrolling="no" loading="lazy" frameborder="0" src="machine__impl_8h__incl.svg" width="2452" height="603"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 </div>
 </div><div class="textblock"><div class="dynheader">
 This graph shows which files directly or indirectly include this file:</div>
@@ -161,7 +162,11 @@ Classes</h2></td></tr>
 <tr class="memitem:Realm_3A_3AMachineImpl" id="r_Realm_3A_3AMachineImpl"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1MachineImpl.html">Realm::MachineImpl</a></td></tr>
 <tr class="memitem:Realm_3A_3AQueryPredicate_3C_20T_2C_20T2_20_3E" id="r_Realm_3A_3AQueryPredicate_3C_20T_2C_20T2_20_3E"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1QueryPredicate.html">Realm::QueryPredicate&lt; T, T2 &gt;</a></td></tr>
 <tr class="memitem:Realm_3A_3AProcessorHasAffinityPredicate" id="r_Realm_3A_3AProcessorHasAffinityPredicate"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ProcessorHasAffinityPredicate.html">Realm::ProcessorHasAffinityPredicate</a></td></tr>
+<tr class="memitem:Realm_3A_3AQueryResultList_3C_20T_20_3E" id="r_Realm_3A_3AQueryResultList_3C_20T_20_3E"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1QueryResultList.html">Realm::QueryResultList&lt; T &gt;</a></td></tr>
+<tr class="memitem:Realm_3A_3AQueryKindCache_3C_20T_2C_20NUM_5FKINDS_20_3E" id="r_Realm_3A_3AQueryKindCache_3C_20T_2C_20NUM_5FKINDS_20_3E"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1QueryKindCache.html">Realm::QueryKindCache&lt; T, NUM_KINDS &gt;</a></td></tr>
+<tr class="memitem:Realm_3A_3AQueryCacheSlot_3C_20S_20_3E" id="r_Realm_3A_3AQueryCacheSlot_3C_20S_20_3E"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1QueryCacheSlot.html">Realm::QueryCacheSlot&lt; S &gt;</a></td></tr>
 <tr class="memitem:Realm_3A_3AProcessorQueryImpl" id="r_Realm_3A_3AProcessorQueryImpl"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1ProcessorQueryImpl.html">Realm::ProcessorQueryImpl</a></td></tr>
+<tr class="memitem:Realm_3A_3AProcessorQueryImpl_3A_3AAffinityCache" id="r_Realm_3A_3AProcessorQueryImpl_3A_3AAffinityCache"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1ProcessorQueryImpl_1_1AffinityCache.html">Realm::ProcessorQueryImpl::AffinityCache</a></td></tr>
 <tr class="memitem:Realm_3A_3AProcessorQueryImpl_3A_3ABestAffinityCostFn" id="r_Realm_3A_3AProcessorQueryImpl_3A_3ABestAffinityCostFn"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1ProcessorQueryImpl_1_1BestAffinityCostFn.html">Realm::ProcessorQueryImpl::BestAffinityCostFn</a></td></tr>
 <tr class="memitem:Realm_3A_3AMemoryHasProcAffinityPredicate" id="r_Realm_3A_3AMemoryHasProcAffinityPredicate"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1MemoryHasProcAffinityPredicate.html">Realm::MemoryHasProcAffinityPredicate</a></td></tr>
 <tr class="memitem:Realm_3A_3AMemoryHasMemAffinityPredicate" id="r_Realm_3A_3AMemoryHasMemAffinityPredicate"><td class="memItemLeft" align="right" valign="top">class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classRealm_1_1MemoryHasMemAffinityPredicate.html">Realm::MemoryHasMemAffinityPredicate</a></td></tr>
@@ -173,6 +178,10 @@ Classes</h2></td></tr>
 Namespaces</h2></td></tr>
 <tr class="memitem:Realm" id="r_Realm"><td class="memItemLeft" align="right" valign="top">namespace &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html">Realm</a></td></tr>
 <tr class="memitem:Realm_3A_3AConfig" id="r_Realm_3A_3AConfig"><td class="memItemLeft" align="right" valign="top">namespace &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Config.html">Realm::Config</a></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-define-members" class="groupheader"><a id="define-members" name="define-members"></a>
+Macros</h2></td></tr>
+<tr class="memitem:a97dbf30b69bbcd0fc0b30ed1f3337c1a" id="r_a97dbf30b69bbcd0fc0b30ed1f3337c1a"><td class="memItemLeft" align="right" valign="top">#define&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a97dbf30b69bbcd0fc0b30ed1f3337c1a">REALM_COUNT_KIND</a>(name,  desc)</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-typedef-members" class="groupheader"><a id="typedef-members" name="typedef-members"></a>
 Typedefs</h2></td></tr>
@@ -207,6 +216,29 @@ Variables</h2></td></tr>
 <tr class="memitem:a9d4c6ce58810217b64701e9d2cfe26d8" id="r_a9d4c6ce58810217b64701e9d2cfe26d8"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm_1_1Config.html#a9d4c6ce58810217b64701e9d2cfe26d8">Realm::Config::use_machine_query_cache</a></td></tr>
 <tr class="memitem:acbabfb91d5923534056ce315d6a70129" id="r_acbabfb91d5923534056ce315d6a70129"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1MachineImpl.html">MachineImpl</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="namespaceRealm.html#acbabfb91d5923534056ce315d6a70129">Realm::machine_singleton</a></td></tr>
 </table>
+<a name="doc-define-members" id="doc-define-members"></a><h2 id="header-doc-define-members" class="groupheader">Macro Definition Documentation</h2>
+<a id="a97dbf30b69bbcd0fc0b30ed1f3337c1a" name="a97dbf30b69bbcd0fc0b30ed1f3337c1a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a97dbf30b69bbcd0fc0b30ed1f3337c1a">&#9670;&#160;</a></span>REALM_COUNT_KIND</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">#define REALM_COUNT_KIND</td>
+          <td>(</td>
+          <td class="paramtype"></td>          <td class="paramname"><span class="paramname"><em>name</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"></td>          <td class="paramname"><span class="paramname"><em>desc</em></span>&#160;)</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<b>Value:</b><div class="fragment"><div class="line">+1</div>
+</div><!-- fragment -->
+</div>
+</div>
 </div><!-- contents -->
 </div><!-- doc-content -->
 <div id="page-nav" class="page-nav-panel">

@@ -42,7 +42,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+8e248ba4</button>
+     <button class="dropbtn">Version 26.9.1+cd89aade</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -105,8 +105,7 @@ $(function() { codefold.init(); });
   </div>
   <div id="navrow4" class="tabs3">
     <ul class="tablist">
-      <li><a href="functions_vars.html#index__5F"><span>_</span></a></li>
-      <li><a href="functions_vars_a.html#index_a"><span>a</span></a></li>
+      <li><a href="functions_vars.html#index_a"><span>a</span></a></li>
       <li><a href="functions_vars_b.html#index_b"><span>b</span></a></li>
       <li><a href="functions_vars_c.html#index_c"><span>c</span></a></li>
       <li><a href="functions_vars_d.html#index_d"><span>d</span></a></li>
@@ -177,10 +176,12 @@ $(function(){initNavTree('functions_vars_w.html','',''); });
 <li>wait_count&#160;:&#160;<a class="el" href="classRealm_1_1PartitioningMicroOp.html#abf2a343e099edde1c7f06525cfc8a788">Realm::PartitioningMicroOp</a></li>
 <li>wait_end&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationEventWaits_1_1WaitInterval.html#a33914557142db43a700cdf7cb7ef4510">Realm::ProfilingMeasurements::OperationEventWaits::WaitInterval</a></li>
 <li>wait_event&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationEventWaits_1_1WaitInterval.html#a3776f28f851a16e79be70cbb02613abe">Realm::ProfilingMeasurements::OperationEventWaits::WaitInterval</a></li>
+<li>wait_mutex&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock.html#a8470d39c3119ef702e7c6a20a1773c2f">Realm::StripedRWLock</a></li>
 <li>wait_on&#160;:&#160;<a class="el" href="classRealm_1_1CompQueueImpl_1_1CompQueueWaiter.html#a7651897a5a3c9dc00332ce3c38b26454">Realm::CompQueueImpl::CompQueueWaiter</a>, <a class="el" href="structRealm_1_1DestroyLockMessage.html#a9b8820c32f0f6c0c04eb8f3b367f076c">Realm::DestroyLockMessage</a>, <a class="el" href="structRealm_1_1ProcGroupDestroyMessage.html#ae2e82ea9b9fc6951100b0ec31f1da07c">Realm::ProcGroupDestroyMessage</a>, <a class="el" href="structRealm_1_1RuntimeShutdownRequest.html#ab615675d924027d455e545f8b87f1576">Realm::RuntimeShutdownRequest</a>, <a class="el" href="structRealm_1_1SparsityMapRefCounter_1_1SparsityMapAddReferenceMessage.html#ae746fe190f4442cef9f1a6275adc2177">Realm::SparsityMapRefCounter::SparsityMapAddReferenceMessage</a>, <a class="el" href="structRealm_1_1SparsityMapRefCounter_1_1SparsityMapRemoveReferencesMessage.html#abaab947fd18d7d735f78d795758dbfe5">Realm::SparsityMapRefCounter::SparsityMapRemoveReferencesMessage</a>, <a class="el" href="structRealm_1_1SubgraphDestroyMessage.html#aad5d74a86d3589c0f6b5557d5b1b0a32">Realm::SubgraphDestroyMessage</a>, <a class="el" href="structRealm_1_1SubgraphInstantiateMessage.html#a8f47a0d488060cc668e8f93a22c6a4c7">Realm::SubgraphInstantiateMessage</a>, <a class="el" href="classRealm_1_1Task_1_1DeferredSpawn.html#ae486e558cb1694ba585f631e444955d1">Realm::Task::DeferredSpawn</a></li>
 <li>wait_ready&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationEventWaits_1_1WaitInterval.html#a52ee890cb6e3bbe1776a3f54a9e780e5">Realm::ProfilingMeasurements::OperationEventWaits::WaitInterval</a></li>
 <li>wait_start&#160;:&#160;<a class="el" href="structRealm_1_1ProfilingMeasurements_1_1OperationEventWaits_1_1WaitInterval.html#a73079210d7de4ea7d9ef76cb167d0c0f">Realm::ProfilingMeasurements::OperationEventWaits::WaitInterval</a></li>
 <li>waiters&#160;:&#160;<a class="el" href="classRealm_1_1CompQueueImpl_1_1CompQueueWaiterBatch.html#ac934839134ca75e3a5aa2b45683a754a">Realm::CompQueueImpl::CompQueueWaiterBatch</a>, <a class="el" href="structRealm_1_1ReservationImpl_1_1LocalSharedInfo.html#adc76ea13a0189b7439e52ee9f29c35a6">Realm::ReservationImpl::LocalSharedInfo</a></li>
+<li>waiting_readers&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock.html#a0da17d89a94eb39100afc4f316f45f99">Realm::StripedRWLock</a></li>
 <li>waits&#160;:&#160;<a class="el" href="classRealm_1_1Operation.html#a6f81f1dd3bb255bef3f0138c96760fd3">Realm::Operation</a></li>
 <li>wants_event_waits&#160;:&#160;<a class="el" href="classRealm_1_1Operation.html#a191b9560f5352db7173b434fc4211a2d">Realm::Operation</a></li>
 <li>wants_gpu_timeline&#160;:&#160;<a class="el" href="classRealm_1_1Operation.html#aba66a66625d1ba4a683b34d698235c8a">Realm::Operation</a></li>
@@ -218,6 +219,9 @@ $(function(){initNavTree('functions_vars_w.html','',''); });
 <li>write_seq_pos&#160;:&#160;<a class="el" href="classRealm_1_1Request.html#a8eed868a76dbd0e7d51b980b5b2c4f0a">Realm::Request</a></li>
 <li>write_size&#160;:&#160;<a class="el" href="classRealm_1_1Cuda_1_1GPUIndirectTransferCompletion.html#a44f9d13a91a999f750bf3868dfac1edb">Realm::Cuda::GPUIndirectTransferCompletion</a>, <a class="el" href="classRealm_1_1Cuda_1_1GPUTransferCompletion.html#a578844eb2a365df3fc076b870959c50c">Realm::Cuda::GPUTransferCompletion</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUIndirectTransferCompletion.html#a101e214de58e3b3ca3294a5789f3ab7c">Realm::Hip::GPUIndirectTransferCompletion</a>, <a class="el" href="classRealm_1_1Hip_1_1GPUTransferCompletion.html#a92266c8478c7ebf6bcacf8ea25e1fd72">Realm::Hip::GPUTransferCompletion</a></li>
 <li>writer&#160;:&#160;<a class="el" href="classRealm_1_1RWLock.html#a5faed2df15025452e96281bd98ac8bf9">Realm::RWLock</a></li>
+<li>writer_active&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock.html#a5b2375418ae78fdaf72515637b9fa9be">Realm::StripedRWLock</a></li>
+<li>writer_done&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock.html#a31c4b9ec679ee87d9eec5d77d46d77b2">Realm::StripedRWLock</a></li>
+<li>writer_mutex&#160;:&#160;<a class="el" href="classRealm_1_1StripedRWLock.html#a98d8a802ae901713ee6d289d82ae6fc4">Realm::StripedRWLock</a></li>
 </ul>
 </div><!-- contents -->
 </div><!-- doc-content -->
