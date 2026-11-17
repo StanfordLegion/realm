@@ -583,7 +583,8 @@ namespace Realm {
       virtual bool supports_subgraph_tasks(void) const;
       virtual bool subgraph_tasks_are_async(void) const;
       virtual void *begin_subgraph_task(const void *const *tokens, size_t num_tokens);
-      virtual void *end_subgraph_task(void *context, bool deferred_effects);
+      virtual void *end_subgraph_task(void *context, bool deferred_effects,
+                                      Processor::TaskFuncID task_id);
       virtual void arm_subgraph_task_completion(void *context, void *token,
                                                 SubgraphAsyncCompletion *completion);
       virtual void release_subgraph_tokens(void *const *tokens, size_t num_tokens);

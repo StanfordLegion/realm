@@ -1675,6 +1675,8 @@ namespace Realm {
       GPUStream *s = gpu->get_next_task_stream();
       ThreadLocal::current_gpu_stream = s;
       assert(!ThreadLocal::created_gpu_streams);
+      if(Cuhook::enabled)
+        Cuhook::start_task(s);
       // a task can force context sync on or off; -1 means no preference
       ThreadLocal::context_sync_required = -1;
       // this task's work follows that of its deferred-effects predecessors
@@ -1685,7 +1687,8 @@ namespace Realm {
       return s;
     }
 
-    void *GPUProcessor::end_subgraph_task(void *context, bool deferred_effects)
+    void *GPUProcessor::end_subgraph_task(void *context, bool deferred_effects,
+                                          Processor::TaskFuncID task_id)
     {
       GPUStream *s = static_cast<GPUStream *>(context);
       assert(ThreadLocal::current_gpu_stream == s);
@@ -1741,6 +1744,8 @@ namespace Realm {
       //  take the context synchronizer path)
       CUevent token = gpu->event_pool.get_event();
       CHECK_CU(CUDA_DRIVER_FNPTR(cuEventRecord)(token, s->get_stream()));
+      if(Cuhook::enabled)
+        Cuhook::end_task(s, task_id);
       gpu->pop_context();
       ThreadLocal::current_gpu_stream = nullptr;
       return token;

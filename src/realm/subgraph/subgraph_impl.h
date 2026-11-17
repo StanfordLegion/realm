@@ -707,8 +707,12 @@ namespace Realm {
     void start(void);
     // An operation's last precondition has been satisfied.
     void op_ready(uint32_t op);
+    // Performs a ready copy or arrival. Direct operations are drained from
+    // a worklist so synchronous completions cannot recurse down the graph.
+    void execute_direct_op(uint32_t op);
     // Starts a copy operation on its compiled plan; it completes through
-    // op_body_done/op_finished when the transfer finishes.
+    // op_body_done/op_finished when the transfer finishes. Poisoned copies
+    // report cancellation to any profiling requests without moving data.
     void launch_copy(uint32_t op);
     // An operation's function has returned (or it was skipped because an
     // input it depends on was poisoned): releases the successors that may

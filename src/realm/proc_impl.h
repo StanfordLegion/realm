@@ -207,7 +207,8 @@ namespace Realm {
     virtual void *begin_subgraph_task(const void *const *tokens, size_t num_tokens);
     // Called right after the function returns. Asynchronous processors
     // return a token that orders dependents after this task's work.
-    virtual void *end_subgraph_task(void *context, bool deferred_effects);
+    virtual void *end_subgraph_task(void *context, bool deferred_effects,
+                                    Processor::TaskFuncID task_id);
     // Asynchronous processors only: arms `completion` to fire once the
     // task's work is done, possibly before this returns.
     virtual void arm_subgraph_task_completion(void *context, void *token,

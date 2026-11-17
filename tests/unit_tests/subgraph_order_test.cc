@@ -285,3 +285,28 @@ TEST(SubgraphOrder, HeldMessageReleasedByPredecessor)
   EXPECT_EQ(t.num_held(), 0u);
   EXPECT_EQ(t.next_unhandled(), 3u);
 }
+
+TEST(SubgraphOrder, DelayedFirstMessageReleasesLargeBacklog)
+{
+  // A large first payload may arrive after many smaller later messages.
+  // Draining this backlog used to rescan an unsorted vector for every pop.
+  RemoteOrderTracker t;
+  constexpr uint64_t count = 64000;
+  std::vector<uint64_t> payloads(count);
+  for(uint64_t seq = 1; seq <= count; seq++) {
+    payloads[seq - 1] = seq;
+    ASSERT_FALSE(t.ready(seq, true));
+    t.hold(seq, &payloads[seq - 1]);
+  }
+  EXPECT_EQ(t.pop_ready(), nullptr);
+  ASSERT_TRUE(t.ready(0, true));
+  for(uint64_t expected = 1; expected <= count; expected++) {
+    uint64_t seq = 0;
+    ASSERT_EQ(t.pop_ready(&seq), &payloads[expected - 1]);
+    ASSERT_EQ(seq, expected);
+    EXPECT_EQ(t.pop_ready(), nullptr); // the popped message is not recorded yet
+    ASSERT_TRUE(t.ready(seq, true));
+  }
+  EXPECT_EQ(t.num_held(), 0u);
+  EXPECT_EQ(t.next_unhandled(), count + 1);
+}

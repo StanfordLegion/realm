@@ -22,6 +22,7 @@
 
 #include "realm/subgraph/subgraph_impl.h"
 #include "realm/event_impl.h"
+#include "realm/faults.h"
 #include "realm/network.h"
 #include "realm/numa/numasysif.h"
 #include "realm/proc_impl.h"
@@ -42,6 +43,20 @@
 #endif
 
 namespace Realm {
+  namespace {
+    struct ReadyDirectOp {
+      SubgraphExecutionState *state;
+      uint32_t op;
+    };
+
+    // A direct operation can complete inline and release another direct
+    // operation, including one in a different instantiation. Each queued
+    // entry owns its operation's direct finish share until it is executed.
+    // Reuse the storage after the first drain on this thread.
+    thread_local std::vector<ReadyDirectOp> ready_direct_ops;
+    thread_local bool draining_direct_ops = false;
+  } // namespace
+
   ////////////////////////////////////////////////////////////////////////
   //
   // class SubgraphExecutionState
@@ -355,7 +370,22 @@ namespace Realm {
       c.procs[o.proc].impl->notify_scheduler_of_new_work();
       return;
     }
-    // Directly launched operation: performed by whoever made it ready.
+    ready_direct_ops.push_back({this, op});
+    if(draining_direct_ops)
+      return;
+    draining_direct_ops = true;
+    while(!ready_direct_ops.empty()) {
+      ReadyDirectOp entry = ready_direct_ops.back();
+      ready_direct_ops.pop_back();
+      entry.state->execute_direct_op(entry.op);
+      // The entry's state may have finished and been recycled here.
+    }
+    draining_direct_ops = false;
+  }
+
+  void SubgraphExecutionState::execute_direct_op(uint32_t op)
+  {
+    const CompiledSubgraph::Op &o = subgraph->compiled.ops[op];
     switch(o.kind) {
     case SubgraphDefinition::OPKIND_ARRIVAL:
     {
@@ -375,11 +405,8 @@ namespace Realm {
       break;
     }
     case SubgraphDefinition::OPKIND_COPY:
-      if(!op_poisoned(op)) {
-        launch_copy(op); // completes asynchronously
-        return;
-      }
-      break;
+      launch_copy(op); // reports completion, including cancellation on poison
+      return;
     default:
       SUBGRAPH_FATAL(subgraph->me, "internal error: operation "
                                        << op << " of kind " << op_kind_name(o.kind)
@@ -398,24 +425,38 @@ namespace Realm {
       SubgraphTransferOperation(TransferDesc &desc, GenEventImpl *finish_event,
                                 EventImpl::gen_t finish_gen, int priority,
                                 const ProfilingRequestSet &prs,
-                                SubgraphExecutionState *_state, uint32_t _op)
+                                SubgraphExecutionState *_state, uint32_t _op,
+                                bool _skipped)
         : TransferOperation(desc, Event::NO_EVENT, finish_event, finish_gen, priority,
                             prs)
         , state(_state)
         , op(_op)
+        , skipped(_skipped)
       {}
+
+      void skip(void)
+      {
+        // Poison comes from the graph's transitive input set, rather than
+        // a single transfer precondition. Use the ordinary cancellation
+        // path so status, timeline and finish-event requests are answered.
+        bool cancelled =
+            attempt_cancellation(Faults::ERROR_POISONED_PRECONDITION, nullptr, 0);
+        assert(cancelled);
+        (void)cancelled;
+        mark_finished(false /*successful*/);
+      }
 
     protected:
       virtual void mark_completed(void) override
       {
         SubgraphExecutionState *s = state;
         const uint32_t o = op;
-        // A copy that failed or was cancelled cannot be recovered from
-        // inside a graph (its successors would run on bad data): fatal,
-        // like every other misuse. Decided before the base call, which may
+        // Input poison deliberately skips a copy and its downstream work.
+        // Any other failure or cancellation is fatal: its successors would
+        // otherwise run on bad data. Decide before the base call, which may
         // delete this operation.
-        const bool failed = (failed_work_items.load() != 0) ||
-                            (Operation::state.load() != Status::RUNNING);
+        const bool failed = !skipped && ((failed_work_items.load() != 0) ||
+                                         (Operation::state.load() != Status::RUNNING));
         TransferOperation::mark_completed(); // may delete this operation
         if(failed)
           SUBGRAPH_FATAL(s->get_subgraph()->me,
@@ -427,6 +468,7 @@ namespace Realm {
 
       SubgraphExecutionState *state;
       uint32_t op;
+      bool skipped;
     };
   } // namespace
 
@@ -436,13 +478,23 @@ namespace Realm {
     const CompiledSubgraph::Op &o = c.ops[op];
     const SubgraphDefinition::CopyDesc &cd = subgraph->defn->copies[o.index];
     TransferDesc *plan = c.copy_plans[o.index];
+    const ProfilingRequestSet &prs = copy_prs.empty() ? cd.prs : copy_prs[o.index];
+    const bool skipped = op_poisoned(op);
+    if(skipped && prs.empty()) {
+      op_body_done(op);
+      op_finished(op);
+      return;
+    }
     // every transfer operation needs a finish event of its own
     GenEventImpl *finish_event = GenEventImpl::create_genevent();
     Event ev = finish_event->current_event();
-    const ProfilingRequestSet &prs = copy_prs.empty() ? cd.prs : copy_prs[o.index];
     SubgraphTransferOperation *top =
         new SubgraphTransferOperation(*plan, finish_event, ID(ev).event_generation(),
-                                      priority + cd.priority, prs, this, op);
+                                      priority + cd.priority, prs, this, op, skipped);
+    if(skipped) {
+      top->skip(); // may finish and recycle the state
+      return;
+    }
     // the plan is analyzed and the graph satisfied the preconditions: this
     // allocates intermediate buffers and creates the transfer descriptors
     top->start_or_defer();
@@ -836,7 +888,8 @@ namespace Realm {
                                                        "poisoned, so this is fatal");
     }
     thread->stop_subgraph_task_execution();
-    void *token = proc_impl->end_subgraph_task(context, op.deferred);
+    void *token = proc_impl->end_subgraph_task(context, op.deferred,
+                                               impl->defn->tasks[op.index].task_id);
     if(pf && pf->wants_timeline)
       pf->timeline.record_end_time();
     Event finish_event;

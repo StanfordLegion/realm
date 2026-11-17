@@ -354,6 +354,11 @@ if(REALM_ENABLE_CUDA)
   add_test(NAME subgraph_unit_tests_gpu
            COMMAND $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:gpu 1 -ll:zsize 32)
   set_tests_properties(subgraph_unit_tests_gpu PROPERTIES RESOURCE_LOCK gpu TIMEOUT 600)
+  add_test(NAME subgraph_unit_tests_gpu_validation
+           COMMAND $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:gpu 1 -ll:zsize 32
+                   -cuda:validation -only Gpu.)
+  set_tests_properties(subgraph_unit_tests_gpu_validation
+                       PROPERTIES RESOURCE_LOCK gpu TIMEOUT 600)
   if(NOT WIN32)
     add_test(NAME subgraph_death_deferred_task_requests_ctxsync
              COMMAND sh -c "! $<TARGET_FILE:subgraph_unit_tests> -ll:cpu 4 -ll:gpu 1 -death deferred_task_requests_ctxsync")

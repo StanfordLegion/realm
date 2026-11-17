@@ -44,6 +44,7 @@
 
 #include "realm.h"
 #include "realm/event.h"
+#include "realm/faults.h"
 #include "realm/indexspace.h"
 #include "realm/profiling.h"
 #include "realm/serialize.h"
@@ -4416,7 +4417,26 @@ static void copy_prof_response_task(const void *args, size_t arglen, const void 
 
 class CopyProfilingTest : public SubgraphTest {
 public:
-  std::string name() const override { return "CopyProfiling"; }
+  enum Poison
+  {
+    NONE,
+    START,
+    INPUT,
+  };
+  explicit CopyProfilingTest(Poison poison = NONE)
+    : poison(poison)
+  {}
+  std::string name() const override
+  {
+    switch(poison) {
+    case START:
+      return "CopyProfiling.PoisonedStart";
+    case INPUT:
+      return "CopyProfiling.PoisonedInput";
+    default:
+      return "CopyProfiling";
+    }
+  }
   bool can_run() override { return (worker_cpus().size() >= 1) && sysmem().exists(); }
 
   void handle(const ProfilingResponse &resp, int which)
@@ -4424,15 +4444,31 @@ public:
     using namespace ProfilingMeasurements;
     int problems = 0;
     OperationTimeline tl;
-    if(!resp.get_measurement(tl) || !(tl.start_time <= tl.end_time) ||
-       !(tl.end_time <= tl.complete_time))
+    if(!resp.get_measurement(tl))
       problems++;
-    if(which == 0) {
+    else if(poison != NONE) {
+      if((tl.start_time != OperationTimeline::INVALID_TIMESTAMP) ||
+         (tl.create_time > tl.end_time) || (tl.end_time > tl.complete_time))
+        problems++;
+    } else if(!(tl.start_time <= tl.end_time) || !(tl.end_time <= tl.complete_time))
+      problems++;
+    OperationStatus status;
+    if(!resp.get_measurement(status) ||
+       (status.result != ((poison == NONE) ? OperationStatus::COMPLETED_SUCCESSFULLY
+                                           : OperationStatus::CANCELLED)) ||
+       ((poison != NONE) && (status.error_code != Faults::ERROR_POISONED_PRECONDITION)))
+      problems++;
+    OperationFinishEvent fe;
+    if(!resp.get_measurement(fe) || !fe.finish_event.exists())
+      problems++;
+    else
+      copy_finishes[which] = fe.finish_event;
+    if((poison == NONE) && (which == 0)) {
       OperationMemoryUsage mu;
       if(!resp.get_measurement(mu) || (mu.target != sysmem()) ||
          (mu.size != N * sizeof(int)))
         problems++;
-    } else {
+    } else if(poison == NONE) {
       OperationCopyInfo ci;
       if(!resp.get_measurement(ci) || ci.inst_info.empty())
         problems++;
@@ -4453,6 +4489,10 @@ public:
         .wait();
     responses.store(0);
     bad.store(0);
+    int zero = 0;
+    std::vector<CopySrcDstField> dst_fields(1);
+    dst_fields[0].set_field(dst, FID_DATA, sizeof(int));
+    is.fill(dst_fields, ProfilingRequestSet(), &zero, sizeof(zero)).wait();
     SubgraphDefinition sd;
     sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
     int v = 3;
@@ -4460,15 +4500,22 @@ public:
     int c = make_copy_desc(sd, is, src, dst, FID_DATA, sizeof(int));
     add_dependency(sd, SubgraphDefinition::OPKIND_COPY, f,
                    SubgraphDefinition::OPKIND_COPY, c);
+    if(poison == INPUT)
+      add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 0,
+                     SubgraphDefinition::OPKIND_COPY, f);
     CopyProfPayload p0{this, 0};
     sd.copies[c]
         .prs.add_request(worker_cpus()[0], copy_prof_response_task_id, &p0, sizeof(p0))
         .add_measurement<ProfilingMeasurements::OperationTimeline>()
+        .add_measurement<ProfilingMeasurements::OperationStatus>()
+        .add_measurement<ProfilingMeasurements::OperationFinishEvent>()
         .add_measurement<ProfilingMeasurements::OperationMemoryUsage>();
     CopyProfPayload p1{this, 1};
     ProfilingRequestSet prs1;
     prs1.add_request(worker_cpus()[0], copy_prof_response_task_id, &p1, sizeof(p1))
         .add_measurement<ProfilingMeasurements::OperationTimeline>()
+        .add_measurement<ProfilingMeasurements::OperationStatus>()
+        .add_measurement<ProfilingMeasurements::OperationFinishEvent>()
         .add_measurement<ProfilingMeasurements::OperationCopyInfo>();
     iprof.copies.emplace_back(unsigned(f), prs1);
     Subgraph::create_subgraph(sg, sd, ProfilingRequestSet()).wait();
@@ -4476,8 +4523,15 @@ public:
 
   void run() override
   {
+    UserEvent bad_start = UserEvent::create_user_event();
+    bad_start.cancel();
+    std::vector<Event> pre, post;
+    if(poison == INPUT)
+      pre.push_back(bad_start);
     completed = wait_with_timeout(
-        sg.instantiate(nullptr, 0, ProfilingRequestSet(), iprof), config.hang_timeout);
+        sg.instantiate(nullptr, 0, ProfilingRequestSet(), iprof, pre, post,
+                       (poison == START) ? bad_start : Event::NO_EVENT),
+        config.hang_timeout, &finish_poisoned);
     got_responses =
         poll_until([&] { return responses.load() >= 2; }, config.hang_timeout);
   }
@@ -4487,9 +4541,17 @@ public:
     AffineAccessor<int, 1> acc(dst, FID_DATA);
     bool data_ok = true;
     for(int i = 0; i < N; i++)
-      data_ok = data_ok && (acc[i] == 3);
+      data_ok = data_ok && (acc[i] == ((poison == NONE) ? 3 : 0));
+    bool events_ok = got_responses;
+    if(got_responses)
+      for(Event e : copy_finishes) {
+        bool poisoned = false;
+        events_ok = events_ok && e.exists() && e.has_triggered_faultaware(poisoned) &&
+                    (poisoned == (poison != NONE));
+      }
     bool ok = completed && got_responses && (responses.load() == 2) &&
-              (bad.load() == 0) && data_ok;
+              (bad.load() == 0) && data_ok && events_ok &&
+              (finish_poisoned == (poison != NONE));
     if(!ok)
       log_app.error() << name() << ": completed=" << completed
                       << " responses=" << responses.load() << " problems=" << bad.load()
@@ -4509,11 +4571,13 @@ public:
 
 private:
   static constexpr int N = 32;
+  Poison poison;
+  Event copy_finishes[2] = {Event::NO_EVENT, Event::NO_EVENT};
   RegionInstance src, dst;
   std::atomic<int> responses{0}, bad{0};
   SubgraphInstantiationProfiling iprof;
   Subgraph sg;
-  bool completed = false, got_responses = false;
+  bool completed = false, got_responses = false, finish_poisoned = false;
 };
 
 static void copy_prof_response_task(const void *args, size_t arglen, const void *userdata,
@@ -4528,7 +4592,16 @@ static void copy_prof_response_task(const void *args, size_t arglen, const void 
 // its old contents) while an independent copy still runs.
 class CopyPoisonTest : public SubgraphTest {
 public:
-  std::string name() const override { return "CopyPoison"; }
+  explicit CopyPoisonTest(int chain_length = 1, bool empty_chain = false)
+    : chain_length(chain_length)
+    , empty_chain(empty_chain)
+  {}
+  std::string name() const override
+  {
+    if(empty_chain)
+      return "CopyEmpty.LongChain";
+    return (chain_length == 1) ? "CopyPoison" : "CopyPoison.LongChain";
+  }
   bool can_run() override { return sysmem().exists(); }
 
   void init() override
@@ -4550,11 +4623,21 @@ public:
     SubgraphDefinition sd;
     sd.concurrency_mode = SubgraphDefinition::ONE_SHOT;
     int va = 11, vb = 22;
-    int fa = make_fill_desc(sd, is, a, FID_DATA, &va, sizeof(va));
+    IndexSpace<1> chain_space = empty_chain ? IndexSpace<1>(Rect<1>(0, -1)) : is;
+    int fa = make_fill_desc(sd, chain_space, a, FID_DATA, &va, sizeof(va));
     int fb = make_fill_desc(sd, is, b, FID_DATA, &vb, sizeof(vb));
+    int last = fa;
+    // Skipped and empty copies both complete inline. Neither should consume
+    // one stack frame per operation while draining a long chain.
+    for(int i = 1; i < chain_length; i++) {
+      int next = make_fill_desc(sd, chain_space, a, FID_DATA, &va, sizeof(va));
+      add_dependency(sd, SubgraphDefinition::OPKIND_COPY, last,
+                     SubgraphDefinition::OPKIND_COPY, next);
+      last = next;
+    }
     add_dependency(sd, SubgraphDefinition::OPKIND_EXT_PRECOND, 0,
                    SubgraphDefinition::OPKIND_COPY, fa);
-    add_dependency(sd, SubgraphDefinition::OPKIND_COPY, fa,
+    add_dependency(sd, SubgraphDefinition::OPKIND_COPY, last,
                    SubgraphDefinition::OPKIND_EXT_POSTCOND, 0);
     add_dependency(sd, SubgraphDefinition::OPKIND_COPY, fb,
                    SubgraphDefinition::OPKIND_EXT_POSTCOND, 1);
@@ -4565,7 +4648,7 @@ public:
   {
     UserEvent bad = UserEvent::create_user_event();
     bad.cancel();
-    std::vector<Event> pre = {bad};
+    std::vector<Event> pre = {empty_chain ? Event::NO_EVENT : bad};
     std::vector<Event> post(2);
     Event e = sg.instantiate(nullptr, 0, ProfilingRequestSet(), pre, post);
     completed = wait_with_timeout(e, config.hang_timeout, &finish_poisoned);
@@ -4578,8 +4661,9 @@ public:
   bool check() override
   {
     AffineAccessor<int, 1> acc_a(a, FID_DATA), acc_b(b, FID_DATA);
-    bool ok = completed && finish_poisoned && post0_done && post0_poisoned &&
-              post1_done && !post1_poisoned && (acc_a[0] == 0) && (acc_b[0] == 22);
+    bool ok = completed && (finish_poisoned == !empty_chain) && post0_done &&
+              (post0_poisoned == !empty_chain) && post1_done && !post1_poisoned &&
+              (acc_a[0] == 0) && (acc_b[0] == 22);
     if(!ok)
       log_app.error() << name() << ": completed=" << completed
                       << " finish_poisoned=" << finish_poisoned << " post0=" << post0_done
@@ -4600,6 +4684,8 @@ public:
 
 private:
   static constexpr int N = 8;
+  int chain_length;
+  bool empty_chain;
   RegionInstance a, b;
   Subgraph sg;
   bool completed = false, finish_poisoned = false;
@@ -6754,7 +6840,11 @@ static std::vector<std::unique_ptr<SubgraphTest>> make_tests()
   tests.emplace_back(new DestroyGuardedByInstantiationTest());
   tests.emplace_back(new CopyReplayTest());
   tests.emplace_back(new CopyProfilingTest());
+  tests.emplace_back(new CopyProfilingTest(CopyProfilingTest::START));
+  tests.emplace_back(new CopyProfilingTest(CopyProfilingTest::INPUT));
   tests.emplace_back(new CopyPoisonTest());
+  tests.emplace_back(new CopyPoisonTest(16384));
+  tests.emplace_back(new CopyPoisonTest(16384, true /*empty_chain*/));
   tests.emplace_back(new IndirectCopyTest());
   tests.emplace_back(new RemoteCopyTest());
   tests.emplace_back(new GraphPriorityInputTest(false));

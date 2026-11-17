@@ -44,6 +44,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <set>
 #include <utility>
 #include <vector>
@@ -86,27 +87,23 @@ namespace Realm {
     }
 
     // An early arrival, kept until its predecessors have been handled.
-    void hold(uint64_t seq, void *payload)
-    {
-      held.push_back(std::make_pair(seq, payload));
-    }
+    void hold(uint64_t seq, void *payload) { held.emplace(seq, payload); }
 
     // Pops a held message whose predecessors have all been handled, if any
     // (not recorded: the caller handles it, which records it; readiness only
     // grows, so it stays ready).
     void *pop_ready(uint64_t *seq = nullptr)
     {
-      for(size_t i = 0; i < held.size(); i++) {
-        if(ready(held[i].first, false /*record*/)) {
-          void *p = held[i].second;
-          if(seq)
-            *seq = held[i].first;
-          held[i] = held.back();
-          held.pop_back();
-          return p;
-        }
-      }
-      return nullptr;
+      // `next` is the first unhandled number, so only that message can
+      // become ready. Avoid rescanning the whole backlog for every pop.
+      auto it = held.find(next);
+      if(it == held.end())
+        return nullptr;
+      void *p = it->second;
+      if(seq)
+        *seq = it->first;
+      held.erase(it);
+      return p;
     }
 
     // Whether seq has already been handled: a sender never reuses a number,
@@ -123,7 +120,7 @@ namespace Realm {
   private:
     uint64_t next = 0;
     std::set<uint64_t> handled;
-    std::vector<std::pair<uint64_t, void *>> held;
+    std::map<uint64_t, void *> held;
   };
 
   // Sender side: one node's instantiates of one subgraph slot, numbered

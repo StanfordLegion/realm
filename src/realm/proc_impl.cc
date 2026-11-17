@@ -1177,7 +1177,8 @@ namespace Realm {
     return nullptr;
   }
 
-  void *LocalTaskProcessor::end_subgraph_task(void *context, bool deferred_effects)
+  void *LocalTaskProcessor::end_subgraph_task(void *context, bool deferred_effects,
+                                              Processor::TaskFuncID task_id)
   {
     return nullptr;
   }
