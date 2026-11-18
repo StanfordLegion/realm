@@ -117,12 +117,17 @@ namespace Realm {
       int cfg_num_gpus = 0;
       std::string cfg_gpu_idxs;
       unsigned cfg_task_streams = 12, cfg_d2d_streams = 4;
-      // Number of streams per peer GPU, including imported HIP IPC framebuffers.  With a single stream per (src,dst) pair --
-      // the historical behaviour, still available as -ll:p2p_streams 1 -- copies to
-      // the same peer queue behind one another, and a small copy can wait for an
-      // unrelated bulk transfer to drain.  The default matches the CUDA module, where
-      // it was measured; it has not been measured separately on HIP devices.
-      unsigned cfg_p2p_streams = 8;
+      // Number of streams per peer GPU, including imported HIP IPC framebuffers.  With a
+      // single stream per (src,dst) pair -- the historical behaviour, still available as
+      // -ll:p2p_streams 1 -- copies to the same peer queue behind one another, and a
+      // small copy can wait for an unrelated bulk transfer to drain.  ROCm maps the
+      // streams of each priority onto at most GPU_MAX_HW_QUEUES hardware queues per
+      // device (default 4), so more streams than that add no concurrency.  On MI250X,
+      // a small IPC copy queued behind four 16 MiB copies to the same peer took 418us
+      // with one stream and 231us with four, with no further gain from 8 or 16 unless
+      // GPU_MAX_HW_QUEUES was raised.  Peer copies between two GPUs of one process
+      // showed no gain from any stream count in the same test.
+      unsigned cfg_p2p_streams = 4;
       // Number of streams per direction for host<->device copies.  With a single stream
       // each -- the historical behaviour, still available as -ll:hd_streams 1 -- every
       // host->FB copy for a GPU queues on one stream and every FB->host copy on another,
