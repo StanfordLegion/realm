@@ -133,7 +133,10 @@ namespace Realm {
       // host->FB copy for a GPU queues on one stream and every FB->host copy on another,
       // so a small copy waits for whatever bulk transfer is already in flight.  The
       // default matches the CUDA module, where 2 was the measured optimum and larger
-      // values were no better; it has not been measured separately on HIP devices.
+      // values were no better.  On MI250X, where these copies are copy kernels rather
+      // than copy-engine transfers, a 256 KiB copy queued behind four 16 MiB copies in
+      // the same direction was no faster with 2 streams than with 1, and 4 or 8
+      // streams helped only for some GPU_MAX_HW_QUEUES settings.
       unsigned cfg_hd_streams = 2;
       bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
            cfg_pin_sysmem = true;
@@ -149,8 +152,15 @@ namespace Realm {
       // and HIP IPC copies.  Lower values are higher priority, and task streams are
       // always created at relative priority 0.  The default of -1 is meant to keep a
       // copy kernel from waiting behind every block of the task kernels that were
-      // launched before it, as measured for the CUDA module; the effect has not been
-      // measured on HIP devices.
+      // launched before it, as measured for the CUDA module.  On HIP every affine copy
+      // is a kernel, including host<->device and single-rectangle copies, so this
+      // applies to every path.  ROCm also gives each priority its own pool of
+      // GPU_MAX_HW_QUEUES hardware queues, so -1 also moves DMA off the hardware
+      // queues shared by the task streams.  On MI250X, a copy issued while task
+      // kernels were running waited for the whole task wave (75ms) at priority 0 and
+      // took about 130us at -1, with no measurable change in the task kernels'
+      // duration.  Raising GPU_MAX_HW_QUEUES to 16 made the task kernels about 4%
+      // slower at -1 and gave copies occasional stalls of tens of milliseconds.
       int cfg_dma_stream_priority = -1;
       bool cfg_use_hip_ipc = true;
 

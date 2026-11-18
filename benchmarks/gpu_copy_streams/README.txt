@@ -14,13 +14,22 @@ Examples (prepend your MPI/cluster launcher):
   gpu_copy_streams -ll:gpu 1 -path h2d -load-tasks 4 -load-place 2
 
 Copy shape: -bytes payload, -rects separated rectangles, -pad uncopied AoS field.
-The defaults are 88064 bytes, four rectangles and eight bytes of padding. A dense
-one-rectangle, pad=0 case is a copy-engine control. Multiple rectangles generally
-use copy kernels. -bg N queues N independent background destinations on the same
-path; -bg-bytes and -bg-rects select their shape. Instances use the exact layouts
-used in capacity accounting, including field/allocation alignment. Preflight
-includes background destinations and every selected GPU's load buffer. It cannot
-account for unrelated concurrent allocations outside this benchmark.
+The defaults are 88064 bytes, four rectangles and eight bytes of padding. With
+CUDA, a dense one-rectangle, pad=0 case is a copy-engine control, and multiple
+rectangles generally use copy kernels. With HIP, Realm uses copy kernels for every
+affine copy, including single-rectangle and host<->device copies, so there is no
+copy-engine control and stream priority applies to every path. -bg N queues N
+independent background destinations on the same path; -bg-bytes and -bg-rects
+select their shape. Instances use the exact layouts used in capacity accounting,
+including field/allocation alignment. Preflight includes background destinations
+and every selected GPU's load buffer. It cannot account for unrelated concurrent
+allocations outside this benchmark.
+
+On HIP, ROCm maps the streams of each priority onto at most GPU_MAX_HW_QUEUES
+hardware queues per device (default 4). Streams beyond that add no concurrency,
+and task and DMA streams of the same priority can share a hardware queue, so a
+copy can wait for an unrelated task kernel. Set GPU_MAX_HW_QUEUES in the
+environment to study that limit.
 
 GPU load: -load-tasks tasks per selected GPU, -load-blocks, -load-threads and
 -load-spin control kernels. -load-place is a bit mask: 1 source, 2 destination,

@@ -32,8 +32,9 @@
 //    rectangle) competes with task kernels for the GPU, and stream priority decides
 //    which runs first.  -load-tasks N launches N GPU tasks, each with one kernel of
 //    -load-blocks blocks, and measures copies while those kernels are pending.
-//    A copy done by the copy engine (a single rectangle) is the control: it should
-//    not be affected.
+//    With CUDA, a copy done by the copy engine (a single rectangle) is the control:
+//    it should not be affected.  HIP uses copy kernels for every affine copy, so
+//    there is no such control there.
 //
 // Measured paths (-path): local (one framebuffer to itself), peer (one GPU's
 // framebuffer to another's, needs -ll:gpu 2 or more), h2d and d2h (host memory to
@@ -46,7 +47,7 @@
 // output, because the logger's print level is compiled out of release builds.
 //
 // Examples (two GPUs):
-//   stream count, copy-engine target behind 4 background copies:
+//   stream count, single-rectangle target (copy engine on CUDA) behind 4 copies:
 //     gpu_copy_streams -ll:gpu 2 -path peer -rects 1 -bg 4 -ll:p2p_streams {1,4,8}
 //   stream priority, kernel target under compute load:
 //     gpu_copy_streams -ll:gpu 2 -path peer -load-tasks 4 -ll:dma_stream_priority {0,-1}
