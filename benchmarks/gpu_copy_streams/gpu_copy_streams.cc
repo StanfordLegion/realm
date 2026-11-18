@@ -458,6 +458,10 @@ static double quantile_us(const std::vector<long long> &sorted, double q)
   return sorted[rank - 1] / 1e3;
 }
 
+// Set when -verify finds a wrong payload.  Reported through the shutdown status;
+// exiting from inside a task can deadlock in the network layer's exit handler.
+static bool verify_failed = false;
+
 static bool run_path(const PathSpec &spec, Processor p)
 {
   Shape shape(TestConfig::bytes, TestConfig::rects, TestConfig::pad);
@@ -674,7 +678,7 @@ static bool run_path(const PathSpec &spec, Processor p)
       std::cout << "VERIFY path=" << spec.name << " checked=" << checked
                 << " errors=" << bad << std::endl;
       if(bad)
-        std::exit(1);
+        verify_failed = true;
     }
   }
 
@@ -781,7 +785,7 @@ static void top_level_task(const void *args, size_t arglen, const void *userdata
   for(const PathSpec &spec : paths)
     measured += run_path(spec, p);
   Runtime::get_runtime().shutdown(Processor::get_current_finish_event(),
-                                  measured ? 0 : 77);
+                                  verify_failed ? 1 : (measured ? 0 : 77));
 }
 
 int main(int argc, char **argv)

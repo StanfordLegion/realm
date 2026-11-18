@@ -40,6 +40,10 @@ __global__ void load_kernel(float *buffer, size_t elements, size_t spin)
   buffer[idx] = x;
 }
 
+// Called from a GPU task.  A failure ends the process with std::_Exit: std::exit
+// would run atexit handlers on this task thread while the runtime is still active,
+// and GASNet-EX's exit handler can deadlock there against the network polling
+// thread (seen with the ofi conduit on Slingshot).
 #ifdef REALM_USE_CUDA
 void launch_load_kernel(float *buffer, size_t elements, size_t blocks, size_t threads,
                         size_t spin, cudaStream_t stream)
@@ -50,20 +54,20 @@ void launch_load_kernel(float *buffer, size_t elements, size_t blocks, size_t th
 {
   if(blocks == 0 || threads == 0 || blocks > UINT_MAX || threads > UINT_MAX) {
     fprintf(stderr, "invalid load kernel grid/block dimensions\n");
-    std::exit(1);
+    std::_Exit(1);
   }
   load_kernel<<<blocks, threads, 0, stream>>>(buffer, elements, spin);
 #ifdef REALM_USE_CUDA
   cudaError_t error = cudaGetLastError();
   if(error != cudaSuccess) {
     fprintf(stderr, "load kernel launch failed: %s\n", cudaGetErrorString(error));
-    std::exit(1);
+    std::_Exit(1);
   }
 #else
   hipError_t error = hipGetLastError();
   if(error != hipSuccess) {
     fprintf(stderr, "load kernel launch failed: %s\n", hipGetErrorString(error));
-    std::exit(1);
+    std::_Exit(1);
   }
 #endif
 }
