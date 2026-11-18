@@ -54,6 +54,11 @@ static void top(const void *, size_t, const void *, size_t, Processor proc)
   const unsigned count = std::max(1u, module->config->cfg_p2p_streams);
   size_t tested = 0, checked = 0;
   for(auto *gpu : module->gpus) {
+    // Copies within one GPU use the d2d streams, so no peer pool targets the GPU
+    // itself.
+    const size_t self = gpu->info->index * gpu->p2p_streams_per_peer;
+    for(unsigned k = 0; k < gpu->p2p_streams_per_peer; k++)
+      assert(gpu->peer_to_peer_streams[self + k] == nullptr);
     // Inspect real imported pools, then interleave selections across peers. A
     // shared rotation counter degenerates when peer count matches pool size.
     std::vector<Backend::GPU::IpcStreamPool *> pools;
