@@ -156,11 +156,16 @@ namespace Realm {
       // is a kernel, including host<->device and single-rectangle copies, so this
       // applies to every path.  ROCm also gives each priority its own pool of
       // GPU_MAX_HW_QUEUES hardware queues, so -1 also moves DMA off the hardware
-      // queues shared by the task streams.  On MI250X, a copy issued while task
-      // kernels were running waited for the whole task wave (75ms) at priority 0 and
-      // took about 130us at -1, with no measurable change in the task kernels'
-      // duration.  Raising GPU_MAX_HW_QUEUES to 16 made the task kernels about 4%
-      // slower at -1 and gave copies occasional stalls of tens of milliseconds.
+      // queues shared by the task streams.  The cost is that sustained DMA delays the
+      // task kernels instead.  On MI250X, an 88KiB copy issued while task kernels
+      // were running waited for the whole task wave (75ms) at priority 0 and took
+      // about 130us at -1, and copies that small did not slow the task kernels.  With
+      // sixteen 16MiB copies queued ahead of each of 40 measured copies, a wave of
+      // task kernels that takes 77ms on its own finished 6.2x later at -1 than at 0
+      // for host->device copies, 4.6x for device->host, 1.4x for peer and 1.1x
+      // within the GPU; with 64KiB copies the delay was under 1%.  Raising
+      // GPU_MAX_HW_QUEUES to 16 made the task kernels about 4% slower at -1 and gave
+      // copies occasional stalls of tens of milliseconds.
       int cfg_dma_stream_priority = -1;
       bool cfg_use_hip_ipc = true;
 
