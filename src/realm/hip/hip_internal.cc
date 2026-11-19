@@ -119,22 +119,17 @@ namespace Realm {
       return pinned_sysmems.count(mem->me) > 0;
     }
 
+    static GPU *mem_to_gpu(const MemoryImpl *mem);
+
     bool GPU::is_accessible_gpu_mem(const MemoryImpl *mem) const
     {
       assert(mem != nullptr);
-      switch(mem->get_kind()) {
-      case Memory::GPU_FB_MEM:
-      {
-        const HipDeviceMemoryInfo *mem_info =
-            mem->find_module_specific<HipDeviceMemoryInfo>();
-        return (mem_info != nullptr) &&
-               ((mem_info->gpu == this) ||
-                (info->peers.find(mem_info->gpu->info->index) != info->peers.end()));
-      }
-      default:
-        break;
-      }
-      return false;
+      // Unlike the CUDA module, GPUFBMemory has no HipDeviceMemoryInfo (only
+      // GPUDynamicFBMemory does), so find the owning GPU the way the copy code does.
+      const GPU *owner = mem_to_gpu(mem);
+      // peers holds HIP device IDs
+      return (owner != nullptr) &&
+             ((owner == this) || (info->peers.count(owner->info->device) > 0));
     }
 
     static GPUStream *select_stream(GPU *dst, GPU *src, GPU *channel_gpu,
