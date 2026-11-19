@@ -369,6 +369,7 @@ jobs:
                 -DREALM_SANITIZER=${{ matrix.config.sanitizer }}
 
       - name: Build
+        shell: bash
         run:
           cmake --build build --parallel 4 --config ${{ matrix.config.build }} --verbose | tee build-new.log
 
