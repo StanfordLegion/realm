@@ -1844,7 +1844,7 @@ namespace Realm {
 
     void GPU::launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elem_size,
                                          size_t volume, GPUStream *stream,
-                                         size_t arg_size)
+                                         size_t arg_size, int blocks_per_cu)
     {
       size_t log_elem_size = std::min(static_cast<size_t>(ctz(elem_size)),
                                       HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
@@ -1853,7 +1853,12 @@ namespace Realm {
       assert(dim <= REALM_MAX_DIM);
       assert(dim >= 1);
       log_gpudma.info() << "launching batch affine kernel ";
-      GPUFuncInfo &func_info = batch_affine_kernels[dim - 1][log_elem_size];
+      GPUFuncInfo func_info = batch_affine_kernels[dim - 1][log_elem_size];
+      // The kernel loops over the copy, so a smaller grid is still correct.
+      if((blocks_per_cu > 0) && (num_cus > 0)) {
+        func_info.occ_num_blocks =
+            std::min(func_info.occ_num_blocks, blocks_per_cu * num_cus);
+      }
       launch_kernel(func_info, copy_info, volume, arg_size, stream);
     }
 
@@ -1951,11 +1956,10 @@ namespace Realm {
       }
 
       hipDevice_t dev;
-      int numSMs;
 
       CHECK_HIP(hipGetDevice(&dev));
       CHECK_HIP(
-          hipDeviceGetAttribute(&numSMs, hipDeviceAttributeMultiprocessorCount, dev));
+          hipDeviceGetAttribute(&num_cus, hipDeviceAttributeMultiprocessorCount, dev));
       CHECK_HIP(hipModuleLoadData(&device_module, (void *)realm_hip_fatbin));
 
       // hipModuleOccupancyMaxPotentialBlockSize ignores __launch_bounds__ on HIP (unlike
