@@ -1883,6 +1883,12 @@ TEST_F(BestAffinityAnchorTest, AnchoredPassScansTheSmallestMapAndOneNodeRun)
     tie.has_affinity_to(p0, 1).has_affinity_to(m0, 1);
     EXPECT_EQ(tie.count(), 1u);
     EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 9) << "cache " << cache;
+    // the tie shows on node 1, where p0's map has no entry and m0's incoming
+    //  map has m1
+    Machine::MemoryQuery tie1(machine);
+    tie1.same_address_space_as(p2).has_affinity_to(p0, 1).has_affinity_to(m0, 1);
+    EXPECT_EQ(tie1.count(), 0u);
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 9) << "cache " << cache;
     // two memory targets: f0's incoming map holds m0 alone
     Machine::MemoryQuery mm(machine);
     mm.has_affinity_to(m0, 1).has_affinity_to(f0, 1);
@@ -1903,6 +1909,34 @@ TEST_F(BestAffinityAnchorTest, AnchoredPassScansTheSmallestMapAndOneNodeRun)
     EXPECT_EQ(MachineQueryCacheTest::results(pm2), (MSet{m0}));
     EXPECT_EQ(MachineQueryCacheTest::results(tie), (MSet{f0}));
     EXPECT_TRUE(MachineQueryCacheTest::results(mm).empty());
+  }
+  // the end of a node's run ends the scan: with two entries of node 1 after
+  //  node 0's run in m0's maps, a node-0 pass examines the first of them only
+  MockRuntimeImplMachineModel::ProcessorMemoriesToBeAdded more; // p3 and m2
+  more.proc_infos.push_back({1, Processor::LOC_PROC, 1});
+  more.mem_infos.push_back({1, Memory::SYSTEM_MEM, size_t(1024) * 1024, 1});
+  runtime_impl_->setup_mock_proc_mems(more);
+  const Processor p3 = ID::make_processor(1, 1).convert<Processor>();
+  const Memory m2 = ID::make_memory(1, 1).convert<Memory>();
+  MachineImpl *mi = runtime_impl_->machine;
+  mi->add_proc_mem_affinity(Machine::ProcessorMemoryAffinity{p3, m0, 100, 10});
+  mi->nodeinfos[1]->add_memory(m2);
+  const Machine::MemoryMemoryAffinity m2m0{m2, m0, 100, 10};
+  mi->nodeinfos[1]->add_mem_mem_affinity(m2m0);
+  mi->nodeinfos[0]->add_mem_mem_affinity(m2m0);
+  mi->update_kind_maps();
+  for(bool cache : {true, false}) {
+    Config::use_machine_query_cache = cache;
+    const unsigned long visits = ProcessorQueryImpl::anchored_visits();
+    Machine::ProcessorQuery node0(machine);
+    node0.same_address_space_as(p0).has_affinity_to(m0, 1);
+    EXPECT_EQ(node0.count(), 3u);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_visits(), visits + 4) << "cache " << cache;
+    const unsigned long mvisits = MemoryQueryImpl::anchored_visits();
+    Machine::MemoryQuery mnode0(machine);
+    mnode0.same_address_space_as(p0).has_affinity_to(m0, 1);
+    EXPECT_EQ(mnode0.count(), 1u);
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 2) << "cache " << cache;
   }
   Config::use_machine_query_cache = saved;
 }
