@@ -34,7 +34,6 @@ jobs:
       - name: Hide token in logs
         run:
           echo "::add-mask::${{ secrets.GITLAB_TRIGGER_TOKEN }}"
-          echo "::add-mask::${{ secrets.GITLAB_ACCESS_TOKEN }}"
 
       - name: Retrieve archive to compute sha256
         run: |
@@ -44,7 +43,6 @@ jobs:
       - name: Trigger remote pipeline
         env:
           GITLAB_TRIGGER_TOKEN: ${{ secrets.GITLAB_TRIGGER_TOKEN }}
-          GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
           REALM_COMMIT: ${{ github.sha }}
           PYTHONUNBUFFERED: 1
         shell: python
@@ -54,7 +52,6 @@ jobs:
           GITLAB_URL = os.environ['GITLAB_URL']
           GITLAB_REF = os.environ['GITLAB_REF']
           GITLAB_TRIGGER_TOKEN = os.environ['GITLAB_TRIGGER_TOKEN']
-          GITLAB_ACCESS_TOKEN = os.environ['GITLAB_ACCESS_TOKEN']
           GITHUB_ARCHIVE = os.environ['GITHUB_ARCHIVE']
           REALM_SHA256 = os.environ['REALM_SHA256']
           REALM_COMMIT = os.environ['REALM_COMMIT']
@@ -70,10 +67,9 @@ jobs:
           pipeline_info = r.json()
           print('::notice::Triggered pipeline at', pipeline_info['web_url'])
           pipeline_id = str(pipeline_info['id'])
-          hdrs = { 'PRIVATE-TOKEN': GITLAB_ACCESS_TOKEN }
           old_status = pipeline_info['status']
           while True:
-            r = requests.get(GITLAB_URL + '/pipelines/' + pipeline_id, headers=hdrs)
+            r = requests.get(GITLAB_URL + '/pipelines/' + pipeline_id)
             r.raise_for_status()
             pipeline_status = r.json()
             if pipeline_status['status'] != old_status:

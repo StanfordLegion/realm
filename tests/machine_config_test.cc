@@ -34,7 +34,7 @@
 
 #ifdef REALM_ON_WINDOWS
 #include <malloc.h>
-#else
+#elif !defined(REALM_ON_FREEBSD) // (FreeBSD's alloca() is in stdlib.h)
 #include <alloca.h>
 #endif
 

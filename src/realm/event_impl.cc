@@ -608,10 +608,10 @@ namespace Realm {
           } else if((gen + 1) == id.event_generation()) {
             // current generation
             waiters_head = impl->current_local_waiters.head.next;
-          } else {
+          } else if(impl->lagging_view) {
             std::map<EventImpl::gen_t, EventWaiter::EventWaiterList>::const_iterator it =
-                impl->future_local_waiters.find(id.event_generation());
-            if(it != impl->future_local_waiters.end())
+                impl->lagging_view->future_local_waiters.find(id.event_generation());
+            if(it != impl->lagging_view->future_local_waiters.end())
               waiters_head = it->second.head.next;
           }
         }
@@ -742,6 +742,8 @@ namespace Realm {
   {
     assert(!is_active());
     assert(free_preconditions.empty());
+    // the overflow storage is released whenever a merge completes
+    assert(!overflow_preconditions);
   }
 
   bool EventMerger::is_active(void) const { return (count_needed.load() != 0); }
@@ -756,8 +758,13 @@ namespace Realm {
     if(expected_events) {
       recycle_preconditions = false;
       if(MAX_INLINE_PRECONDITIONS < *expected_events) {
-        overflow_preconditions.resize(*expected_events - MAX_INLINE_PRECONDITIONS);
-        for(MergeEventPrecondition &pre : overflow_preconditions) {
+        // wide merge - allocate the overflow storage on demand (any earlier
+        //  merge on this event released it when it completed)
+        if(!overflow_preconditions) {
+          overflow_preconditions = std::make_unique<std::deque<MergeEventPrecondition>>();
+        }
+        overflow_preconditions->resize(*expected_events - MAX_INLINE_PRECONDITIONS);
+        for(MergeEventPrecondition &pre : *overflow_preconditions) {
           pre.merger = this;
         }
       }
@@ -814,9 +821,12 @@ namespace Realm {
       return &inline_preconditions[precondition_offset++];
     }
     const unsigned offset = precondition_offset - MAX_INLINE_PRECONDITIONS;
-    if(offset < overflow_preconditions.size()) {
+    // the overflow storage does not exist until the first overflow
+    const size_t overflow_size =
+        overflow_preconditions ? overflow_preconditions->size() : 0;
+    if(offset < overflow_size) {
       precondition_offset++;
-      return &overflow_preconditions[offset];
+      return &(*overflow_preconditions)[offset];
     }
 #ifndef TSAN_ENABLED
     // Can unsafely test this if TSAN is not enabled, we can still lose
@@ -831,9 +841,14 @@ namespace Realm {
       }
     }
     precondition_offset++;
-    assert(offset == overflow_preconditions.size());
-    overflow_preconditions.resize(offset + 1);
-    MergeEventPrecondition &result = overflow_preconditions.back();
+    assert(offset == overflow_size);
+    // grow the overflow storage by one, allocating it on first use - the deque
+    //  constructs the new element in place and leaves the addresses of the
+    //  existing preconditions untouched
+    if(!overflow_preconditions) {
+      overflow_preconditions = std::make_unique<std::deque<MergeEventPrecondition>>();
+    }
+    MergeEventPrecondition &result = overflow_preconditions->emplace_back();
     result.merger = this;
     return &result;
   }
@@ -897,9 +912,7 @@ namespace Realm {
       // if we dynamically allocated space for a wide merger, give that
       //  storage back - the chance that this particular event will have
       //  another wide merge isn't particularly high
-      if(!overflow_preconditions.empty()) {
-        overflow_preconditions.clear();
-      }
+      overflow_preconditions.reset();
       const bool any_faults = (faults_observed.load() != 0);
       // Trigger on the last input unless an eagerly propagated poison already did so.
       // Deferred fault propagation reports the accumulated poison now that all inputs
@@ -1079,7 +1092,6 @@ namespace Realm {
 
   GenEventImpl::GenEventImpl(void)
     : merger(this)
-    , external_waiter_condvar(external_waiter_mutex)
   {}
 
   GenEventImpl::GenEventImpl(EventTriggerNotifier *_event_triggerer,
@@ -1087,18 +1099,19 @@ namespace Realm {
     : merger(this)
     , event_triggerer(_event_triggerer)
     , event_comm(_event_comm)
-    , external_waiter_condvar(external_waiter_mutex)
   {}
 
   GenEventImpl::~GenEventImpl(void)
   {
 #ifdef DEBUG_REALM
     AutoLock<> a(mutex);
-    if(!current_local_waiters.empty() || !future_local_waiters.empty() ||
-       has_external_waiters || !remote_waiters.empty()) {
+    const bool future_waiters =
+        lagging_view && !lagging_view->future_local_waiters.empty();
+    if(!current_local_waiters.empty() || future_waiters || has_external_waiters ||
+       !remote_waiters.empty()) {
       log_event.fatal() << "Event " << me << " destroyed with"
                         << (current_local_waiters.empty() ? "" : " current local waiters")
-                        << (future_local_waiters.empty() ? "" : " current future waiters")
+                        << (future_waiters ? " current future waiters" : "")
                         << (has_external_waiters ? " external waiters" : "")
                         << (remote_waiters.empty() ? "" : " remote waiters");
       while(!current_local_waiters.empty()) {
@@ -1106,12 +1119,14 @@ namespace Realm {
         log_event.fatal() << "  waiting on " << make_event(generation.load() + 1) << ": "
                           << ew;
       }
-      for(std::map<gen_t, EventWaiter::EventWaiterList>::iterator it =
-              future_local_waiters.begin();
-          it != future_local_waiters.end(); ++it) {
-        while(!it->second.empty()) {
-          EventWaiter *ew = it->second.pop_front();
-          log_event.fatal() << "  waiting on " << make_event(it->first) << ": " << ew;
+      if(future_waiters) {
+        for(std::map<gen_t, EventWaiter::EventWaiterList>::iterator it =
+                lagging_view->future_local_waiters.begin();
+            it != lagging_view->future_local_waiters.end(); ++it) {
+          while(!it->second.empty()) {
+            EventWaiter *ew = it->second.pop_front();
+            log_event.fatal() << "  waiting on " << make_event(it->first) << ": " << ew;
+          }
         }
       }
     }
@@ -1331,13 +1346,11 @@ namespace Realm {
         trigger_now = true; // actually do trigger outside of mutex
         trigger_poisoned = is_generation_poisoned(needed_gen);
       } else {
-        std::map<gen_t, bool>::const_iterator it = local_triggers.find(needed_gen);
-        if(it != local_triggers.end()) {
+        if(find_local_trigger(needed_gen, trigger_poisoned)) {
           // 2) we're not the owner node, but we've locally triggered this and have
           // correct poison info
           assert(owner != Network::my_node_id);
           trigger_now = true;
-          trigger_poisoned = it->second;
         } else {
           // 3) we don't know of a trigger of this event, so record the waiter and
           // subscribe if needed
@@ -1354,7 +1367,7 @@ namespace Realm {
             // no, put it in an appropriate future waiter list - only allowed for
             // non-owners
             assert(owner != Network::my_node_id);
-            future_local_waiters[needed_gen].push_back(waiter);
+            get_lagging_view().future_local_waiters[needed_gen].push_back(waiter);
           }
 
           // do we need to subscribe to this event?
@@ -1389,8 +1402,8 @@ namespace Realm {
 
     // case 2: is it a local trigger we've also already dealt with?
     {
-      std::map<gen_t, bool>::const_iterator it = local_triggers.find(needed_gen);
-      if(it != local_triggers.end())
+      bool poisoned = false;
+      if(find_local_trigger(needed_gen, poisoned))
         return false;
     }
 
@@ -1400,9 +1413,53 @@ namespace Realm {
       assert(ok);
       return true;
     } else {
-      bool ok = future_local_waiters[needed_gen].erase(waiter) > 0;
+      // look, don't create - a generation nobody is waiting on has no list
+      if(!lagging_view)
+        return false;
+      std::map<gen_t, EventWaiter::EventWaiterList>::iterator it =
+          lagging_view->future_local_waiters.find(needed_gen);
+      if(it == lagging_view->future_local_waiters.end())
+        return false;
+      bool ok = it->second.erase(waiter) > 0;
+      // drop the list (and the lagging-view state, if that was all of it) once empty
+      if(it->second.empty()) {
+        lagging_view->future_local_waiters.erase(it);
+        release_lagging_view_if_empty();
+      }
       return ok;
     }
+  }
+
+  GenEventImpl::LaggingViewState &GenEventImpl::get_lagging_view(void)
+  {
+    // caller holds 'mutex'
+    if(!lagging_view) {
+      lagging_view = std::make_unique<LaggingViewState>();
+    }
+    return *lagging_view;
+  }
+
+  void GenEventImpl::release_lagging_view_if_empty(void)
+  {
+    // caller holds 'mutex'
+    if(lagging_view && lagging_view->future_local_waiters.empty() &&
+       lagging_view->local_triggers.empty()) {
+      lagging_view.reset();
+    }
+  }
+
+  bool GenEventImpl::find_local_trigger(gen_t gen, bool &poisoned) const
+  {
+    // caller holds 'mutex'
+    if(!lagging_view) {
+      return false;
+    }
+    std::map<gen_t, bool>::const_iterator it = lagging_view->local_triggers.find(gen);
+    if(it == lagging_view->local_triggers.end()) {
+      return false;
+    }
+    poisoned = it->second;
+    return true;
   }
 
   bool GenEventImpl::is_generation_poisoned(gen_t gen) const
@@ -1523,32 +1580,40 @@ namespace Realm {
       if(!current_local_waiters.empty())
         to_wake[generation.load() + 1].swap(current_local_waiters);
 
-      // now any future waiters up to and including the triggered gen
-      if(!future_local_waiters.empty()) {
-        std::map<gen_t, EventWaiter::EventWaiterList>::iterator it =
-            future_local_waiters.begin();
-        while((it != future_local_waiters.end()) && (it->first <= current_gen)) {
-          to_wake[it->first].swap(it->second);
-          future_local_waiters.erase(it);
-          it = future_local_waiters.begin();
+      if(lagging_view) {
+        // now any future waiters up to and including the triggered gen
+        std::map<gen_t, EventWaiter::EventWaiterList> &future_local_waiters =
+            lagging_view->future_local_waiters;
+        if(!future_local_waiters.empty()) {
+          std::map<gen_t, EventWaiter::EventWaiterList>::iterator it =
+              future_local_waiters.begin();
+          while((it != future_local_waiters.end()) && (it->first <= current_gen)) {
+            to_wake[it->first].swap(it->second);
+            future_local_waiters.erase(it);
+            it = future_local_waiters.begin();
+          }
+
+          // and see if there's a future list that's now current
+          if((it != future_local_waiters.end()) && (it->first == (current_gen + 1))) {
+            current_local_waiters.swap(it->second);
+            future_local_waiters.erase(it);
+          }
         }
 
-        // and see if there's a future list that's now current
-        if((it != future_local_waiters.end()) && (it->first == (current_gen + 1))) {
-          current_local_waiters.swap(it->second);
-          future_local_waiters.erase(it);
+        // next, clear out any local triggers that have been ack'd
+        std::map<gen_t, bool> &local_triggers = lagging_view->local_triggers;
+        if(has_local_triggers) {
+          std::map<gen_t, bool>::iterator it = local_triggers.begin();
+          while((it != local_triggers.end()) && (it->first <= current_gen)) {
+            assert(it->second == is_generation_poisoned(it->first));
+            local_triggers.erase(it);
+            it = local_triggers.begin();
+          }
+          has_local_triggers = !local_triggers.empty();
         }
-      }
 
-      // next, clear out any local triggers that have been ack'd
-      if(has_local_triggers) {
-        std::map<gen_t, bool>::iterator it = local_triggers.begin();
-        while((it != local_triggers.end()) && (it->first <= current_gen)) {
-          assert(it->second == is_generation_poisoned(it->first));
-          local_triggers.erase(it);
-          it = local_triggers.begin();
-        }
-        has_local_triggers = !local_triggers.empty();
+        // our view has caught up to 'current_gen' - drop the state if it is empty
+        release_lagging_view_if_empty();
       }
 
       // finally, update the generation count, representing that we have complete
@@ -1558,9 +1623,11 @@ namespace Realm {
       // external waiters need to be signalled inside the lock
       if(has_external_waiters) {
         has_external_waiters = false;
-        // also need external waiter mutex
-        AutoLock<KernelMutex> al2(external_waiter_mutex);
-        external_waiter_condvar.broadcast();
+        // also need external waiter mutex - the pair was allocated before the
+        //  flag was set
+        assert(external_waiter_sync);
+        AutoLock<KernelMutex> al2(external_waiter_sync->mutex);
+        external_waiter_sync->condvar.broadcast();
       }
     }
 
@@ -1649,12 +1716,7 @@ namespace Realm {
       poisoned = is_generation_poisoned(needed_gen);
       return true;
     }
-    std::map<gen_t, bool>::const_iterator it = local_triggers.find(needed_gen);
-    if(it != local_triggers.end()) {
-      poisoned = it->second;
-      return true;
-    }
-    return false;
+    return find_local_trigger(needed_gen, poisoned);
   }
 
   void GenEventImpl::subscribe(gen_t subscribe_gen)
@@ -1678,7 +1740,8 @@ namespace Realm {
         already_triggered = true;
       } else if(has_local_triggers) {
         // if we have a local trigger (poisoned or not), that counts too
-        if(local_triggers.count(subscribe_gen))
+        bool poisoned = false;
+        if(find_local_trigger(subscribe_gen, poisoned))
           already_triggered = true;
       }
 
@@ -1694,6 +1757,16 @@ namespace Realm {
     }
   }
 
+  GenEventImpl::ExternalWaiterSync &GenEventImpl::get_external_waiter_sync(void)
+  {
+    // caller holds 'mutex' - the pair is created by the first external wait on
+    //  this event and then lives as long as the event does
+    if(!external_waiter_sync) {
+      external_waiter_sync = std::make_unique<ExternalWaiterSync>();
+    }
+    return *external_waiter_sync;
+  }
+
   void GenEventImpl::external_wait(gen_t gen_needed, bool &poisoned)
   {
     // if the event is remote, make sure we've subscribed
@@ -1705,15 +1778,15 @@ namespace Realm {
 
       // wait until the generation has advanced far enough
       while(gen_needed > generation.load_acquire()) {
+        ExternalWaiterSync &sync = get_external_waiter_sync();
         has_external_waiters = true;
-        // must wait on external_waiter_condvar with external_waiter_mutex
-        //  but NOT with base mutex - hand-over-hand lock on the way in,
-        //  and then release external_waiter mutex before retaking main
-        //  mutex
-        external_waiter_mutex.lock();
+        // must wait on the condvar with its kernel mutex but NOT with base
+        //  mutex - hand-over-hand lock on the way in, and then release the
+        //  kernel mutex before retaking main mutex
+        sync.mutex.lock();
         mutex.unlock();
-        external_waiter_condvar.wait();
-        external_waiter_mutex.unlock();
+        sync.condvar.wait();
+        sync.mutex.unlock();
         mutex.lock();
       }
 
@@ -1733,17 +1806,17 @@ namespace Realm {
         long long now = Clock::current_time_in_nanoseconds();
         if(now >= deadline)
           return false; // trigger has not occurred
+        ExternalWaiterSync &sync = get_external_waiter_sync();
         has_external_waiters = true;
         // we don't actually care what timedwait returns - we'll recheck
         //  the generation ourselves
-        // must wait on external_waiter_condvar with external_waiter_mutex
-        //  but NOT with base mutex - hand-over-hand lock on the way in,
-        //  and then release external_waiter mutex before retaking main
-        //  mutex
-        external_waiter_mutex.lock();
+        // must wait on the condvar with its kernel mutex but NOT with base
+        //  mutex - hand-over-hand lock on the way in, and then release the
+        //  kernel mutex before retaking main mutex
+        sync.mutex.lock();
         mutex.unlock();
-        external_waiter_condvar.timedwait(deadline - now);
-        external_waiter_mutex.unlock();
+        sync.condvar.timedwait(deadline - now);
+        sync.mutex.unlock();
         mutex.lock();
       }
 
@@ -1779,7 +1852,8 @@ namespace Realm {
         assert(gen_triggered == (generation.load() + 1));
 
         to_wake.swap(current_local_waiters);
-        assert(future_local_waiters.empty()); // no future waiters here
+        // the owner never has future waiters or local triggers
+        assert(!lagging_view);
 
         to_update.swap(remote_waiters);
         update_gen = gen_triggered;
@@ -1823,9 +1897,11 @@ namespace Realm {
         // external waiters need to be signalled inside the lock
         if(has_external_waiters) {
           has_external_waiters = false;
-          // also need external waiter mutex
-          AutoLock<KernelMutex> al2(external_waiter_mutex);
-          external_waiter_condvar.broadcast();
+          // also need external waiter mutex - the pair was allocated before the
+          //  flag was set
+          assert(external_waiter_sync);
+          AutoLock<KernelMutex> al2(external_waiter_sync->mutex);
+          external_waiter_sync->condvar.broadcast();
         }
       }
 
@@ -1870,7 +1946,9 @@ namespace Realm {
           // yes, so we have complete information and can update the state directly
           to_wake.swap(current_local_waiters);
           // any future waiters?
-          if(!future_local_waiters.empty()) {
+          if(lagging_view && !lagging_view->future_local_waiters.empty()) {
+            std::map<gen_t, EventWaiter::EventWaiterList> &future_local_waiters =
+                lagging_view->future_local_waiters;
             std::map<gen_t, EventWaiter::EventWaiterList>::iterator it =
                 future_local_waiters.begin();
             log_event.debug() << "future waiters non-empty: first=" << it->first
@@ -1883,7 +1961,7 @@ namespace Realm {
           // if this event was poisoned, record it in the local triggers since we only
           //  update the official poison list on owner update messages
           if(poisoned) {
-            local_triggers[gen_triggered] = true;
+            get_lagging_view().local_triggers[gen_triggered] = true;
             has_local_triggers = true;
             if(gen_triggered > gen_subscribed.load()) {
               subscribe_needed = true; // make sure we get that update
@@ -1901,14 +1979,16 @@ namespace Realm {
           //  future waiter list to see who we can wake, and update the local trigger
           //  list
 
-          std::map<gen_t, EventWaiter::EventWaiterList>::iterator it =
-              future_local_waiters.find(gen_triggered);
-          if(it != future_local_waiters.end()) {
-            to_wake.swap(it->second);
-            future_local_waiters.erase(it);
+          if(lagging_view) {
+            std::map<gen_t, EventWaiter::EventWaiterList>::iterator it =
+                lagging_view->future_local_waiters.find(gen_triggered);
+            if(it != lagging_view->future_local_waiters.end()) {
+              to_wake.swap(it->second);
+              lagging_view->future_local_waiters.erase(it);
+            }
           }
 
-          local_triggers[gen_triggered] = poisoned;
+          get_lagging_view().local_triggers[gen_triggered] = poisoned;
           has_local_triggers = true;
 
           // TODO: this might still cause shutdown races - do we really
@@ -1920,12 +2000,18 @@ namespace Realm {
           }
         }
 
+        // an unpoisoned trigger of the next generation may have drained the
+        //  lagging-view state
+        release_lagging_view_if_empty();
+
         // external waiters need to be signalled inside the lock
         if(has_external_waiters) {
           has_external_waiters = false;
-          // also need external waiter mutex
-          AutoLock<KernelMutex> al2(external_waiter_mutex);
-          external_waiter_condvar.broadcast();
+          // also need external waiter mutex - the pair was allocated before the
+          //  flag was set
+          assert(external_waiter_sync);
+          AutoLock<KernelMutex> al2(external_waiter_sync->mutex);
+          external_waiter_sync->condvar.broadcast();
         }
       }
 
