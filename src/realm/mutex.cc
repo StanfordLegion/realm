@@ -252,6 +252,7 @@ namespace Realm {
 
 #if defined(REALM_ON_LINUX) && !defined(REALM_NO_USE_FUTEX)
       // doorbells only synchronize threads within this process
+      //
       // if we can transition from AWAKE->ASLEEP, we ask the kernel to
       //  wait for someone to wake us (if val changes before we get there,
       //   we'll get EAGAIN)
