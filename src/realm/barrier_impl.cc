@@ -850,8 +850,7 @@ namespace Realm {
             retro_flushes_sent | stale_edge_forwards | report_edges_pinned |
             pin_conflicts_avoided | gap_pulls | reports_received | notifies_received |
             reports_gated | ts_arrivals_received | owner_valve_flushes | reclaim_pulls |
-            late_arrivals_dropped) !=
-           0;
+            late_arrivals_dropped) != 0;
   }
 
   // IMPLEMENTATION_PLAN section 5 - the counters' way out.  Everything in
@@ -1716,8 +1715,7 @@ namespace Realm {
     if(!cur_plan.inplan && cur_plan.kids.empty()) {
       return; // nothing installed to retire
     }
-    std::map<gen_t, int64_t>::const_iterator it =
-        alter_steps.find(generation.load() + 1);
+    std::map<gen_t, int64_t>::const_iterator it = alter_steps.find(generation.load() + 1);
     if((it == alter_steps.end()) || (it->second >= 0)) {
       return;
     }
@@ -3370,8 +3368,7 @@ namespace Realm {
         //  Measured: a 2-rank probe issuing three arrivals for a count of two
         //  never reaches this branch.
         log_barrier.fatal() << "barrier generation over-arrived: " << me << "/" << gen
-                            << " expected=" << expected
-                            << " remaining=" << remaining
+                            << " expected=" << expected << " remaining=" << remaining
                             << " - more arrivals were issued than the count allows;"
                             << " see arrive()/alter_arrival_count() in event.h";
         abort();
@@ -3393,7 +3390,7 @@ namespace Realm {
                           << " ts=" << g.ts_acc << ")"
                           << " - more arrivals were issued than the count allows;"
                           << " see arrive()/alter_arrival_count() in event.h";
-        abort();
+      abort();
     }
     return counted == expected;
   }
@@ -3974,9 +3971,9 @@ namespace Realm {
 
         // R2-07 - the sender's arrival floor.  An arrival made HERE carries no
         //  message, so read it locally; a forwarded one brought it along.
-        const Barrier::timestamp_t eff_local_ts =
-            (sender == Network::my_node_id) ? ts_floor_locked(barrier_gen)
-                                            : sender_local_ts;
+        const Barrier::timestamp_t eff_local_ts = (sender == Network::my_node_id)
+                                                      ? ts_floor_locked(barrier_gen)
+                                                      : sender_local_ts;
 
         if(delta > 0) {
           // An ALTERATION that came in through the arrival path.  Nothing
@@ -4959,8 +4956,8 @@ namespace Realm {
         //  Reports are deliberately not checked this way - a stale report
         //  after a plan switch is legitimate (rule 10).
         counters.late_arrivals_dropped++;
-        log_barrier.fatal() << "barrier arrival for a triggered generation: " << me
-                            << "/" << arrival_gen << " from=" << from
+        log_barrier.fatal() << "barrier arrival for a triggered generation: " << me << "/"
+                            << arrival_gen << " from=" << from
                             << " watermark=" << generation.load()
                             << " - the barrier triggered without this arrival; see"
                             << " alter_arrival_count's contract in event.h";

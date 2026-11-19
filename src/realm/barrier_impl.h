@@ -477,8 +477,7 @@ namespace Realm {
     void adjust_arrival(gen_t barrier_gen, int delta, Barrier::timestamp_t timestamp,
                         Event wait_on, NodeID sender, const void *reduce_value,
                         size_t reduce_value_size, TimeLimit work_until,
-                        bool poisoned = false,
-                        Barrier::timestamp_t sender_local_ts = 0);
+                        bool poisoned = false, Barrier::timestamp_t sender_local_ts = 0);
 
     // ARRIVAL_PROTOCOL rules 8 and 9 - alter_arrival_count, the whole of action
     //  AL in ONE critical section.  The causal timestamp is MINTED INSIDE that
