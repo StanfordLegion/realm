@@ -347,14 +347,37 @@ single integer, which erases the timestamps.** Three rules follow.
    on anything derived from it, bypasses too — and it has altered nothing, so it
    has no arrival floor and rule 3 does not fire for it. **The owner is the only
    node that can see this, and the bypassed arrival is the evidence.** It
-   records the sender as a non-member (so no future plan gives it a quota) and
+   records the sender as a non-member **only if the sender has altered** (so no
+   future plan gives an alterer a quota, since its floor is permanent), and
    RETIRES THE CURRENT PLAN (so the parent waiting on it right now is released).
    Keeping only the first half leaves the hazard fully reachable: measured as a
    hang on three of five recipients in the `handoff` phase of
    `tests/barrier_scale_test.cc`.
 
-   At most one retirement per node per barrier lifetime — the non-member set is
-   monotone until `init()` — so the cost is bounded.
+   A HANDLE-ONLY bypasser is NOT made a non-member: its gate lasts one
+   generation (rule 8.1), so it is re-admitted by the next rebuild, and
+   excluding it for good cost one direct message per generation for the life of
+   the barrier.
+
+   The retirement is therefore **not** what carries the guarantee, and the
+   earlier "at most one per node per barrier lifetime, because the non-member
+   set is monotone" argument does not survive re-admission. Review round 2
+   found both holes: a second handoff to an already re-admitted node got no
+   retirement (R2-02), and a retirement on receipt cannot cover a generation
+   that a LATER rebuild governs (R2-03). What carries the guarantee now is that
+   a **handle-only** bypasser — one with no arrival floor of its own — sends a
+   **count-free flush for that generation to the owner**, once per generation.
+   The guard is "can the owner still give me a quota?", not "do I hold one
+   now": conditioning it on the plan the bypasser happens to hold at bypass
+   time reintroduces the R2-03 hole, while sending it unconditionally puts an
+   ALTERING node — whose floor makes every one of its arrivals bypass — into
+   eager flush for the life of the barrier. An alterer needs no flush: it is
+   in the owner's non-member set, so no future plan gives it a quota and it
+   can strand nobody, which the owner fans down the live tree and
+   re-fans down any tree it builds before the generation triggers. That is
+   per-generation and state-free, so neither hole exists. The retirement is kept
+   for CONVERGENCE only — it rebuilds a plan that still hands quota to a node
+   that has permanently left the tree — and remains bounded at one per node.
 
 The safety argument for why the owner cannot trigger on a stale count lives in
 the **API contract, not the protocol**: `event.h:290-292` requires the caller to
@@ -891,6 +914,43 @@ It is believed for each control kind here (flush and invalidate are idempotent
 by rule, `newplan` is epoch-keyed), but it is believed, not checked.
 
 ---
+
+### 8.11 Unordered sibling alterations: both round-2 reports are ill-formed programs
+
+Round 2 reported two cases (R2-06, R2-08) as contract ambiguities needing a
+decision in `event.h`. They are not. Both are **ill-formed applications**
+exercising undefined behaviour, and the existing contract already says so.
+
+**The rule they break.** A decrement must be CHAINED behind the alterations
+whose arrivals it cancels, so the handle's causal timestamp carries the
+dependency explicitly. Every rank must keep the barrier's conditions in every
+order the owner may observe, which means no over-decrementing — the obligation
+is on the caller, because `alter_arrival_count` is nonblocking and the owner
+cannot see an alteration still on the wire (`event.h:303-308`).
+
+**R2-06 (`negmask` variant 0).** The owner issues its `-2` on the ORIGINAL
+handle, incomparable with C's `+1` and A's `+1`. `event.h:295-298` already
+says a terminal negative "closes only its own causal branch — it never
+satisfies the outstanding-arrival obligation of an incomparable sibling", and
+making it do exactly that is what this program does. The early trigger is the
+documented worst case (`event.h:303-306`), not a gap. The correct form is the
+probe's own control: issue the `-2` on A's RETURNED handle, which is causally
+after both alterations. That completes correctly (`triggered=0`).
+
+**R2-08 (`negzero` variant 0).** `+3` and `-3` as unordered siblings on base 3.
+Chaining the `-3` behind the `+3` makes the count valid in every order; not
+chaining it does not, and "must remain positive" (`event.h:300-301`) binds the
+barrier's actual state, not the issuing rank's private arithmetic. The owner's
+abort on a non-positive count (`:1614-1621`) is the correct response to an
+ill-formed program.
+
+**Consequence for the implementation: none.** No code change, and no `event.h`
+change is required. If anything is added it is a clarifying sentence making the
+chaining rule explicit rather than implied by the sibling and terminal-negative
+paragraphs. Both probes are retained as documentation of what the runtime does
+with an ill-formed program: `negmask` variant 0 triggers early and then reports
+both alterations as landing on a triggered generation; `negzero` variant 0
+aborts. Neither is a target to "fix".
 
 ## 9. Reproducing the results
 

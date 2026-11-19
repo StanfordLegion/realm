@@ -239,6 +239,11 @@ namespace Realm {
       int delta;
       Barrier barrier;
       Event wait_on;
+      // R2-07 - the SENDER's arrival floor (rule 8.1's myTs[n][g]).  'barrier'
+      //  already carries the HANDLE's causal timestamp; this is the other half
+      //  of the gate, and only the sending node can know it.  Zero when the
+      //  sender has never altered this barrier.
+      Barrier::timestamp_t local_ts;
 
       static void handle_message(NodeID sender, const BarrierAdjustMessage &args,
                                  const void *data, size_t datalen, TimeLimit work_until)
@@ -249,17 +254,20 @@ namespace Realm {
         BarrierImpl *impl = get_runtime()->get_barrier_impl(args.barrier);
         EventImpl::gen_t gen = ID(args.barrier).barrier_generation();
         impl->adjust_arrival(gen, args.delta, args.barrier.timestamp, args.wait_on,
-                             args.sender, datalen ? data : 0, datalen, work_until);
+                             args.sender, datalen ? data : 0, datalen, work_until,
+                             /*poisoned=*/false, args.local_ts);
       }
 
       static void send_request(NodeID target, Barrier barrier, int delta, Event wait_on,
-                               NodeID sender, const void *data, size_t datalen)
+                               NodeID sender, const void *data, size_t datalen,
+                               Barrier::timestamp_t local_ts = 0)
       {
         ActiveMessage<BarrierAdjustMessage> amsg(target, datalen);
         amsg->barrier = barrier;
         amsg->delta = delta;
         amsg->wait_on = wait_on;
         amsg->sender = sender;
+        amsg->local_ts = local_ts;
         amsg.add_payload(data, datalen);
         amsg.commit();
       }
@@ -607,8 +615,24 @@ namespace Realm {
 
     // with lock released, perform any local notifications.  The legacy path
     //  does not carry poison (Q4 is implemented on the scalable path only), so
-    //  POISON_FIXME stays here.  The only other survivors are external_wait and
-    //  external_timedwait, which decision Q9 puts out of scope entirely.
+    //  POISON_FIXME stays here.  external_wait and external_timedwait used to
+    //  share it; R2-10 gave them the same is_generation_poisoned() answer
+    //  every other wait path reports.
+    //
+    // KNOWN GAP, and it needs a wire change.  R2-05 made adjust_arrival ask
+    //  the FAULT-AWARE question, so an already-poisoned precondition no longer
+    //  aborts; on the scalable path the bit reaches the generation, because
+    //  BarrierTsArrivalMessage carries it.  On the LEGACY path it does not: a
+    //  non-owner breaks out to 'forward_to_node' before the generation record
+    //  is touched, and BarrierAdjustMessage cannot carry the bit - adding a
+    //  'bool poisoned' to it fails the fragment-header static_assert
+    //  (activemsg.inl:521, MAX_FRAGMENT_HEADER_BYTES = 56; the struct is at
+    //  the limit after R2-07's 'local_ts').  TRIED AND REVERTED, so it is not
+    //  re-attempted as a field.  It has to be packed - the spare high bits of
+    //  'sender' are the obvious home, since Realm node ids stay below 65536.
+    //  Until then a forwarded arrival whose precondition was ALREADY poisoned
+    //  counts clean where it used to abort: a quiet wrong answer traded for a
+    //  loud one, on a path that also still notifies with POISON_FIXME.
     if(!local_notifications.empty())
       get_runtime()->event_triggerer.trigger_event_waiters(local_notifications,
                                                            POISON_FIXME, work_until);
@@ -825,7 +849,8 @@ namespace Realm {
             plans_parked | parked_plans_applied | dead_plans_discarded |
             retro_flushes_sent | stale_edge_forwards | report_edges_pinned |
             pin_conflicts_avoided | gap_pulls | reports_received | notifies_received |
-            reports_gated | ts_arrivals_received | owner_valve_flushes | reclaim_pulls) !=
+            reports_gated | ts_arrivals_received | owner_valve_flushes | reclaim_pulls |
+            late_arrivals_dropped) !=
            0;
   }
 
@@ -875,7 +900,8 @@ namespace Realm {
                        << " reports_gated=" << counters.reports_gated
                        << " ts_arrivals_received=" << counters.ts_arrivals_received
                        << " owner_valve_flushes=" << counters.owner_valve_flushes
-                       << " reclaim_pulls=" << counters.reclaim_pulls;
+                       << " reclaim_pulls=" << counters.reclaim_pulls
+                       << " late_arrivals_dropped=" << counters.late_arrivals_dropped;
   }
 
 #ifdef DEBUG_REALM
@@ -1572,16 +1598,25 @@ namespace Realm {
       gen_t apply_gen = cur.gen;
       const gen_t watermark = generation.load();
       if(apply_gen <= watermark) {
-        // CONTRACT VIOLATION (event.h:302-306): the generation the application
-        //  named has already triggered, so it triggered without this
-        //  alteration - "a barrier that triggered too early".  It is reported
-        //  rather than fatal because the damage is already done, and the delta
-        //  is still applied persistently from the next open generation on, so
-        //  that every later count stays consistent.
+        // CONTRACT VIOLATION (event.h:302-306) - and it is FATAL.  The
+        //  generation the application named has already triggered, so it
+        //  triggered WITHOUT this alteration: "a barrier that triggered too
+        //  early".
+        //
+        // This used to log and carry on, re-basing the delta onto the next
+        //  open generation so later counts stayed consistent.  That is the
+        //  wrong trade: it keeps a barrier the application has already
+        //  corrupted limping along, and whether this alteration or the late
+        //  arrival (:4895) reaches the owner first is a race - so warning on
+        //  one and continuing on the other makes the failure look
+        //  intermittent and sends the author hunting for a race in their own
+        //  code.  Both sides of that race now terminate.
         log_barrier.fatal() << "barrier alteration for a triggered generation: " << me
                             << "/" << cur.gen << " delta=" << cur.delta
-                            << " watermark=" << watermark;
-        apply_gen = watermark + 1;
+                            << " watermark=" << watermark
+                            << " - the barrier triggered without this alteration; see"
+                            << " alter_arrival_count's contract in event.h";
+        abort();
       }
 
       alter_steps[apply_gen] += cur.delta;
@@ -1672,6 +1707,26 @@ namespace Realm {
   //  retained is one entry per alteration ever issued on this barrier, which
   //  tla/STATE_AND_LOCKING.md section 7.3 already calls the residual of this
   //  design; shrinking it to one entry per altering node is deferred.
+  // R2-04 - retire the live plan when the NEXT generation is where a negative
+  //  alteration takes effect.  Called on the trigger path, after the watermark
+  //  has moved, so 'generation.load() + 1' is the generation about to open.
+  void BarrierImpl::retire_at_negative_step_locked(PendingSends &sends)
+  {
+    REALM_BARRIER_ASSERT_LOCKED();
+    if(!cur_plan.inplan && cur_plan.kids.empty()) {
+      return; // nothing installed to retire
+    }
+    std::map<gen_t, int64_t>::const_iterator it =
+        alter_steps.find(generation.load() + 1);
+    if((it == alter_steps.end()) || (it->second >= 0)) {
+      return;
+    }
+    counters.plan_rebuilds_declined++; // same signal: the plan stopped fitting
+    log_barrier.info() << "retiring barrier plan before a count decrease: " << me
+                       << " gen=" << it->first << " delta=" << it->second;
+    retire_plan_locked(sends);
+  }
+
   void BarrierImpl::prune_alter_state_locked(gen_t watermark)
   {
     REALM_BARRIER_ASSERT_LOCKED();
@@ -1710,10 +1765,16 @@ namespace Realm {
   }
 
   // RULE 8.1 - HOW LONG A HANDLE'S TIMESTAMP KEEPS AN ARRIVAL OFF THE TREE.
-  // Only the first generation the handle was used at: past that the alteration
-  // is certainly applied, because a generation cannot trigger while one naming
-  // it is outstanding and generations trigger in watermark order.  Conservative
-  // - the model cleared gating only a.gen, which this node cannot see.
+  // Gate every arrival AT OR BELOW the first generation the handle was used at;
+  // send the ones above it through the tree.  Those cannot trigger before the
+  // gated one, which cannot trigger before the alteration is applied.
+  //
+  // R2-01: the test is per ARRIVAL and the record is never collapsed.  A node
+  // does not process its arrivals in generation order - a deferred arrival
+  // reaches adjust_arrival only when its precondition fires - so an arrival at
+  // a later generation says nothing about the gated one, which may still be
+  // coming.  Collapsing on first use above the window ungated it and the
+  // barrier triggered early.
   Barrier::timestamp_t BarrierImpl::handle_gate_locked(Barrier::timestamp_t ts, gen_t gen)
   {
     REALM_BARRIER_ASSERT_LOCKED();
@@ -1726,16 +1787,11 @@ namespace Realm {
       handle_first_gen[ts] = gen;
       return ts;
     }
-    if(it->second == RELEASED) {
-      return 0;
-    }
     if(gen <= it->second) {
       return ts;
     }
-    // RELEASED is recorded IN PLACE, never erased: ABSENCE MEANS "GATE IT", so
-    // forgetting a released timestamp re-arms the gate and the node never
-    // rejoins the tree.  The first version pruned here and did exactly that.
-    it->second = RELEASED;
+    // above the window: through the tree.  The entry STAYS - it is the window
+    // bound, and erasing it would re-arm the gate on a later arrival.
     counters.handle_gates_released++;
     return 0;
   }
@@ -2438,8 +2494,19 @@ namespace Realm {
     // THE INVARIANT, measured against the count this plan's FIRST generation
     //  will actually be waiting for - not against 'base_arrival_count', which a
     //  NEGATIVE alteration (rule 9) puts above the truth.  A later positive
-    //  alteration only raises expected(), which is the safe direction; a later
-    //  negative one invalidates the plan outright, which is what rule 9 is for.
+    //  alteration only raises expected(), which is the safe direction.
+    //
+    // R2-04: a later NEGATIVE one does not save us by itself.  Rule 9 retires
+    //  the plan when the alteration is ISSUED, not when its generation
+    //  arrives, so the rebuild that follows was checked against a count the
+    //  decrease had not reached yet and stayed installed when it did.  The
+    //  plan's LIFETIME is bounded instead - retire_at_negative_step_locked()
+    //  on the trigger path retires it before the generation the decrease
+    //  takes effect at - so this test only has to fit the count at
+    //  'plan_from'.  Testing the minimum over every future breakpoint would
+    //  also be safe, but one far-future decrease would then decline every
+    //  rebuild until it landed and leave the barrier fully eager for the whole
+    //  interval (adversarial review).
     const gen_t plan_from = generation.load() + 1;
     const int64_t expected = expected_locked(plan_from);
     if(total > expected) {
@@ -3284,12 +3351,51 @@ namespace Realm {
     // expected(gen) is base_arrival_count until somebody alters the barrier,
     //  so both tests below are exactly what they were before stage C6 for a
     //  barrier nobody alters.
+    const int64_t expected = expected_locked(gen);
     if(redop_id != 0) {
       // legacy/reduction path: the count-down convention stays here (D4)
-      return (expected_locked(gen) + g.unguarded_delta) == 0;
+      const int64_t remaining = expected + g.unguarded_delta;
+      if(remaining < 0) {
+        // CONTRACT VIOLATION - this generation's remaining count went NEGATIVE.
+        //  The completion test is an EQUALITY, so without this the generation
+        //  could never satisfy it and the barrier would hang with no
+        //  explanation.  Fatal: a hang is the worst possible way to be told.
+        //
+        // WHAT THIS DOES NOT CATCH, and cannot: the owner counts arrivals, it
+        //  does not attribute them.  N+1 arrivals for a count of N trigger the
+        //  generation at the Nth, and the surplus then lands for a triggered
+        //  generation, where it is indistinguishable from a legitimate stale
+        //  report (rule 10).  Only an update that OVERSHOOTS in one step - a
+        //  cumulative report past the remaining count - is visible here.
+        //  Measured: a 2-rank probe issuing three arrivals for a count of two
+        //  never reaches this branch.
+        log_barrier.fatal() << "barrier generation over-arrived: " << me << "/" << gen
+                            << " expected=" << expected
+                            << " remaining=" << remaining
+                            << " - more arrivals were issued than the count allows;"
+                            << " see arrive()/alter_arrival_count() in event.h";
+        abort();
+      }
+      return remaining == 0;
     }
     // the model's ownerAcc[g] + localTotal[Owner][g] + TsTotal(g) = expected[g]
-    return (g.local_total + g.child_sum + g.ts_acc) == expected_locked(gen);
+    const int64_t counted = g.local_total + g.child_sum + g.ts_acc;
+    if(counted > expected) {
+      // the same violation on the scalable path, and the same limit: only a
+      //  single overshooting update is visible, because the generation
+      //  triggers the moment 'counted' reaches 'expected'.  A gated arrival is
+      //  not in 'ts_acc' until its alteration has been applied, and applying
+      //  that alteration is what raised 'expected', so a legal program can
+      //  reach equality but never exceed it.
+      log_barrier.fatal() << "barrier generation over-arrived: " << me << "/" << gen
+                          << " expected=" << expected << " counted=" << counted
+                          << " (local=" << g.local_total << " child=" << g.child_sum
+                          << " ts=" << g.ts_acc << ")"
+                          << " - more arrivals were issued than the count allows;"
+                          << " see arrive()/alter_arrival_count() in event.h";
+        abort();
+    }
+    return counted == expected;
   }
 
   // NOTIFICATION_PROTOCOL action T, the notification half.
@@ -3463,6 +3569,16 @@ namespace Realm {
     //  makes it unreachable has just moved.
     prune_alter_state_locked(trigger_gen);
 
+    // R2-04 - BOUND THE LIVE PLAN'S LIFETIME.  A plan is checked against the
+    //  count at its first generation; a decrease recorded for a LATER one
+    //  would leave it over-predicting there, and a relay below an unreachable
+    //  subtree quota goes silent.  Rule 9's retirement fires when the
+    //  alteration is issued, which is too early to help.  So retire here,
+    //  while the watermark is one short of the generation the decrease takes
+    //  effect at: that generation then runs eager (safe by construction) and
+    //  the rebuild at its trigger is measured against the lowered count.
+    retire_at_negative_step_locked(sends);
+
     // RULE 5 - the plan switch, in the SAME critical section as the trigger
     //  that motivated it (section 12: "count comparison and the plan switch
     //  that follows it").  At most one switch per section, which keeps this a
@@ -3565,11 +3681,24 @@ namespace Realm {
                                    Barrier::timestamp_t timestamp, Event wait_on,
                                    NodeID sender, const void *reduce_value,
                                    size_t reduce_value_size, TimeLimit work_until,
-                                   bool poisoned /*= false*/)
+                                   bool poisoned /*= false*/,
+                                   Barrier::timestamp_t sender_local_ts /*= 0*/)
   {
     Barrier b = make_barrier(barrier_gen, timestamp);
 
-    if(!wait_on.has_triggered()) {
+    // R2-05 - decision Q4 says a poisoned precondition POISONS the generation,
+    //  and the deferred path below does that.  has_triggered() is the
+    //  fault-INTOLERANT test and aborts on an already-poisoned event, so the
+    //  outcome used to depend on whether the poison landed before or after
+    //  arrive() registered.  Ask the fault-aware question instead and carry the
+    //  poison into the arrival.
+    bool wait_on_poisoned = false;
+    const bool wait_on_done = wait_on.has_triggered_faultaware(wait_on_poisoned);
+    if(wait_on_poisoned) {
+      poisoned = true;
+    }
+
+    if(!wait_on_done) {
       // deferred arrival
 
       // only forward deferred arrivals if the precondition is not one that looks like
@@ -3643,6 +3772,9 @@ namespace Realm {
     void *final_values_copy = 0;
     size_t sizeof_lhs = 0;
     NodeID forward_to_node = (NodeID)-1;
+    // R2-07 - this node's floor, captured under the mutex and sent with a
+    //  forwarded legacy arrival.
+    Barrier::timestamp_t fwd_local_ts = 0;
     // reports and flush announcements are RECORDED under the lock and emitted
     //  after it (S2); the emit phase reads only these locals (S3)
     PendingSends sends;
@@ -3680,6 +3812,9 @@ namespace Realm {
       //  non-owner still has to hand the arrival on
       if(owner != Network::my_node_id) {
         if(!scalable_route) {
+          // R2-07 - the legacy route forwards without computing a gate, so the
+          //  floor has to be captured HERE, under the mutex, and travel with it.
+          fwd_local_ts = ts_floor_locked(barrier_gen);
           forward_to_node = owner;
           break;
         }
@@ -3718,20 +3853,64 @@ namespace Realm {
           sends.ts_arrival.local_ts = gate.local_ts;
           sends.ts_arrival.poisoned = g->poisoned;
 
+          // R2-02 / R2-03 - TELL THE OWNER that this generation is open,
+          //  with a count-free flush.  The local announcement below only
+          //  reaches this node's CHILDREN; the node that actually strands is
+          //  the PARENT, which is quota-gated on a subtree total this arrival
+          //  will never feed.  The owner fans the flush down the live tree and
+          //  re-fans it at switch time down any tree it builds before the
+          //  generation triggers, so it covers both the plan in force now and
+          //  one rebuilt later.
+          //
+          // THE GUARD IS "CAN THE OWNER STILL GIVE ME A QUOTA?", and that is
+          //  'local_ts == 0' - a HANDLE-ONLY bypass.  Two wrong answers were
+          //  tried and both are recorded here because each looks right:
+          //
+          //  * 'cur_plan.inplan && quota > 0' (the local fan's guard) is too
+          //    NARROW.  It describes the plan this node holds AT BYPASS TIME,
+          //    which is exactly the state R2-03 says cannot be trusted: a node
+          //    that bypasses while planless or at quota 0 sends nothing, and a
+          //    later rebuild can still hand it a quota for the generation it
+          //    has already bypassed in.  The switch-time re-fan then skips
+          //    that generation, because the owner's only state for it is a
+          //    bypassed count and subtree_known() excludes ts_acc (:737).
+          //
+          //  * unconditional is too WIDE.  An ALTERING node has a persistent
+          //    floor, so every arrival it ever makes bypasses; telling the
+          //    owner each time puts the barrier in eager flush for life
+          //    (measured: recipient flush episodes 4-8 -> 92-95 of 96, owner
+          //    inbound 372 -> 796).  That is the regression B09 removed.
+          //
+          //  An alterer needs no flush: the owner puts it in 'ts_bypass_nodes'
+          //  (:4805) and no future plan gives it a quota, so it can strand
+          //  nobody.  A handle-only bypasser is re-admitted by the next
+          //  rebuild and is precisely the node that can.
+          //
+          // ONCE PER GENERATION.  enter_flush_locked is idempotent, but this
+          //  send sits outside it, so k arrivals at the same gated generation
+          //  would otherwise send k flushes and re-arm the owner's rebuild
+          //  machinery each time.
+          if((gate.local_ts == 0) && !g->told_owner_bypassed) {
+            g->told_owner_bypassed = true;
+            sends.flushes.push_back(PendingFlush());
+            sends.flushes.back().gen = barrier_gen;
+            sends.flushes.back().to.push_back(owner);
+          }
+
           // RULE 8.3, generalised to the arrival rather than the alteration:
           //  an arrival that bypasses the tree never reaches 'local_total', so
           //  this node's quota just became that much less reachable.  A relay
           //  waiting on an unreachable quota goes silent and strands its
           //  children, so it stops aggregating for this generation and reports
-          //  what it is already holding.  (Over-signalling a flush is always
-          //  safe - it only ever causes MORE eager reporting.)
+          //  what it is already holding.
           // ... BUT ONLY WHILE THE PLAN IS STILL WRONG ABOUT THIS NODE.  Once
           //  the owner has rebuilt, a bypassing node has quota 0, so there is
           //  no quota to miss and announcing again only drags the tree back
-          //  into eager mode for the rest of the barrier's life.  This
-          //  suppresses the ANNOUNCEMENT TO THE CHILDREN, who have reachable
-          //  quotas of their own; this node's own eager reporting is
-          //  unaffected (flush_mode_locked derives it from its arrival floor).
+          //  into eager mode.  This suppresses the ANNOUNCEMENT TO THE
+          //  CHILDREN, who have reachable quotas of their own; this node's own
+          //  eager reporting is unaffected (flush_mode_locked derives it from
+          //  its arrival floor).  The owner flush above is NOT suppressed with
+          //  it - different message, different job.
           if(cur_plan.inplan && (cur_plan.quota > 0)) {
             enter_flush_locked(*g, barrier_gen, sends);
           }
@@ -3793,6 +3972,12 @@ namespace Realm {
           g->poisoned = true;
         }
 
+        // R2-07 - the sender's arrival floor.  An arrival made HERE carries no
+        //  message, so read it locally; a forwarded one brought it along.
+        const Barrier::timestamp_t eff_local_ts =
+            (sender == Network::my_node_id) ? ts_floor_locked(barrier_gen)
+                                            : sender_local_ts;
+
         if(delta > 0) {
           // An ALTERATION that came in through the arrival path.  Nothing
           //  generates this on the scalable path any more - alter_arrival_count
@@ -3839,7 +4024,7 @@ namespace Realm {
           if(cur_plan.inplan && (cur_plan.quota > 0)) {
             enter_flush_locked(*g, barrier_gen, sends);
           }
-        } else if((redop_id != 0) && (timestamp != 0)) {
+        } else if((redop_id != 0) && ((timestamp != 0) || (eff_local_ts != 0))) {
           // A LEGACY arrival that names an alteration.  Reduction barriers stay
           //  on the eager path, but the ordering question is the same one rule
           //  8.2 answers, so they get the same EXACT-SET gate rather than the
@@ -3849,6 +4034,14 @@ namespace Realm {
           //  the scalable path's own message is cumulative.
           Generation::TsKey lgate;
           lgate.ts = timestamp;
+          // R2-07 - and the sender's floor.  Without it, an altered node's
+          //  RESERVED arrival - made on the PRE-alteration handle, so
+          //  'timestamp' is 0 or an older alteration - was counted at once when
+          //  it carried a reduction value, and the generation could trigger
+          //  before the alteration landed.  ts_gate_open_locked already
+          //  requires BOTH components, so this is the same exact-set gate the
+          //  scalable path uses.
+          lgate.local_ts = eff_local_ts;
           Generation::TsStreamKey lkey;
           lkey.from = sender;
           lkey.gate = lgate;
@@ -3938,8 +4131,12 @@ namespace Realm {
       // decision Q8 - straight to the active message interface, no communicator
       //  indirection
       Barrier b = make_barrier(barrier_gen, timestamp);
+      // R2-07 - carry this node's floor.  The scalable route computes the gate
+      //  locally and bypasses; the legacy route forwards, so the floor has to
+      //  travel with the message or the owner counts the arrival ungated.
       BarrierAdjustMessage::send_request(forward_to_node, b, delta, Event::NO_EVENT,
-                                         sender, reduce_value, reduce_value_size);
+                                         sender, reduce_value, reduce_value_size,
+                                         fwd_local_ts);
       return;
     }
 
@@ -4340,7 +4537,12 @@ namespace Realm {
                                << " parked=" << defer_epoch << " retired-by=" << epoch;
           }
           // RETROACTIVE CASE 3 (BarrierArrive RecvInvalidate :418-437, rule 10.4).
-          //  This node has been invalidated with NO live replacement.  A node
+          //  This node has been invalidated with no live replacement to adopt.
+          //  Under R2-09 it may still be HOLDING a newer plan - the guard
+          //  below keeps that - so "planless" is no longer exactly the
+          //  condition; the signal is sent on any non-live invalidation, which
+          //  is what the model does too (the retro-flush conjunct hangs off
+          //  ~live, not off planlessness).  Extra eagerness, never less.  A node
           //  that ran ahead arrived believing itself a plan member, so the
           //  outsider rule never fired: its count reached the owner, but a
           //  count is not a signal, and nothing tells the owner the plan
@@ -4379,7 +4581,22 @@ namespace Realm {
           //  made an excluded node eager-flush down a dead edge list for ever
           //  (11 of 16 ranks at 95 of 96 episodes).  Rule 6 is intact: step 2
           //  resolved the targets long before this line.
-          cur_plan = ArrivalPlan();
+          //
+          // R2-09: ... BUT ONLY IF THIS INVALIDATION IS ABOUT THE PLAN WE HOLD.
+          //  An invalidation OLDER than the installed plan is a death notice
+          //  for a plan this node has already moved past, and clearing on it
+          //  threw away a live newer plan - leaving this node and the subtree
+          //  below it eager until a DIFFERENT plan was built, because the
+          //  owner's newer plan is not retired and an identical rebuild is
+          //  skipped.  The invalidation's other effects (the retroactive
+          //  flush, 'inval_epoch') still apply; only the plan record is kept.
+          if(my_epoch <= epoch) {
+            cur_plan = ArrivalPlan();
+          } else {
+            log_barrier.info() << "keeping newer barrier plan over a stale "
+                               << "invalidation: " << me << " have=" << my_epoch
+                               << " inval=" << epoch;
+          }
         }
         if(defer_epoch != 0) {
           defer_epoch = 0;
@@ -4442,24 +4659,35 @@ namespace Realm {
                            << " epoch=" << epoch << " have=" << my_epoch
                            << " inval=" << inval_epoch;
       } else if(cur_plan.inplan && (inval_epoch < my_epoch)) {
-        counters.plans_parked++;
         // step 2 - PARK IT.  At most ONE parked plan per node, so a second one
-        //  simply replaces the first; that is safe because epochs are monotone
-        //  and the newer plan is the one that will be current when the
-        //  invalidation finally lands (BarrierArrive BoundedRetention).
+        //  replaces the first - but only if it is NEWER.
         //
-        // The payload is COPIED: the active-message buffer is dead once this
-        //  handler returns, and the node has to be able to forward each child's
-        //  slice of it later.
-        log_barrier.info() << "parking barrier newplan: " << me << " epoch=" << epoch
-                           << " (holding epoch " << my_epoch << ", inval " << inval_epoch
-                           << ")";
-        defer_epoch = epoch;
-        defer_parent = parent;
-        deferred_plan_payload.clear();
-        if(datalen > 0) {
-          const unsigned char *p = static_cast<const unsigned char *>(data);
-          deferred_plan_payload.assign(p, p + datalen);
+        // R2-09: epochs are monotone at the OWNER, not in delivery order.  A
+        //  newplan 3 followed by a newplan 2 used to overwrite the parked slot
+        //  with the older plan, and invalidate 1 then installed plan 2; the
+        //  invalidation for plan 2 that follows clears it again, leaving this
+        //  node and the part of plan 3 below it eager until a DIFFERENT plan is
+        //  built.  Safe either way - this is convergence, not correctness - and
+        //  it matches the drop guard just above, which already refuses a plan
+        //  that is not newer than what this node holds.
+        if(epoch <= defer_epoch) {
+          log_barrier.info() << "keeping newer parked barrier plan: " << me
+                             << " parked=" << defer_epoch << " offered=" << epoch;
+        } else {
+          counters.plans_parked++;
+          // The payload is COPIED: the active-message buffer is dead once this
+          //  handler returns, and the node has to be able to forward each
+          //  child's slice of it later.
+          log_barrier.info() << "parking barrier newplan: " << me << " epoch=" << epoch
+                             << " (holding epoch " << my_epoch << ", inval "
+                             << inval_epoch << ")";
+          defer_epoch = epoch;
+          defer_parent = parent;
+          deferred_plan_payload.clear();
+          if(datalen > 0) {
+            const unsigned char *p = static_cast<const unsigned char *>(data);
+            deferred_plan_payload.assign(p, p + datalen);
+          }
         }
       } else {
         // step 3 - install it, and pass it on
@@ -4712,8 +4940,31 @@ namespace Realm {
       }
 
       if(arrival_gen <= generation.load()) {
-        log_barrier.info() << "dropping barrier ts arrival for triggered generation: "
-                           << me << "/" << arrival_gen << " from=" << from;
+        // CONTRACT VIOLATION (event.h) - and it is FATAL.  This arrival was
+        //  issued for a generation that has already triggered, so the
+        //  generation completed without it: "a barrier that triggered too
+        //  early", observed from the arrival side.
+        //
+        // Deterministic failure is the point.  Whether this arrival or the
+        //  late alteration reaches the owner first is a race, so a check that
+        //  only warned would fail the application on one interleaving and let
+        //  it pass on the other - which teaches the author that their program
+        //  is flaky and sends them hunting for a race in their own code,
+        //  instead of telling them they broke the barrier's stated semantics.
+        //  Failing on every interleaving that observes the violation is what
+        //  makes the diagnosis unambiguous.
+        //
+        // The counter is kept as the exercise-proof: it must read ZERO across
+        //  every legal workload, which is what licenses the abort below.
+        //  Reports are deliberately not checked this way - a stale report
+        //  after a plan switch is legitimate (rule 10).
+        counters.late_arrivals_dropped++;
+        log_barrier.fatal() << "barrier arrival for a triggered generation: " << me
+                            << "/" << arrival_gen << " from=" << from
+                            << " watermark=" << generation.load()
+                            << " - the barrier triggered without this arrival; see"
+                            << " alter_arrival_count's contract in event.h";
+        abort();
       } else {
         Generation *g = get_generation_locked(arrival_gen);
         // decision Q4 - as on the report path, OR-ed in before anything can
@@ -4796,10 +5047,14 @@ namespace Realm {
 
   void BarrierImpl::external_wait(gen_t gen_needed, bool &poisoned)
   {
-    poisoned = POISON_FIXME;
+    // R2-10 - every other wait path reports poison; this one used to return a
+    //  constant false, so a fault-aware external wait that BLOCKED missed it.
+    //  is_generation_poisoned() is the same query has_triggered_faultaware
+    //  uses, and it is safe to call without the mutex (:2822-2827).
+    poisoned = false;
 
-    // early out for now without taking lock (TODO: fix for poisoning)
     if(gen_needed <= generation.load_acquire()) {
+      poisoned = is_generation_poisoned(gen_needed);
       return;
     }
 
@@ -4822,15 +5077,17 @@ namespace Realm {
         external_waiter_mutex.unlock();
         mutex.lock();
       }
+      // R2-10 - the generation has now triggered; say whether it was poisoned.
+      poisoned = is_generation_poisoned(gen_needed);
     }
   }
 
   bool BarrierImpl::external_timedwait(gen_t gen_needed, bool &poisoned, long long max_ns)
   {
-    poisoned = POISON_FIXME;
+    poisoned = false; // R2-10, as in external_wait
 
-    // early out for now without taking lock (TODO: fix for poisoning)
     if(gen_needed <= generation.load_acquire()) {
+      poisoned = is_generation_poisoned(gen_needed);
       return true;
     }
 
@@ -4860,6 +5117,7 @@ namespace Realm {
         external_waiter_mutex.unlock();
         mutex.lock();
       }
+      poisoned = is_generation_poisoned(gen_needed); // R2-10
     }
     return true;
   }

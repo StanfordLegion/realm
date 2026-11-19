@@ -471,10 +471,14 @@ namespace Realm {
     // 'poisoned' is decision Q4: the arrival's PRECONDITION was poisoned, which
     //  poisons the generation it arrives on.  The arrival itself still counts -
     //  refusing to count it would hang the barrier instead of poisoning it.
+    // 'sender_local_ts' is R2-07: the SENDER's arrival floor, carried on the
+    //  legacy/reduction path because that route forwards instead of computing
+    //  the gate locally.  Zero on every other path and for an unaltered sender.
     void adjust_arrival(gen_t barrier_gen, int delta, Barrier::timestamp_t timestamp,
                         Event wait_on, NodeID sender, const void *reduce_value,
                         size_t reduce_value_size, TimeLimit work_until,
-                        bool poisoned = false);
+                        bool poisoned = false,
+                        Barrier::timestamp_t sender_local_ts = 0);
 
     // ARRIVAL_PROTOCOL rules 8 and 9 - alter_arrival_count, the whole of action
     //  AL in ONE critical section.  The causal timestamp is MINTED INSIDE that
@@ -638,6 +642,12 @@ namespace Realm {
       //  a deviation at generation g says nothing about g+1, so g+1 starts
       //  back in planned mode.
       bool flushing = false;
+      // R2-02/R2-03 - this node has already told the OWNER that this generation
+      //  is open because one of its arrivals bypassed the tree.  Per
+      //  GENERATION, not per arrival: the signal is idempotent at the owner,
+      //  so repeating it is only traffic, and k arrivals at the same gated
+      //  generation would otherwise send k flushes.
+      bool told_owner_bypassed = false;
       // ARRIVAL_PROTOCOL rule 3, propagated.  A 'direct' says "your plan did
       //  not predict me", and only the OWNER acts on it - but a node whose
       //  plan has been retired still reports to its STORED parent (changing
@@ -1012,10 +1022,9 @@ namespace Realm {
     // RULE 8.1 - how long a handle's timestamp keeps an arrival off the tree:
     //  only through the first generation this node used it at, since later
     //  generations are held behind that one anyway (ARRIVAL_PROTOCOL.md rule
-    //  8.5, checked by MCReadmit).  ABSENCE MEANS "GATE IT", so a released
-    //  timestamp is marked in place, never erased - erasing re-arms the gate
-    //  and the node never rejoins the tree.
-    static const gen_t RELEASED = 0; // no real generation is 0, so no alias
+    //  8.5, checked by MCReadmit).  The window bound is kept per handle and
+    //  compared on EVERY arrival (R2-01): arrivals are not processed in
+    //  generation order, so a later one must not release the gate.
     std::map<Barrier::timestamp_t, gen_t> handle_first_gen;
 
     // alterations with an unapplied PREDECESSOR, keyed by the timestamp they
@@ -1285,6 +1294,24 @@ namespace Realm {
       //     waits on the barrier; non-zero only on an arrival-only participant.
       uint64_t reclaim_pulls = 0;
 
+      // --- CONTRACT VIOLATION, OBSERVED LATE (review round 2 follow-up).  An
+      //     arrival that reaches the owner for a generation that has ALREADY
+      //     triggered says the generation triggered without it - the same
+      //     "barrier that triggered too early" the alteration path reports as
+      //     fatal (:1605).  The runtime ABORTS on it, so in a correct program
+      //     this counter is always zero; it exists as the exercise-proof that
+      //     licenses the abort - a legal workload that incremented it would
+      //     mean the check is wrong, not the application.  Reports are
+      //     deliberately NOT checked this way: a stale report after a plan
+      //     switch is legitimate (rule 10).  Non-zero means some rank broke
+      //     the arrival contract, typically an unchained decrement (event.h).
+      //     NOTE: this covers only BYPASSED (timestamped) arrivals.  A late
+      //     arrival from a node that never altered travels as an ordinary
+      //     report and cannot be told apart from a stale one, so it is not
+      //     flagged.  A locally-issued extra arrival is caught earlier, by the
+      //     DEBUG-only assert in adjust_arrival (:3818).
+      uint64_t late_arrivals_dropped = 0;
+
       // has anything at all happened worth reporting?
       bool any(void) const;
     };
@@ -1417,6 +1444,9 @@ namespace Realm {
     //  or below the watermark into the floor and drop the ts_floor breakpoints
     //  no arrival can name any more.
     void prune_alter_state_locked(gen_t watermark);
+    // R2-04 - retire the live plan before a generation whose expected count
+    //  drops, so a plan is never left over-predicting a generation it governs.
+    void retire_at_negative_step_locked(PendingSends &sends);
 
     // ARRIVAL_PROTOCOL rule 5 - install a plan record decoded from a 'newplan'
     //  payload and record the fan-out to this node's children in the new tree.

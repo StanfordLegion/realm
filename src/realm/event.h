@@ -300,6 +300,21 @@ namespace Realm {
      * The expected arrival count for the current and every future generation must
      * remain positive and within the supported range.
      *
+     * CHAIN YOUR DECREMENTS.  A negative alteration must be issued on a handle
+     * causally DESCENDED FROM every alteration whose arrivals it cancels - not on
+     * an incomparable one - so that the handle's causal timestamp carries the
+     * dependency to the owner explicitly.  Issuing it on an incomparable handle
+     * makes it cancel a reserved arrival that was holding the generation open for
+     * a sibling still in flight, which is the one thing the paragraph above says a
+     * terminal negative must never do.  The same requirement is what keeps the
+     * count positive: positivity binds the barrier's actual state, which depends on
+     * the order the owner receives messages in, not on the issuing rank's private
+     * arithmetic.
+     *
+     * This is a restatement of the obligations above, not a new rule; it is spelled
+     * out because assembling it from the sibling, reserved-arrival and
+     * terminal-negative paragraphs has proved easy to get wrong.
+     *
      * Violating any of the above is a fatal application error, but because the
      * runtime can only reason about alterations it has actually received, the
      * violation may be detected late (or, in the worst case, show up as a barrier

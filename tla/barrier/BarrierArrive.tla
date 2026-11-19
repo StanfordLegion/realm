@@ -690,10 +690,15 @@ RecvInvalidate(m) ==
                       \*  - instead of firing case 3.  The retroactive signal
                       \*  above covers arrivals from BEFORE this invalidation;
                       \*  becoming an outsider covers the ones after.
+                      \* R2-09: an invalidation OLDER than the installed plan
+                      \* is a death notice for a plan this node has moved past;
+                      \* clearing on it discards a live newer plan and leaves
+                      \* the subtree eager.  Convergence only.
                       /\ curPlan' = IF live THEN [curPlan EXCEPT ![m.to] = Plans[dk][m.to]]
-                                            ELSE [curPlan EXCEPT ![m.to] =
-                                                    [quota |-> 0, inplan |-> FALSE,
-                                                     kids |-> {}]]
+                                     ELSE IF myEpoch[m.to] > m.epoch THEN curPlan
+                                     ELSE [curPlan EXCEPT ![m.to] =
+                                             [quota |-> 0, inplan |-> FALSE,
+                                              kids |-> {}]]
                       /\ myEpoch' = IF live THEN [myEpoch EXCEPT ![m.to] = dk] ELSE myEpoch
                       /\ deferEpoch' = [deferEpoch EXCEPT ![m.to] = 0]
               /\ invalEpoch' = [invalEpoch EXCEPT ![m.to] = m.epoch]
@@ -721,8 +726,18 @@ RecvNewPlan(m) ==
          THEN /\ msgs' = msgs \ {m}
               /\ UNCHANGED << reportedUp, curPlan, myEpoch, deferEpoch, flushing >>
          ELSE IF curPlan[m.to].inplan /\ (invalEpoch[m.to] < myEpoch[m.to])
+                \* R2-09: KEEP THE NEWER parked plan.  Epochs are monotone at
+                \* the owner, not in delivery order, so an older newplan
+                \* arriving second must not displace a newer parked one - the
+                \* invalidation would then install the older plan and the next
+                \* invalidation would clear it, leaving this node and the
+                \* subtree below it eager until a DIFFERENT plan is built.
+                \* Convergence only; the drop guard above already refuses a
+                \* plan no newer than what the node holds.
                 THEN /\ msgs' = msgs \ {m}
-                     /\ deferEpoch' = [deferEpoch EXCEPT ![m.to] = m.epoch]
+                     /\ deferEpoch' = [deferEpoch EXCEPT ![m.to] =
+                                         IF m.epoch > deferEpoch[m.to]
+                                           THEN m.epoch ELSE deferEpoch[m.to]]
                      /\ UNCHANGED << reportedUp, curPlan, myEpoch, flushing >>
                 ELSE /\ LET held == { g \in Gens : ~triggered[g] /\ Unreported(m.to, g) > 0 }
                          IN  /\ msgs' = (msgs \ {m})

@@ -410,6 +410,7 @@ radix, `G` = open (untriggered, locally-known) generations, `N` = nodes:
 | **owner** `cached_targets` | O(ranges) | — | rebuilt on `set_ver` change |
 | **owner** `want_out` | 16 B (normally empty) | O(departing) bits | applied at the next trigger |
 | **owner** `alter_steps`, `applied_ts` | O(nodes that ever altered *this* barrier) | — | trigger (prune) |
+| **any node** `handle_first_gen` | O(distinct altered handles that reached this node) | — | `init()` only |
 | **owner** aggregation structure | **does not exist** (D9) | is the per-generation flush maps | the generation's trigger |
 | legacy the legacy reduction members | O(N) maps + O(generations × sizeof_lhs) | — | destroy. Reduction barriers are explicitly not scalable |
 

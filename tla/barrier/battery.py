@@ -100,10 +100,13 @@ ARRIVAL = [
  # REPOINTED under quota-gated forwarding: the owner valve rescues MCStale's
  #  strand, but five other scenarios still catch this one.
  ("no planless-outsider", "Double.cfg", "MCDouble", "CATCH",
-  [("""                                            ELSE [curPlan EXCEPT ![m.to] =
-                                                    [quota |-> 0, inplan |-> FALSE,
-                                                     kids |-> {}]]""",
-    """                                            ELSE curPlan""")]),
+  # R2-09 reshaped this branch (the stale-invalidation guard); the mutation
+  #  still removes the planless-outsider transition, which is what it tests.
+  [("""                                     ELSE IF myEpoch[m.to] > m.epoch THEN curPlan
+                                     ELSE [curPlan EXCEPT ![m.to] =
+                                             [quota |-> 0, inplan |-> FALSE,
+                                              kids |-> {}]]""",
+    """                                     ELSE curPlan""")]),
  # SUBSUMED BY THE OWNER VALVE, same verdict and same caveat as the
  #  immediate case-3 signal above: retained for plan learning.
  ("no retroactive case 3 (subsumed)", "Stale.cfg", "MCStale", "BENIGN",
