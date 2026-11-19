@@ -544,14 +544,16 @@ namespace Realm {
 
           // release our reads before release_slot can clear the slot pointer
           usecount.fetch_sub_acqrel(1);
+
+          // Cache discovery only after acquiring a reference. A zero count
+          // can mean that we have not yet observed the slot assignment.
+          known_work_item_mask[elem] |= unknown_bit;
         }
 
-        known_work_item_mask[elem] |= unknown_bit;
         unknown_mask &= ~unknown_bit;
       }
 
-      // now that everything is at least known, limit the active mask to
-      //  just things we're allowed to take
+      // Limit the active mask to slots we've discovered and are allowed to take.
       BitMask allowed_mask = (active_mask & allowed_work_item_mask[elem]);
 
       while(allowed_mask != 0) {
