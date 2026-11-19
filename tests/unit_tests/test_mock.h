@@ -59,6 +59,9 @@ public:
 
   void finalize(void)
   {
+    // as the real runtime does at shutdown: the shared query snapshots built
+    //  against this machine model go away with it
+    cleanup_query_caches();
     delete[] nodes;
     Realm::Network::max_node_id = 0;
     Realm::Network::my_node_id = 0;
@@ -264,18 +267,24 @@ public:
       add_proc_mem_affinity(pma);
     }
 
-    // add memory-memory affinities
+    // add memory-memory affinities: a node's table only describes its own
+    //  memories, so each end's node records the affinity (both nodes if it
+    //  crosses nodes)
     for(const MockMemoryMemoryAffinity &mma_info : procs_mems.mem_mem_affinities) {
       Machine::MemoryMemoryAffinity mma;
       mma.m1 = mems[mma_info.mem1_idx];
       mma.m2 = mems[mma_info.mem2_idx];
       mma.bandwidth = mma_info.bandwidth;
       mma.latency = mma_info.latency;
-      MachineNodeInfo *node_info =
-          machine->nodeinfos[mems[mma_info.mem1_idx].address_space()];
-      node_info->add_memory(mems[mma_info.mem1_idx]);
-      node_info->add_memory(mems[mma_info.mem2_idx]);
-      node_info->add_mem_mem_affinity(mma);
+      for(Memory end : {mma.m1, mma.m2}) {
+        MachineNodeInfo *&node_info = machine->nodeinfos[end.address_space()];
+        if(node_info == nullptr)
+          node_info = new MachineNodeInfo(end.address_space(), this);
+        node_info->add_memory(end);
+      }
+      machine->nodeinfos[mma.m1.address_space()]->add_mem_mem_affinity(mma);
+      if(mma.m2.address_space() != mma.m1.address_space())
+        machine->nodeinfos[mma.m2.address_space()]->add_mem_mem_affinity(mma);
     }
 
     machine->update_kind_maps();
