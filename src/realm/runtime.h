@@ -274,8 +274,22 @@ namespace Realm {
     // called before runtime::init to create module configs for users to configure realm
     bool create_configs(int argc, char **argv);
 
-    // return the configuration of a specific module
+    // return the configuration of a specific module (by name), or a null
+    //  pointer if no such module is present in this build/run
     ModuleConfig *get_module_config(const std::string &name) const;
+
+    // typed version of the above - T must be one of the module configuration
+    //  classes (e.g. Realm::Cuda::CudaModuleConfig), each of which declares a
+    //  static MODULE_NAME - the headers declaring these classes contain only
+    //  plain data types and are installed with every Realm build, whether or
+    //  not the corresponding module is compiled in, so applications can use
+    //  this unconditionally and test the result for null to detect a missing
+    //  module (no RTTI is used, so this links even when the module is absent)
+    template <typename T>
+    T *get_module_config(void) const
+    {
+      return static_cast<T *>(get_module_config(T::MODULE_NAME));
+    }
     // modules in Realm may offer extra capabilities specific to certain kinds
     //  of hardware or software - to get access, you'll want to know the name
     //  of the module and it's C++ type (both should be found in the module's

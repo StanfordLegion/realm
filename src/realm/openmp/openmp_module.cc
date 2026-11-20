@@ -200,16 +200,7 @@ namespace Realm {
     //
     // class OpenMPModuleConfig
 
-    OpenMPModuleConfig::OpenMPModuleConfig(void)
-      : ModuleConfig("openmp")
-    {
-      config_map.insert({"ocpu", &cfg_num_openmp_cpus});
-      config_map.insert({"othr", &cfg_num_threads_per_cpu});
-      config_map.insert({"onuma", &cfg_use_numa});
-      config_map.insert({"ostack", &cfg_stack_size});
-    }
-
-    void OpenMPModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void OpenMPModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // first order of business - read command line parameters
       CommandLineParser cp;
@@ -244,7 +235,15 @@ namespace Realm {
 
     /*static*/ ModuleConfig *OpenMPModule::create_module_config(RuntimeImpl *runtime)
     {
+      static constexpr ModuleConfig::Property properties[] = {
+          ModuleConfig::property<&OpenMPModuleConfig::cfg_num_openmp_cpus>("ocpu"),
+          ModuleConfig::property<&OpenMPModuleConfig::cfg_num_threads_per_cpu>("othr"),
+          ModuleConfig::property<&OpenMPModuleConfig::cfg_use_numa>("onuma"),
+          ModuleConfig::property<&OpenMPModuleConfig::cfg_stack_size>("ostack"),
+          ModuleConfig::property<&OpenMPModuleConfig::cfg_fake_cpukind>("fake_cpukind"),
+      };
       OpenMPModuleConfig *config = new OpenMPModuleConfig();
+      ModuleConfig::bind<OpenMPModuleConfig>(properties);
       return config;
     }
 
@@ -258,8 +257,7 @@ namespace Realm {
       openmp_api_force_linkage();
 #endif
 
-      OpenMPModuleConfig *config =
-          checked_cast<OpenMPModuleConfig *>(runtime->get_module_config("openmp"));
+      OpenMPModuleConfig *config = runtime->get_module_config<OpenMPModuleConfig>();
       assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());

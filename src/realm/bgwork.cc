@@ -253,20 +253,7 @@ namespace Realm {
     }
   }
 
-  void BackgroundWorkManager::configure_from_cmdline(std::vector<std::string> &cmdline)
-  {
-    CommandLineParser cp;
-    cp.add_option_int("-ll:bgwork", cfg.generic_workers)
-        .add_option_int("-ll:bgnuma", cfg.per_numa_workers)
-        .add_option_int("-ll:bgworkpin", cfg.pin_generic)
-        .add_option_int("-ll:bgnumapin", cfg.pin_numa)
-        .add_option_int("-ll:bgstack", cfg.worker_stacksize_in_kb)
-        .add_option_int("-ll:bgspin", cfg.worker_spin_interval)
-        .add_option_int("-ll:bgslice", cfg.work_item_timeslice);
-
-    bool ok = cp.parse_command_line(cmdline);
-    assert(ok);
-  }
+  void BackgroundWorkManager::configure(const Config &_cfg) { cfg = _cfg; }
 
   void BackgroundWorkManager::start_dedicated_workers(Realm::CoreReservationSet &crs)
   {

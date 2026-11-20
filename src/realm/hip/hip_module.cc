@@ -2324,24 +2324,6 @@ namespace Realm {
     //
     // class HipModuleConfig
 
-    HipModuleConfig::HipModuleConfig(void)
-      : ModuleConfig("hip")
-    {
-      config_map.insert({"gpu", &cfg_num_gpus});
-      config_map.insert({"zcmem", &cfg_zc_mem_size});
-      config_map.insert({"fbmem", &cfg_fb_mem_size});
-      config_map.insert({"ib_fbmem", &cfg_fb_ib_size});
-      config_map.insert({"ib_zcmem", &cfg_zc_ib_size});
-      config_map.insert({"uvmem", &cfg_uvm_mem_size});
-      config_map.insert({"use_dynamic_fb", &cfg_use_dynamic_fb});
-      config_map.insert({"dynfb_max_size", &cfg_dynfb_max_size});
-      config_map.insert({"task_streams", &cfg_task_streams});
-      config_map.insert({"d2d_streams", &cfg_d2d_streams});
-
-      resource_map.insert({"gpu", &res_num_gpus});
-      resource_map.insert({"fbmem", &res_min_fbmem_size});
-    }
-
     bool HipModuleConfig::discover_resource(void)
     {
       hip_init_code = hipGetDeviceCount(&res_num_gpus);
@@ -2363,7 +2345,7 @@ namespace Realm {
       return resource_discover_finished;
     }
 
-    void HipModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void HipModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // first order of business - read command line parameters
       CommandLineParser cp;
@@ -2440,7 +2422,45 @@ namespace Realm {
 
     /*static*/ ModuleConfig *HipModule::create_module_config(RuntimeImpl *runtime)
     {
+      static constexpr ModuleConfig::Property properties[] = {
+          ModuleConfig::property<&HipModuleConfig::cfg_num_gpus>("gpu"),
+          ModuleConfig::property<&HipModuleConfig::cfg_zc_mem_size>("zcmem"),
+          ModuleConfig::property<&HipModuleConfig::cfg_fb_mem_size>("fbmem"),
+          ModuleConfig::property<&HipModuleConfig::cfg_fb_ib_size>("ib_fbmem"),
+          ModuleConfig::property<&HipModuleConfig::cfg_zc_ib_size>("ib_zcmem"),
+          ModuleConfig::property<&HipModuleConfig::cfg_uvm_mem_size>("uvmem"),
+          ModuleConfig::property<&HipModuleConfig::cfg_use_dynamic_fb>("use_dynamic_fb"),
+          ModuleConfig::property<&HipModuleConfig::cfg_dynfb_max_size>("dynfb_max_size"),
+          ModuleConfig::property<&HipModuleConfig::cfg_task_streams>("task_streams"),
+          ModuleConfig::property<&HipModuleConfig::cfg_d2d_streams>("d2d_streams"),
+          ModuleConfig::property<&HipModuleConfig::cfg_d2d_stream_priority>(
+              "d2d_stream_priority"),
+          ModuleConfig::property<&HipModuleConfig::cfg_use_worker_threads>(
+              "use_worker_threads"),
+          ModuleConfig::property<&HipModuleConfig::cfg_use_shared_worker>(
+              "use_shared_worker"),
+          ModuleConfig::property<&HipModuleConfig::cfg_pin_sysmem>("pin_sysmem"),
+          ModuleConfig::property<&HipModuleConfig::cfg_fences_use_callbacks>(
+              "fences_use_callbacks"),
+          ModuleConfig::property<&HipModuleConfig::cfg_skip_gpu_count>("skip_gpu_count"),
+          ModuleConfig::property<&HipModuleConfig::cfg_skip_busy_gpus>("skip_busy_gpus"),
+          ModuleConfig::property<&HipModuleConfig::cfg_min_avail_mem>("min_avail_mem"),
+          ModuleConfig::property<&HipModuleConfig::cfg_task_context_sync>(
+              "task_context_sync"),
+          ModuleConfig::property<&HipModuleConfig::cfg_max_ctxsync_threads>(
+              "max_ctxsync_threads"),
+          ModuleConfig::property<&HipModuleConfig::cfg_multithread_dma>(
+              "multithread_dma"),
+          ModuleConfig::property<&HipModuleConfig::cfg_hostreg_limit>("hostreg_limit"),
+          ModuleConfig::property<&HipModuleConfig::cfg_use_hip_ipc>("use_hip_ipc"),
+      };
+      static constexpr ModuleConfig::Property resources[] = {
+          ModuleConfig::property<HipModuleConfig, &HipModuleConfig::res_num_gpus>("gpu"),
+          ModuleConfig::property<HipModuleConfig, &HipModuleConfig::res_min_fbmem_size>(
+              "fbmem"),
+      };
       HipModuleConfig *config = new HipModuleConfig();
+      ModuleConfig::bind<HipModuleConfig>(properties, resources);
       if(config->discover_resource() == false) {
         log_gpu.error("We are not able to discover the HIP resources.");
       }
@@ -2450,8 +2470,7 @@ namespace Realm {
     /*static*/ Module *HipModule::create_module(RuntimeImpl *runtime)
     {
       HipModule *m = new HipModule(runtime);
-      HipModuleConfig *config =
-          checked_cast<HipModuleConfig *>(runtime->get_module_config("hip"));
+      HipModuleConfig *config = runtime->get_module_config<HipModuleConfig>();
       assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());

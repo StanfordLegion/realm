@@ -19,25 +19,13 @@
 #define REALM_HDF5_MODULE_H
 
 #include "realm/module.h"
+#include "realm/hdf5/hdf5_module_config.h"
 
 namespace Realm {
 
   namespace HDF5 {
 
     class HDF5Memory;
-
-    class HDF5ModuleConfig : public ModuleConfig {
-      friend class HDF5Module;
-
-    protected:
-      HDF5ModuleConfig(void);
-
-    public:
-      virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
-
-    protected:
-      bool cfg_showerrors = true;
-    };
 
     // our interface to the rest of the runtime
     class HDF5Module : public Module {

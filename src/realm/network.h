@@ -195,10 +195,25 @@ namespace Realm {
     // Enumerates all the peers that the current node could potentially share memory with
     virtual void get_shared_peers(NodeSet &shared_peers) = 0;
 
-    // actual parsing of the command line should wait until here if at all
-    //  possible
+    // network modules are created (in Runtime::network_init) before the module
+    //  configs exist, so instead of the static create_module_config used by
+    //  normal modules, they are asked for their config object here (from
+    //  Runtime::create_configs) - a module with no configurable settings may
+    //  return a null pointer (the default)
+    virtual ModuleConfig *create_module_config(RuntimeImpl *runtime);
+
+    // called from Runtime::parse_command_line once all module configs
+    //  (including this module's own) have been configured from the command
+    //  line - any remaining network-specific command line options may be
+    //  parsed here, but the module's configuration must NOT be consumed yet
+    //  (an application may still modify it before finish_configure)
     virtual void parse_command_line(RuntimeImpl *runtime,
                                     std::vector<std::string> &cmdline);
+
+    // called from Runtime::finish_configure once the module configs are
+    //  final - a module that needs to act on its configuration before
+    //  'attach' (e.g. to initialize its internals) should do so here
+    virtual void finish_configure(RuntimeImpl *runtime);
 
     // "attaches" to the network, if that is meaningful - attempts to
     //  bind/register/(pick your network-specific verb) the requested memory

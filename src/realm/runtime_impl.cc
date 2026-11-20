@@ -18,6 +18,7 @@
 // Runtime implementation for Realm
 
 #include "realm/runtime_impl.h"
+#include "realm/deppart/deppart_config.h"
 
 #include "realm/proc_impl.h"
 #include "realm/mem_impl.h"
@@ -752,33 +753,10 @@ namespace Realm {
     unsigned long long job_id = 0;
   }; // namespace Config
 
-  CoreModuleConfig::CoreModuleConfig(const HardwareTopology *topo)
-    : ModuleConfig("core")
-    , host_topology(topo)
+  bool CoreModuleConfig::discover_resource(const HardwareTopology &topo)
   {
-    config_map.insert({"cpu", &num_cpu_procs});
-    config_map.insert({"util", &num_util_procs});
-    config_map.insert({"io", &num_io_procs});
-    config_map.insert({"sysmem", &sysmem_size});
-    config_map.insert({"sysmem_ipc_limit", &sysmem_ipc_limit});
-    config_map.insert({"stack_size", &stack_size});
-    config_map.insert({"pin_util_procs", &pin_util_procs});
-    config_map.insert({"use_ext_sysmem", &use_ext_sysmem});
-    config_map.insert({"regmem", &reg_mem_size});
-    config_map.insert({"ib_regmem", &reg_ib_mem_size});
-    config_map.insert({"report_sparsity_leaks", &report_sparsity_leaks});
-    config_map.insert({"barrier_broadcast_radix", &barrier_broadcast_radix});
-    config_map.insert({"diskmem", &disk_mem_size});
-    config_map.insert({"dma_multi_field", &dma_multi_field});
-
-    resource_map.insert({"cpu", &res_num_cpus});
-    resource_map.insert({"sysmem", &res_sysmem_size});
-  }
-
-  bool CoreModuleConfig::discover_resource(void)
-  {
-    res_num_cpus = host_topology->num_physical_cores();
-    res_sysmem_size = host_topology->system_memory();
+    res_num_cpus = topo.num_physical_cores();
+    res_sysmem_size = topo.system_memory();
     // we should be able to safely assume they are larger than 0,
     // otherwise, something is wrong with resource detection
     assert(res_num_cpus > 0 && res_sysmem_size > 0);
@@ -788,7 +766,7 @@ namespace Realm {
     return resource_discover_finished;
   }
 
-  void CoreModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+  void CoreModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
   {
     assert(finish_configured == false);
     // parse command line arguments
@@ -810,12 +788,6 @@ namespace Realm {
         .add_option_int("-ll:barrier_radix", barrier_broadcast_radix);
 
     // config for RuntimeImpl
-    // low-level runtime parameters
-    if(Network::max_node_id > 0)
-      reg_ib_mem_size = 256 << 20; // for inter-node copies
-    else
-      reg_ib_mem_size = 64 << 20; // for local transposes/serdez
-
     // This dummy network list is actually handled in network_init()
     // this is just here to help verify low-level arguement
     std::vector<std::string> dummy_network_list;
@@ -833,14 +805,8 @@ namespace Realm {
         .add_option_int("-ll:bitset_twolevel", bitset_twolevel);
 
     cp.add_option_string("-ll:eventtrace", event_trace_file)
-        .add_option_string("-ll:locktrace", lock_trace_file);
-
-#ifdef NODE_LOGGING
-    cp.add_option_string("-ll:prefix", RuntimeImpl::prefix);
-#else
-    std::string dummy_prefix;
-    cp.add_option_string("-ll:prefix", dummy_prefix);
-#endif
+        .add_option_string("-ll:locktrace", lock_trace_file)
+        .add_option_string("-ll:prefix", prefix);
 
     cp.add_option_int("-ll:ahandlers", active_msg_handler_threads);
     cp.add_option_int("-ll:handler_bgwork", active_msg_handler_bgwork);
@@ -849,13 +815,55 @@ namespace Realm {
 
     // The default of path_cache_size is 0, when it is set to non-zero, the caching is
     // enabled.
-    cp.add_option_int("-ll:path_cache_size", Config::path_cache_lru_size);
+    cp.add_option_int("-ll:path_cache_size", path_cache_lru_size);
+
+    // runtime-wide settings (published to the globals that consume them in
+    //  RuntimeImpl::finish_configure)
+    cp.add_option_int("-realm:eventloopcheck", event_loop_detection_limit)
+        .add_option_bool("-ll:force_kthreads", force_kernel_threads)
+        .add_option_bool("-ll:frsrv_fallback", use_fast_reservation_fallback)
+        .add_option_int("-ll:machine_query_cache", use_machine_query_cache)
+        .add_option_int("-ll:defalloc", deferred_instance_allocation)
+        .add_option_int("-ll:amprofile", profile_activemsg_handlers)
+        .add_option_int("-ll:aminline", max_inline_message_time);
+
+    // background workers
+    cp.add_option_int("-ll:bgwork", bgwork_generic_workers)
+        .add_option_int("-ll:bgnuma", bgwork_per_numa_workers)
+        .add_option_int("-ll:bgworkpin", bgwork_pin_generic)
+        .add_option_int("-ll:bgnumapin", bgwork_pin_numa)
+        .add_option_int("-ll:bgstack", bgwork_worker_stacksize_in_kb)
+        .add_option_int("-ll:bgspin", bgwork_worker_spin_interval)
+        .add_option_int("-ll:bgslice", bgwork_work_item_timeslice);
+
+    // dependent partitioning
+    cp.add_option_int("-dp:workers", deppart_num_workers)
+        .add_option_bool("-dp:noisectopt", deppart_disable_intersection_opt)
+        .add_option_int("-dp:sleep", deppart_worker_threads_sleep)
+        .add_option_int("-dp:inline_ok", deppart_allow_inline_ops);
+
+    // sampling profiler
+    cp.add_option_int("-realm:prof", realmprof_nodes)
+        .add_option_string("-realm:prof_file", realmprof_file)
+        .add_option_int("-realm:prof_buffer_size", realmprof_buffer_size)
+        .add_option_int("-realm:prof_sample_interval", realmprof_sample_interval)
+        .add_option_stringlist("-realm:prof_pattern", realmprof_patterns);
 
     bool cmdline_ok = cp.parse_command_line(cmdline);
 
     if(!cmdline_ok) {
       fprintf(stderr, "ERROR: failure parsing command line options\n");
       exit(1);
+    }
+
+    // resolve the node-count-dependent default for the ib registered memory
+    //  (done here rather than in the constructor because the network, and
+    //  hence the node count, may not be known when the config is created)
+    if(reg_ib_mem_size == ~size_t(0)) {
+      if(Network::max_node_id > 0)
+        reg_ib_mem_size = 256 << 20; // for inter-node copies
+      else
+        reg_ib_mem_size = 64 << 20; // for local transposes/serdez
     }
 
 #ifndef EVENT_TRACING
@@ -873,7 +881,7 @@ namespace Realm {
 #endif
 
 #ifndef NODE_LOGGING
-    if(!dummy_prefix.empty()) {
+    if(prefix != ".") {
       fprintf(stderr,
               "WARNING: prefix set, but NODE_LOGGING not enabled at compile time!\n");
     }
@@ -893,8 +901,103 @@ namespace Realm {
 
   /*static*/ ModuleConfig *CoreModule::create_module_config(RuntimeImpl *runtime)
   {
-    CoreModuleConfig *config = new CoreModuleConfig(&(runtime->host_topology));
-    config->discover_resource();
+    static constexpr ModuleConfig::Property properties[] = {
+        ModuleConfig::property<&CoreModuleConfig::num_cpu_procs>("cpu"),
+        ModuleConfig::property<&CoreModuleConfig::num_util_procs>("util"),
+        ModuleConfig::property<&CoreModuleConfig::num_io_procs>("io"),
+        ModuleConfig::property<&CoreModuleConfig::sysmem_size>("sysmem"),
+        ModuleConfig::property<&CoreModuleConfig::sysmem_ipc_limit>("sysmem_ipc_limit"),
+        ModuleConfig::property<&CoreModuleConfig::stack_size>("stack_size"),
+        ModuleConfig::property<&CoreModuleConfig::pin_util_procs>("pin_util_procs"),
+        ModuleConfig::property<&CoreModuleConfig::use_ext_sysmem>("use_ext_sysmem"),
+        ModuleConfig::property<&CoreModuleConfig::reg_mem_size>("regmem"),
+        ModuleConfig::property<&CoreModuleConfig::reg_ib_mem_size>("ib_regmem"),
+        ModuleConfig::property<&CoreModuleConfig::report_sparsity_leaks>(
+            "report_sparsity_leaks"),
+        ModuleConfig::property<&CoreModuleConfig::barrier_broadcast_radix>(
+            "barrier_broadcast_radix"),
+        ModuleConfig::property<&CoreModuleConfig::disk_mem_size>("diskmem"),
+        ModuleConfig::property<&CoreModuleConfig::dma_multi_field>("dma_multi_field"),
+        ModuleConfig::property<&CoreModuleConfig::concurrent_io_threads>(
+            "concurrent_io_threads"),
+        ModuleConfig::property<&CoreModuleConfig::cpu_bgwork_timeslice>(
+            "cpu_bgwork_timeslice"),
+        ModuleConfig::property<&CoreModuleConfig::util_bgwork_timeslice>(
+            "util_bgwork_timeslice"),
+        ModuleConfig::property<&CoreModuleConfig::dma_worker_threads>(
+            "dma_worker_threads"),
+        ModuleConfig::property<&CoreModuleConfig::pin_dma_threads>("pin_dma_threads"),
+        ModuleConfig::property<&CoreModuleConfig::dummy_reservation_ok>(
+            "dummy_reservation_ok"),
+        ModuleConfig::property<&CoreModuleConfig::show_reservations>("show_reservations"),
+        ModuleConfig::property<&CoreModuleConfig::hyperthread_sharing>(
+            "hyperthread_sharing"),
+        ModuleConfig::property<&CoreModuleConfig::bitset_chunk_size>("bitset_chunk_size"),
+        ModuleConfig::property<&CoreModuleConfig::bitset_twolevel>("bitset_twolevel"),
+        ModuleConfig::property<&CoreModuleConfig::active_msg_handler_threads>(
+            "active_msg_handler_threads"),
+        ModuleConfig::property<&CoreModuleConfig::active_msg_handler_bgwork>(
+            "active_msg_handler_bgwork"),
+        ModuleConfig::property<&CoreModuleConfig::replheap_size>("replheap_size"),
+        ModuleConfig::property<&CoreModuleConfig::path_cache_lru_size>(
+            "path_cache_lru_size"),
+        ModuleConfig::property<&CoreModuleConfig::event_trace_block_size>(
+            "event_trace_block_size"),
+        ModuleConfig::property<&CoreModuleConfig::event_trace_exp_arrv_rate>(
+            "event_trace_exp_arrv_rate"),
+        ModuleConfig::property<&CoreModuleConfig::lock_trace_block_size>(
+            "lock_trace_block_size"),
+        ModuleConfig::property<&CoreModuleConfig::lock_trace_exp_arrv_rate>(
+            "lock_trace_exp_arrv_rate"),
+        ModuleConfig::property<&CoreModuleConfig::event_loop_detection_limit>(
+            "event_loop_detection_limit"),
+        ModuleConfig::property<&CoreModuleConfig::force_kernel_threads>(
+            "force_kernel_threads"),
+        ModuleConfig::property<&CoreModuleConfig::use_fast_reservation_fallback>(
+            "use_fast_reservation_fallback"),
+        ModuleConfig::property<&CoreModuleConfig::use_machine_query_cache>(
+            "use_machine_query_cache"),
+        ModuleConfig::property<&CoreModuleConfig::deferred_instance_allocation>(
+            "deferred_instance_allocation"),
+        ModuleConfig::property<&CoreModuleConfig::profile_activemsg_handlers>(
+            "profile_activemsg_handlers"),
+        ModuleConfig::property<&CoreModuleConfig::max_inline_message_time>(
+            "max_inline_message_time"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_generic_workers>(
+            "bgwork_generic_workers"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_per_numa_workers>(
+            "bgwork_per_numa_workers"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_pin_generic>(
+            "bgwork_pin_generic"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_pin_numa>("bgwork_pin_numa"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_worker_stacksize_in_kb>(
+            "bgwork_worker_stacksize_in_kb"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_worker_spin_interval>(
+            "bgwork_worker_spin_interval"),
+        ModuleConfig::property<&CoreModuleConfig::bgwork_work_item_timeslice>(
+            "bgwork_work_item_timeslice"),
+        ModuleConfig::property<&CoreModuleConfig::deppart_num_workers>(
+            "deppart_num_workers"),
+        ModuleConfig::property<&CoreModuleConfig::deppart_disable_intersection_opt>(
+            "deppart_disable_intersection_opt"),
+        ModuleConfig::property<&CoreModuleConfig::deppart_worker_threads_sleep>(
+            "deppart_worker_threads_sleep"),
+        ModuleConfig::property<&CoreModuleConfig::deppart_allow_inline_ops>(
+            "deppart_allow_inline_ops"),
+        ModuleConfig::property<&CoreModuleConfig::realmprof_nodes>("realmprof_nodes"),
+        ModuleConfig::property<&CoreModuleConfig::realmprof_buffer_size>(
+            "realmprof_buffer_size"),
+        ModuleConfig::property<&CoreModuleConfig::realmprof_sample_interval>(
+            "realmprof_sample_interval"),
+    };
+    static constexpr ModuleConfig::Property resources[] = {
+        ModuleConfig::property<CoreModuleConfig, &CoreModuleConfig::res_num_cpus>("cpu"),
+        ModuleConfig::property<CoreModuleConfig, &CoreModuleConfig::res_sysmem_size>(
+            "sysmem"),
+    };
+    CoreModuleConfig *config = new CoreModuleConfig();
+    ModuleConfig::bind<CoreModuleConfig>(properties, resources);
+    config->discover_resource(runtime->host_topology);
     return config;
   }
 
@@ -902,8 +1005,7 @@ namespace Realm {
   {
     CoreModule *m = new CoreModule;
 
-    CoreModuleConfig *config =
-        checked_cast<CoreModuleConfig *>(runtime->get_module_config("core"));
+    CoreModuleConfig *config = runtime->get_module_config<CoreModuleConfig>();
     assert(config != nullptr);
     assert(config->finish_configured);
     assert(m->name == config->get_name());
@@ -1336,6 +1438,11 @@ namespace Realm {
     }
 
     module_registrar.create_network_modules(network_modules, &local_argc, &local_argv);
+
+    // if the module configs already exist (i.e. create_configs was called
+    //  before network_init), add the network modules' configs to them now
+    if(module_configs_created)
+      create_network_module_configs();
 
     if(argc)
       *argc = local_argc;
@@ -1856,53 +1963,24 @@ namespace Realm {
     init_nvtx(nvtx_module_list);
 #endif
 
-    // configure network modules
-    for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
-        it != network_modules.end(); it++)
-      (*it)->parse_command_line(this, cmdline);
-
-    // configure module configs
-    std::map<std::string, ModuleConfig *>::iterator it;
-    for(it = module_configs.begin(); it != module_configs.end(); it++) {
+    // configure module configs (including those of the network modules)
+    for(std::map<std::string, ModuleConfig *>::iterator it = module_configs.begin();
+        it != module_configs.end(); it++) {
       ModuleConfig *module_config = it->second;
       module_config->configure_from_cmdline(cmdline);
     }
 
-    PartitioningOpQueue::configure_from_cmdline(cmdline);
+    // let the network modules parse any remaining network-specific options
+    //  (they must not act on their configuration yet - that happens in
+    //  finish_configure)
+    for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
+        it != network_modules.end(); it++)
+      (*it)->parse_command_line(this, cmdline);
 
-    // parse the global Config
-    {
-      CommandLineParser cp;
-      cp.add_option_int("-realm:eventloopcheck", Config::event_loop_detection_limit);
-      cp.add_option_bool("-ll:force_kthreads", Config::force_kernel_threads);
-      cp.add_option_bool("-ll:frsrv_fallback", Config::use_fast_reservation_fallback);
-      cp.add_option_int("-ll:machine_query_cache", Config::use_machine_query_cache);
-      cp.add_option_int("-ll:defalloc", Config::deferred_instance_allocation);
-      cp.add_option_int("-ll:amprofile", Config::profile_activemsg_handlers);
-      cp.add_option_int("-ll:aminline", Config::max_inline_message_time);
-      bool cmdline_ok = cp.parse_command_line(cmdline);
-      if(!cmdline_ok) {
-        fprintf(stderr, "ERROR: failure parsing command line options for Config\n");
-        exit(1);
-      }
-    }
-
-    // load the CoreModuleConfig
-    CoreModuleConfig *config =
-        checked_cast<CoreModuleConfig *>(get_module_config("core"));
-    assert(config != nullptr);
-
-    if(!config->hyperthread_sharing) {
-      host_topology.remove_hyperthreads();
-    }
-    core_reservations = new CoreReservationSet(&host_topology);
-
-    // std::vector<const HardwareTopology::Proc *> pm;
-    // pm = host_topology->distribute_procs_across_domains();
-
-    sampling_profiler.configure_from_cmdline(cmdline, *core_reservations);
-
-    bgwork.configure_from_cmdline(cmdline);
+    // NOTE: nothing below this point may consume the contents of a module
+    //  config - an application is permitted to modify the configs between
+    //  parse_command_line() and finish_configure(), so anything that acts on
+    //  configuration values must live in finish_configure()
 
     // now that we've done all of our argument parsing, scan through what's
     //  left and see if anything starts with -ll: - probably a misspelled
@@ -1924,6 +2002,51 @@ namespace Realm {
       module_config->finish_configure();
     }
 
+    // give the network modules a chance to act on their (now final)
+    //  configuration
+    for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();
+        it != network_modules.end(); it++)
+      (*it)->finish_configure(this);
+
+    // load the CoreModuleConfig
+    CoreModuleConfig *config = get_module_config<CoreModuleConfig>();
+    assert(config != nullptr);
+    assert(config->finish_configured);
+
+    // publish the runtime-wide settings carried by the core config to the
+    //  subsystems that consume them - nothing below this point may change them
+    Config::path_cache_lru_size = config->path_cache_lru_size;
+    Config::event_loop_detection_limit = config->event_loop_detection_limit;
+    Config::force_kernel_threads = config->force_kernel_threads;
+    Config::use_fast_reservation_fallback = config->use_fast_reservation_fallback;
+    Config::use_machine_query_cache = config->use_machine_query_cache;
+    Config::deferred_instance_allocation = config->deferred_instance_allocation;
+    Config::profile_activemsg_handlers = config->profile_activemsg_handlers;
+    Config::max_inline_message_time = config->max_inline_message_time;
+    {
+      BackgroundWorkManager::Config bgwork_cfg;
+      bgwork_cfg.generic_workers = config->bgwork_generic_workers;
+      bgwork_cfg.per_numa_workers = config->bgwork_per_numa_workers;
+      bgwork_cfg.pin_generic = config->bgwork_pin_generic;
+      bgwork_cfg.pin_numa = config->bgwork_pin_numa;
+      bgwork_cfg.worker_stacksize_in_kb = config->bgwork_worker_stacksize_in_kb;
+      bgwork_cfg.worker_spin_interval = config->bgwork_worker_spin_interval;
+      bgwork_cfg.work_item_timeslice = config->bgwork_work_item_timeslice;
+      bgwork.configure(bgwork_cfg);
+    }
+    DeppartConfig::cfg_num_partitioning_workers = config->deppart_num_workers;
+    DeppartConfig::cfg_disable_intersection_optimization =
+        config->deppart_disable_intersection_opt;
+    DeppartConfig::cfg_worker_threads_sleep = config->deppart_worker_threads_sleep;
+    DeppartConfig::cfg_allow_inline_operations = config->deppart_allow_inline_ops;
+
+    if(!config->hyperthread_sharing) {
+      host_topology.remove_hyperthreads();
+    }
+    core_reservations = new CoreReservationSet(&host_topology);
+
+    sampling_profiler.configure(*config, *core_reservations);
+
     // start up the threading subsystem - modules will likely want threads
     if(!Threading::initialize())
       exit(1);
@@ -1932,12 +2055,6 @@ namespace Realm {
     module_registrar.create_static_modules(modules);
     module_registrar.create_dynamic_modules(modules);
     modules_created = true;
-
-    // load the CoreModuleConfig
-    CoreModuleConfig *config =
-        dynamic_cast<CoreModuleConfig *>(get_module_config("core"));
-    assert(config != nullptr);
-    assert(config->finish_configured);
 
     // Check that we have enough resources for the number of nodes we are using
     if(Network::max_node_id > (NodeID)(ID::MAX_NODE_ID)) {
@@ -3037,7 +3154,7 @@ namespace Realm {
       // e.g. the sparsity map impl class
       for(std::map<std::string, ModuleConfig *>::iterator it = module_configs.begin();
           it != module_configs.end(); it++) {
-        delete(it->second);
+        ModuleConfig::destroy(it->second);
         it->second = nullptr;
       }
 
@@ -3079,8 +3196,21 @@ namespace Realm {
       module_registrar.create_static_module_configs(module_configs);
       module_registrar.create_dynamic_module_configs(cmdline, module_configs);
       module_configs_created = true;
+      // network modules that already exist contribute their configs as well
+      create_network_module_configs();
     }
     return true;
+  }
+
+  void RuntimeImpl::create_network_module_configs(void)
+  {
+    for(NetworkModule *nm : network_modules) {
+      ModuleConfig *config = nm->create_module_config(this);
+      if(config) {
+        assert(module_configs.count(config->get_name()) == 0);
+        module_configs.insert({config->get_name(), config});
+      }
+    }
   }
 
   ModuleConfig *RuntimeImpl::get_module_config(const std::string &name) const

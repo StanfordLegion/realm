@@ -88,17 +88,6 @@ namespace Realm {
     //
     // class NumaModuleConfig
 
-    NumaModuleConfig::NumaModuleConfig(void)
-      : ModuleConfig("numa")
-    {
-      config_map.insert({"numamem", &cfg_numa_mem_size});
-      config_map.insert({"numa_nocpumem", &cfg_numa_nocpu_mem_size});
-      config_map.insert({"numacpus", &cfg_num_numa_cpus});
-      config_map.insert({"pin_memory", &cfg_pin_memory});
-
-      resource_map.insert({"numa_mems", &res_numa_mems});
-    }
-
     bool NumaModuleConfig::discover_resource(void)
     {
       // TODO(WW): combine these two functions?
@@ -116,7 +105,7 @@ namespace Realm {
       return resource_discover_finished;
     }
 
-    void NumaModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void NumaModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // first order of business - read command line parameters
       CommandLineParser cp;
@@ -150,7 +139,20 @@ namespace Realm {
 
     /*static*/ ModuleConfig *NumaModule::create_module_config(RuntimeImpl *runtime)
     {
+      static constexpr ModuleConfig::Property properties[] = {
+          ModuleConfig::property<&NumaModuleConfig::cfg_numa_mem_size>("numamem"),
+          ModuleConfig::property<&NumaModuleConfig::cfg_numa_nocpu_mem_size>(
+              "numa_nocpumem"),
+          ModuleConfig::property<&NumaModuleConfig::cfg_num_numa_cpus>("numacpus"),
+          ModuleConfig::property<&NumaModuleConfig::cfg_pin_memory>("pin_memory"),
+          ModuleConfig::property<&NumaModuleConfig::cfg_stack_size>("stack_size"),
+      };
+      static constexpr ModuleConfig::Property resources[] = {
+          ModuleConfig::property<NumaModuleConfig, &NumaModuleConfig::res_numa_mems>(
+              "numa_mems"),
+      };
       NumaModuleConfig *config = new NumaModuleConfig();
+      ModuleConfig::bind<NumaModuleConfig>(properties, resources);
       config->discover_resource();
       return config;
     }
@@ -161,8 +163,7 @@ namespace Realm {
       //  disabled
       NumaModule *m = new NumaModule;
 
-      NumaModuleConfig *config =
-          checked_cast<NumaModuleConfig *>(runtime->get_module_config("numa"));
+      NumaModuleConfig *config = runtime->get_module_config<NumaModuleConfig>();
       assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());

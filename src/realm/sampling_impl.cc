@@ -19,7 +19,7 @@
 
 #include "realm/realm_config.h"
 #include "realm/sampling_impl.h"
-#include "realm/cmdline.h"
+#include "realm/core_module_config.h"
 #include "realm/timers.h"
 #include "realm/network.h"
 #include "realm/threads.h"
@@ -262,10 +262,10 @@ namespace Realm {
 
   SamplingProfiler::~SamplingProfiler(void) { delete(SamplingProfilerImpl *)impl; }
 
-  void SamplingProfiler::configure_from_cmdline(std::vector<std::string> &cmdline,
-                                                CoreReservationSet &crs)
+  void SamplingProfiler::configure(const CoreModuleConfig &config,
+                                   CoreReservationSet &crs)
   {
-    ((SamplingProfilerImpl *)impl)->configure_from_cmdline(cmdline, crs);
+    ((SamplingProfilerImpl *)impl)->configure(config, crs);
   }
 
   void SamplingProfiler::flush_data(void)
@@ -466,32 +466,22 @@ namespace Realm {
       size_t cpos = s.find(',', spos);
       if(cpos == std::string::npos)
         break;
-      cfg_patterns.push_back(std::string(s, spos, cpos - spos - 1));
+      cfg_patterns.push_back(std::string(s, spos, cpos - spos));
       spos = cpos + 1;
     }
     cfg_patterns.push_back(std::string(s, spos));
     return true;
   }
 
-  void SamplingProfilerImpl::configure_from_cmdline(std::vector<std::string> &cmdline,
-                                                    CoreReservationSet &crs)
+  void SamplingProfilerImpl::configure(const CoreModuleConfig &config,
+                                       CoreReservationSet &crs)
   {
-    int nodes_profiled = 0;
-    std::string logfile = "realmprof_%.dat";
-
-#ifndef NDEBUG
-    bool ok =
-#endif
-        CommandLineParser()
-            .add_option_int("-realm:prof", nodes_profiled)
-            .add_option_string("-realm:prof_file", logfile)
-            .add_option_int("-realm:prof_buffer_size", cfg_buffer_size)
-            .add_option_int("-realm:prof_sample_interval", cfg_sample_interval)
-            .add_option_method("-realm:prof_pattern", this,
-                               &SamplingProfilerImpl::parse_profile_pattern)
-            .parse_command_line(cmdline);
-
-    assert(ok);
+    int nodes_profiled = config.realmprof_nodes;
+    std::string logfile = config.realmprof_file;
+    cfg_buffer_size = config.realmprof_buffer_size;
+    cfg_sample_interval = config.realmprof_sample_interval;
+    for(const std::string &patterns : config.realmprof_patterns)
+      parse_profile_pattern(patterns);
 
     cfg_enabled = (Network::my_node_id < nodes_profiled);
 
