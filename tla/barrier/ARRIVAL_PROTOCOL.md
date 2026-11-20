@@ -350,34 +350,31 @@ single integer, which erases the timestamps.** Three rules follow.
    records the sender as a non-member **only if the sender has altered** (so no
    future plan gives an alterer a quota, since its floor is permanent), and
    RETIRES THE CURRENT PLAN (so the parent waiting on it right now is released).
-   Keeping only the first half leaves the hazard fully reachable: measured as a
-   hang on three of five recipients in the `handoff` phase of
-   `tests/barrier_scale_test.cc`.
 
    A HANDLE-ONLY bypasser is NOT made a non-member: its gate lasts one
    generation (rule 8.1), so it is re-admitted by the next rebuild, and
    excluding it for good cost one direct message per generation for the life of
    the barrier.
 
-   The retirement is therefore **not** what carries the guarantee, and the
-   earlier "at most one per node per barrier lifetime, because the non-member
-   set is monotone" argument does not survive re-admission. Review round 2
-   found both holes: a second handoff to an already re-admitted node got no
-   retirement (R2-02), and a retirement on receipt cannot cover a generation
-   that a LATER rebuild governs (R2-03). What carries the guarantee now is that
-   a **handle-only** bypasser — one with no arrival floor of its own — sends a
-   **count-free flush for that generation to the owner**, once per generation.
-   The guard is "can the owner still give me a quota?", not "do I hold one
-   now": conditioning it on the plan the bypasser happens to hold at bypass
-   time reintroduces the R2-03 hole, while sending it unconditionally puts an
-   ALTERING node — whose floor makes every one of its arrivals bypass — into
-   eager flush for the life of the barrier. An alterer needs no flush: it is
-   in the owner's non-member set, so no future plan gives it a quota and it
-   can strand nobody, and the owner fans that flush down the live tree and
-   re-fans down any tree it builds before the generation triggers. That is
-   per-generation and state-free, so neither hole exists. The retirement is kept
-   for CONVERGENCE only — it rebuilds a plan that still hands quota to a node
-   that has permanently left the tree — and remains bounded at one per node.
+   Neither the retirement nor anything the bypassing node sends is what carries
+   the guarantee. **The owner does, with a slack valve.** A plan learned while
+   some node bypasses leaves that node's bypassed count as slack; once bypassed
+   arrivals exceed it the tree can no longer reach its predicted total, every
+   tree node can sit at or below quota, and nothing flushes — so the owner
+   flushes that generation itself (`check_bypass_slack_locked`, review round 3
+   R3-07). It is decided entirely from state the owner already holds, so it does
+   not depend on what the bypassing node knows about a plan it may not hold.
+
+   Round 2 instead had the bypassing node send the owner a count-free flush.
+   That worked, but its guard was the hard part — too narrow reintroduced the
+   hazard, too wide put an altering node into eager flush for life — and the
+   valve covers the same cases and more. Measured as a 2×2: with the valve,
+   removing the node-side flush changes nothing; with neither, the handoff
+   probes hang. The node-side flush has been removed.
+
+   The retirement is kept for CONVERGENCE only — it rebuilds a plan that still
+   hands quota to a node that has permanently left the tree — and remains
+   bounded at one per node.
 
 The safety argument for why the owner cannot trigger on a stale count lives in
 the **API contract, not the protocol**: `event.h:290-292` requires the caller to

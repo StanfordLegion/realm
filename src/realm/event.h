@@ -269,56 +269,62 @@ namespace Realm {
      * Alter the arrival count of a barrier.
      *
      * The change is PERSISTENT: `delta` applies to this generation and to every
-     * subsequent generation of the barrier, not just to the phase the handle names.
-     * Sibling alterations accumulate, so two alterations of +2 and +3 issued on the
-     * same handle leave a net persistent change of +5.
+     * generation after it, not just to the phase the handle names. Alterations
+     * accumulate, so +2 and +3 made on the same handle leave a net change of +5.
      *
-     * The returned handle carries a causal timestamp identifying this alteration and
-     * must be used for any subsequent work on that adjustment branch. Specifically,
-     * every returned handle must be used by at least one of:
-     *   - an `arrive()` performed on that handle;
-     *   - another `alter_arrival_count()` invoked on that handle;
-     *   - a descendant chain of alterations that ends in such an arrival;
-     *   - the terminal-negative exception described below.
-     * "At least one use" is the contract - the handle is not single-use, and multiple
-     * arrivals may be made on it.
+     * The rules below are what the barrier needs in order to stay correct while an
+     * alteration is still travelling to its owner. The runtime cannot check most of
+     * them, because it only ever sees the alterations that have reached it.
      *
-     * Sibling alterations (two or more alterations invoked on the same input handle)
-     * are allowed and do not have to be ordered with respect to each other. However,
-     * each sibling requires its OWN distinct outstanding arrival: an arrival made on
-     * one sibling's handle does not witness an incomparable sibling, and an arrival
-     * on a descendant witnesses only the ancestors on its own causal path. Before
-     * issuing an alteration the application must still hold at least one unissued
-     * arrival from the pre-alteration expected count; that reserved arrival is what
-     * prevents the barrier from triggering before it learns of the alteration.
+     * USE THE RETURNED HANDLE. The alteration travels on the handle this call
+     * returns. Every arrival made for this generation after the alteration should
+     * use that handle, or one derived from it with advance_barrier. An arrival made
+     * on the original handle by another node does not know about the alteration and
+     * is not ordered after it.
      *
-     * A negative alteration that makes the current generation's remaining arrival
-     * count exactly zero is the only case that needs no arrival on the returned
-     * handle. Such a terminal negative closes only its own causal branch - it never
-     * satisfies the outstanding-arrival obligation of an incomparable sibling.
+     * KEEP AN ARRIVAL IN RESERVE, AND MAKE IT AFTER THE ALTERATION. When you alter,
+     * you must still owe at least one arrival from the old count, and you must make
+     * it after the alteration: either on this node, or on a handle that came from
+     * the alteration. That arrival is what keeps the generation open until the owner
+     * learns of the alteration.
      *
-     * The expected arrival count for the current and every future generation must
-     * remain positive and within the supported range.
+     * An arrival that another node still owes does not count. It is not ordered
+     * against your alteration, so it can be made first and complete the generation
+     * at the old count. For the same reason, a node that has already made all of
+     * its own arrivals for a generation must not then alter that generation.
      *
-     * CHAIN YOUR DECREMENTS.  A negative alteration must be issued on a handle
-     * causally DESCENDED FROM every alteration whose arrivals it cancels - not on
-     * an incomparable one - so that the handle's causal timestamp carries the
-     * dependency to the owner explicitly.  Issuing it on an incomparable handle
-     * makes it cancel a reserved arrival that was holding the generation open for
-     * a sibling still in flight, which is the one thing the paragraph above says a
-     * terminal negative must never do.  The same requirement is what keeps the
-     * count positive: positivity binds the barrier's actual state, which depends on
-     * the order the owner receives messages in, not on the issuing rank's private
-     * arithmetic.
+     * Two or more alterations may be made on the same handle without ordering them
+     * against each other, but each one needs its own reserved arrival. An arrival
+     * made on one alteration's handle says nothing about the others.
      *
-     * This is a restatement of the obligations above, not a new rule; it is spelled
-     * out because assembling it from the sibling, reserved-arrival and
-     * terminal-negative paragraphs has proved easy to get wrong.
+     * ARRIVE EXACTLY AS MANY TIMES AS THE COUNT SAYS. Making more arrivals than the
+     * count calls for is undefined behavior. Realm reports some cases and will keep
+     * reporting more over time, but it cannot detect all of them: it counts arrivals
+     * without recording which node made them, so a surplus arrival can look exactly
+     * like one that was already counted.
      *
-     * Violating any of the above is a fatal application error, but because the
-     * runtime can only reason about alterations it has actually received, the
-     * violation may be detected late (or, in the worst case, show up as a barrier
-     * that triggered too early).
+     * KEEP THE COUNT POSITIVE IN EVERY ORDER. The count for this and every later
+     * generation must stay positive. That applies to the order the owner receives
+     * your messages in, which is not always the order you sent them - not just to
+     * the arithmetic on the sending node.
+     *
+     * CHAIN YOUR DECREMENTS. This is how you make those two orders agree. A negative
+     * alteration must be made on a handle that came from every alteration whose
+     * arrivals it cancels, so that the owner applies them in the order you issued
+     * them. Made on an unrelated handle, it can reach the owner first and cancel an
+     * arrival that was holding the generation open for an alteration still in
+     * flight.
+     *
+     * One exception needs no arrival afterwards: a negative alteration that brings
+     * the generation's remaining count to exactly zero, counting every arrival the
+     * program has issued for it. Chaining is what makes that count trustworthy. Such
+     * an alteration closes only its own branch; it never satisfies the obligation of
+     * an unrelated alteration.
+     *
+     * Breaking any of these rules is a fatal application error. Realm reports what
+     * it can, but a report may come long after the mistake, and which error you get
+     * can depend on the order messages happened to arrive in. In the worst case the
+     * barrier simply triggers too early.
      *
      * This call is nonblocking and performs no round trip to the barrier's owner.
      *

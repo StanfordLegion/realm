@@ -641,12 +641,6 @@ namespace Realm {
       //  a deviation at generation g says nothing about g+1, so g+1 starts
       //  back in planned mode.
       bool flushing = false;
-      // R2-02/R2-03 - this node has already told the OWNER that this generation
-      //  is open because one of its arrivals bypassed the tree.  Per
-      //  GENERATION, not per arrival: the signal is idempotent at the owner,
-      //  so repeating it is only traffic, and k arrivals at the same gated
-      //  generation would otherwise send k flushes.
-      bool told_owner_bypassed = false;
       // ARRIVAL_PROTOCOL rule 3, propagated.  A 'direct' says "your plan did
       //  not predict me", and only the OWNER acts on it - but a node whose
       //  plan has been retired still reports to its STORED parent (changing

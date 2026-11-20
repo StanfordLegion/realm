@@ -3927,51 +3927,16 @@ namespace Realm {
           sends.ts_arrival.local_ts = gate.local_ts;
           sends.ts_arrival.poisoned = g->poisoned;
 
-          // R2-02 / R2-03 - TELL THE OWNER that this generation is open,
-          //  with a count-free flush.  The local announcement below only
-          //  reaches this node's CHILDREN; the node that actually strands is
-          //  the PARENT, which is quota-gated on a subtree total this arrival
-          //  will never feed.  The owner fans the flush down the live tree and
-          //  re-fans it at switch time down any tree it builds before the
-          //  generation triggers, so it covers both the plan in force now and
-          //  one rebuilt later.
-          //
-          // THE GUARD IS "CAN THE OWNER STILL GIVE ME A QUOTA?", and that is
-          //  'local_ts == 0' - a HANDLE-ONLY bypass.  Two wrong answers were
-          //  tried and both are recorded here because each looks right:
-          //
-          //  * 'cur_plan.inplan && quota > 0' (the local fan's guard) is too
-          //    NARROW.  It describes the plan this node holds AT BYPASS TIME,
-          //    which is exactly the state R2-03 says cannot be trusted: a node
-          //    that bypasses while planless or at quota 0 sends nothing, and a
-          //    later rebuild can still hand it a quota for the generation it
-          //    has already bypassed in.  The switch-time re-fan then skips
-          //    that generation, because the owner's only state for it is a
-          //    bypassed count and subtree_known() excludes ts_acc (subtree_known excludes
-          //    ts_acc).
-          //
-          //  * unconditional is too WIDE.  An ALTERING node has a persistent
-          //    floor, so every arrival it ever makes bypasses; telling the
-          //    owner each time puts the barrier in eager flush for life
-          //    (measured: recipient flush episodes 4-8 -> 92-95 of 96, owner
-          //    inbound 372 -> 796).  That is the regression B09 removed.
-          //
-          //  An alterer needs no flush: the owner puts it in 'ts_bypass_nodes'
-          //  (the ts-arrival handler) and no future plan gives it a quota, so it can
-          //  strand nobody.  A handle-only bypasser is re-admitted by the next rebuild
-          //  and is precisely the node that can.
-          //
-          // ONCE PER GENERATION.  enter_flush_locked is idempotent, but this
-          //  send sits outside it, so k arrivals at the same gated generation
-          //  would otherwise send k flushes and re-arm the owner's rebuild
-          //  machinery each time.
-          if((gate.local_ts == 0) && !g->told_owner_bypassed) {
-            g->told_owner_bypassed = true;
-            sends.flushes.push_back(PendingFlush());
-            sends.flushes.back().gen = barrier_gen;
-            sends.flushes.back().to.push_back(owner);
-          }
-
+          // R2-02 / R2-03 used to send the owner a count-free flush here, so
+          //  that a handle-only bypasser could not strand its parent.  REMOVED:
+          //  R3-07's owner valve (check_bypass_slack_locked) covers the same
+          //  hazard and more, from state the owner already holds, so it does
+          //  not depend on what the bypassing node knows about a plan it may
+          //  not even hold.  Measured, 2x2: with the valve, removing this
+          //  changes nothing (rehandoff x4/x6 and pipehandoff all complete);
+          //  with neither, both hang.  The guard this send needed was wrong
+          //  twice before it was right, which is the other reason to prefer a
+          //  mechanism that needs no guard.
           // RULE 8.3, generalised to the arrival rather than the alteration:
           //  an arrival that bypasses the tree never reaches 'local_total', so
           //  this node's quota just became that much less reachable.  A relay
