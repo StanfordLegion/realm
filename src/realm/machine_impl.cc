@@ -1688,10 +1688,7 @@ namespace Realm {
   ProcessorQueryImpl::ProcessorQueryImpl(const MachineImpl *_machine_impl)
     : references(1)
     , machine(_machine_impl)
-    , is_restricted_node(false)
-    , is_restricted_kind(false)
-    , cached_mem(Memory::NO_MEMORY)
-    , is_cached_mem(false)
+    , conflict(false)
     , attached(nullptr)
   {}
 
@@ -1701,13 +1698,11 @@ namespace Realm {
   ProcessorQueryImpl::ProcessorQueryImpl(const ProcessorQueryImpl &copy_from)
     : references(1)
     , machine(copy_from.machine)
-    , is_restricted_node(copy_from.is_restricted_node)
     , restricted_node_id(copy_from.restricted_node_id)
-    , is_restricted_kind(copy_from.is_restricted_kind)
     , restricted_kind(copy_from.restricted_kind)
+    , conflict(copy_from.conflict)
     , best_affinity_cost(copy_from.best_affinity_cost)
     , cached_mem(copy_from.cached_mem)
-    , is_cached_mem(copy_from.is_cached_mem)
     , anchor_mem(copy_from.anchor_mem)
     , attached(nullptr)
   {
@@ -1749,30 +1744,26 @@ namespace Realm {
     }
   }
 
-  void ProcessorQueryImpl::restrict_to_node(int new_node_id)
+  void ProcessorQueryImpl::restrict_to_node(AddressSpace new_node_id)
   {
-    // attempts to restrict to two different nodes results in no possible match
-    if(is_restricted_node && (new_node_id != restricted_node_id)) {
-      restricted_node_id = -1;
-    } else {
-      is_restricted_node = true;
+    // attempts to restrict to two different nodes, or to a node no id can
+    //  name, result in no possible match
+    if((new_node_id > ID::MAX_NODE_ID) ||
+       (restricted_node_id && (new_node_id != *restricted_node_id)))
+      conflict = true;
+    else
       restricted_node_id = new_node_id;
-    }
     // any constraint to processor query will invalidate cached list
     reset_cached_list();
   }
 
   void ProcessorQueryImpl::restrict_to_kind(Processor::Kind new_kind)
   {
-    // attempts to restrict to two different kind results in no possible match
-    // (use node restriction to enforce this)
-    if(is_restricted_kind && (new_kind != restricted_kind)) {
-      is_restricted_node = true;
-      restricted_node_id = -1;
-    } else {
-      is_restricted_kind = true;
+    // attempts to restrict to two different kinds result in no possible match
+    if(restricted_kind && (new_kind != *restricted_kind))
+      conflict = true;
+    else
       restricted_kind = new_kind;
-    }
     reset_cached_list();
   }
 
@@ -1786,9 +1777,9 @@ namespace Realm {
   // Cached result lists are sorted by id, and ids order by owning node
   //  before anything else, so the entries one node owns form a contiguous
   //  run. These answer a node-restricted query from such a list the way a
-  //  walk of the machine would (a 'node' of -1, a query restricted to two
-  //  different nodes, owns nothing; an unrestricted query reads the list
-  //  directly).
+  //  walk of the machine would (an unrestricted query reads the list
+  //  directly, and a conflicting query's list is empty: see
+  //  shared_cache_covers and build_own_list).
   namespace {
     inline unsigned owner_node(Processor p) { return ID(p).proc_owner_node(); }
     inline unsigned owner_node(Memory m) { return ID(m).memory_owner_node(); }
@@ -1811,10 +1802,10 @@ namespace Realm {
     }
 
     template <typename T>
-    size_t run_size(const std::vector<T> &items, int node)
+    size_t run_size(const std::vector<T> &items, AddressSpace node)
     {
-      typename std::vector<T>::const_iterator b = run_begin(items, unsigned(node));
-      return run_end(items, b, unsigned(node)) - b;
+      typename std::vector<T>::const_iterator b = run_begin(items, node);
+      return run_end(items, b, node) - b;
     }
 
     // Iteration hint: next(after) is nearly always called with what the
@@ -1885,31 +1876,30 @@ namespace Realm {
     }
 
     template <typename T>
-    T first_in_run(const std::vector<T> &items, int node, T none)
+    T first_in_run(const std::vector<T> &items, AddressSpace node, T none)
     {
-      typename std::vector<T>::const_iterator it = run_begin(items, unsigned(node));
+      typename std::vector<T>::const_iterator it = run_begin(items, node);
       hint_position(items, it - items.begin());
-      return ((it != items.end()) && (owner_node(*it) == unsigned(node))) ? *it : none;
+      return ((it != items.end()) && (owner_node(*it) == node)) ? *it : none;
     }
 
     template <typename T>
-    T random_in_run(const std::vector<T> &items, int node, T none)
+    T random_in_run(const std::vector<T> &items, AddressSpace node, T none)
     {
-      typename std::vector<T>::const_iterator b = run_begin(items, unsigned(node));
-      typename std::vector<T>::const_iterator e = run_end(items, b, unsigned(node));
+      typename std::vector<T>::const_iterator b = run_begin(items, node);
+      typename std::vector<T>::const_iterator e = run_end(items, b, node);
       return (b == e) ? none : b[lrand48() % (e - b)];
     }
 
     // the successor of 'after' within the run; like the walk, an 'after' on
     //  another node has no successor
     template <typename T>
-    inline T next_in_run(const std::vector<T> &items, T after, int node, T none)
+    inline T next_in_run(const std::vector<T> &items, T after, AddressSpace node, T none)
     {
-      if(owner_node(after) != unsigned(node))
+      if(owner_node(after) != node)
         return none;
       const size_t i = successor_index(items, after);
-      return ((i < items.size()) && (owner_node(items[i]) == unsigned(node))) ? items[i]
-                                                                              : none;
+      return ((i < items.size()) && (owner_node(items[i]) == node)) ? items[i] : none;
     }
   } // namespace
 
@@ -1941,19 +1931,19 @@ namespace Realm {
   }
 
   // The rest of cached_list() (machine_impl.h), for a query the shared cache
-  // covers (shared_cache_covers(): the others - best-affinity queries,
-  // predicated queries other than the single memory-affinity predicate, and
-  // queries restricted to two different nodes, which match nothing - walk
-  // the machine directly). A query restricted to one node is answered by that
-  // node's run of the shared list (see range()). Reads nothing but the
-  // current snapshot unless that is stale, in which case a new one is built
-  // (under the machine's reader lock) and published.
+  // covers (shared_cache_covers(): the others - best-affinity queries and
+  // predicated queries other than the single memory-affinity predicate - walk
+  // the machine directly, and conflicting queries match nothing). A query
+  // restricted to one node is answered by that node's run of the shared list
+  // (see range()). Reads nothing but the current snapshot unless that is
+  // stale, in which case a new one is built (under the machine's reader lock)
+  // and published.
   const ProcessorQueryImpl::CachedList *ProcessorQueryImpl::cached_list_lookup() const
   {
     // the generation is read before the snapshot: a snapshot stamped with it
     //  describes the machine as of this generation or later
     const unsigned generation = cache_invalid_count.load();
-    if(!is_cached_mem) {
+    if(!cached_mem) {
       const KindCache *kc = kind_cache.get(generation);
       if(kc)
         return attach(list_in(kc));
@@ -1969,15 +1959,15 @@ namespace Realm {
   ProcessorQueryImpl::list_in(const AffinityCache *ac) const
   {
     const std::map<Memory, CachedList> &by_mem =
-        is_restricted_kind ? ac->by_kind_and_mem[restricted_kind] : ac->by_mem;
-    std::map<Memory, CachedList>::const_iterator it = by_mem.find(cached_mem);
+        restricted_kind ? ac->by_kind_and_mem[*restricted_kind] : ac->by_mem;
+    std::map<Memory, CachedList>::const_iterator it = by_mem.find(*cached_mem);
     return (it != by_mem.end()) ? &it->second : &ac->none;
   }
 
   const ProcessorQueryImpl::CachedList *
   ProcessorQueryImpl::cached_list_miss(unsigned generation) const
   {
-    if(!is_cached_mem) {
+    if(!cached_mem) {
       const KindCache *kc =
           kind_cache.get_or_build(generation, cache_invalid_count,
                                   [this](unsigned g) { return build_kind_cache(g); });
@@ -2104,17 +2094,17 @@ namespace Realm {
     const std::vector<Processor> &items = clist->items;
     switch(q) {
     case QUERY_FIRST:
-      if(!is_restricted_node) {
+      if(!restricted_node_id) {
         pval = items.empty() ? Processor::NO_PROC : items.front();
         hint_position(items, 0);
       } else
-        pval = first_in_run(items, restricted_node_id, Processor::NO_PROC);
+        pval = first_in_run(items, *restricted_node_id, Processor::NO_PROC);
       break;
     case QUERY_RANDOM:
-      if(!is_restricted_node)
+      if(!restricted_node_id)
         pval = items.empty() ? Processor::NO_PROC : items[lrand48() % items.size()];
       else
-        pval = random_in_run(items, restricted_node_id, Processor::NO_PROC);
+        pval = random_in_run(items, *restricted_node_id, Processor::NO_PROC);
       break;
     default:
       log_query.fatal() << "unexpected cached query type " << int(q);
@@ -2133,10 +2123,10 @@ namespace Realm {
     if(!clist)
       return false;
     const std::vector<Processor> &items = clist->items;
-    if(!is_restricted_node)
+    if(!restricted_node_id)
       pval = successor(items, p, Processor::NO_PROC);
     else
-      pval = next_in_run(items, p, restricted_node_id, Processor::NO_PROC);
+      pval = next_in_run(items, p, *restricted_node_id, Processor::NO_PROC);
     return true;
   }
 
@@ -2147,7 +2137,7 @@ namespace Realm {
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
-    count = is_restricted_node ? run_size(clist->items, restricted_node_id)
+    count = restricted_node_id ? run_size(clist->items, *restricted_node_id)
                                : clist->items.size();
     return true;
   }
@@ -2189,13 +2179,15 @@ namespace Realm {
   Processor ProcessorQueryImpl::own_list_next(Processor after) const
   {
     const std::vector<Processor> &items = own_list()->items;
-    if(is_restricted_node)
-      return next_in_run(items, after, restricted_node_id, Processor::NO_PROC);
+    if(restricted_node_id)
+      return next_in_run(items, after, *restricted_node_id, Processor::NO_PROC);
     return successor(items, after, Processor::NO_PROC);
   }
 
   void ProcessorQueryImpl::build_own_list(std::vector<Processor> &result) const
   {
+    if(conflict)
+      return; // no matches, and no best among them
     if(best_affinity_cost.has_value())
       build_best_affinity_list(result);
     else
@@ -2218,17 +2210,17 @@ namespace Realm {
     // otherwise the walk of count_matches(), collecting
     proc_walks++;
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
-    if(is_restricted_node)
-      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    if(restricted_node_id)
+      it = machine->nodeinfos.lower_bound(NodeID(*restricted_node_id));
     else
       it = machine->nodeinfos.begin();
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(restricted_node_id && (it->first != NodeID(*restricted_node_id)))
         break;
       const std::map<Processor, MachineProcInfo *> *plist;
-      if(is_restricted_kind) {
+      if(restricted_kind) {
         std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
-            it2 = it->second->proc_by_kind.find(restricted_kind);
+            it2 = it->second->proc_by_kind.find(*restricted_kind);
         plist = (it2 != it->second->proc_by_kind.end()) ? &(it2->second) : 0;
       } else
         plist = &(it->second->procs);
@@ -2261,8 +2253,8 @@ namespace Realm {
       return; // no target memory, no result (the walk this replaces scored
               //  every processor by an arbitrary affinity in that case)
     const NodeID node = ID(target).memory_owner_node();
-    if(is_restricted_node && (node != NodeID(restricted_node_id)))
-      return; // the restriction is to another node (or to none): nothing can score
+    if(restricted_node_id && (node != NodeID(*restricted_node_id)))
+      return; // the restriction is to another node: nothing can score
     std::map<NodeID, MachineNodeInfo *>::const_iterator nit =
         machine->nodeinfos.find(node);
     if(nit == machine->nodeinfos.end())
@@ -2273,9 +2265,9 @@ namespace Realm {
       return;
     // the processors of that node the query may return, by id
     const std::map<Processor, MachineProcInfo *> *plist;
-    if(is_restricted_kind) {
+    if(restricted_kind) {
       std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
-          kit = ni->proc_by_kind.find(restricted_kind);
+          kit = ni->proc_by_kind.find(*restricted_kind);
       if(kit == ni->proc_by_kind.end())
         return;
       plist = &(kit->second);
@@ -2336,16 +2328,16 @@ namespace Realm {
   const std::map<Processor, MachineProcInfo *> *
   ProcessorQueryImpl::candidate_list(NodeID node) const
   {
-    if(is_restricted_node && (node != NodeID(restricted_node_id)))
+    if(restricted_node_id && (node != NodeID(*restricted_node_id)))
       return NULL;
     std::map<NodeID, MachineNodeInfo *>::const_iterator nit =
         machine->nodeinfos.find(node);
     if(nit == machine->nodeinfos.end())
       return NULL;
-    if(!is_restricted_kind)
+    if(!restricted_kind)
       return &(nit->second->procs);
     std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
-        kit = nit->second->proc_by_kind.find(restricted_kind);
+        kit = nit->second->proc_by_kind.find(*restricted_kind);
     return (kit != nit->second->proc_by_kind.end()) ? &(kit->second) : NULL;
   }
 
@@ -2356,7 +2348,10 @@ namespace Realm {
     // a match has an affinity to every anchor memory, so any of their maps
     //  holds every match: the smallest is scanned (the first predicate's
     //  anchor is recorded, the others are read from the predicates). A memory
-    //  that is not in the model has no map, and nothing matches
+    //  that is not in the model has no map, and nothing matches; nor does
+    //  anything match a conflicting query
+    if(conflict)
+      return;
     const AffinityAnchor<Memory> *anchor = &*anchor_mem;
     const std::map<Processor, Machine::ProcessorMemoryAffinity *> *pmas =
         anchor_affinities(anchor->target);
@@ -2380,13 +2375,10 @@ namespace Realm {
     std::map<Processor, Machine::ProcessorMemoryAffinity *>::const_iterator it =
         after.exists() ? pmas->upper_bound(after) : pmas->begin();
     // ids sort by owner node first, so a query restricted to one node finds
-    //  its candidates in that node's run of the map; a node that does not
-    //  exist has none (restrict_to_node)
-    if(is_restricted_node) {
-      if(restricted_node_id < 0)
-        return;
+    //  its candidates in that node's run of the map
+    if(restricted_node_id) {
       const Processor node_first =
-          ID::make_processor(restricted_node_id, 0).convert<Processor>();
+          ID::make_processor(*restricted_node_id, 0).convert<Processor>();
       if((it != pmas->end()) && (it->first < node_first))
         it = pmas->lower_bound(node_first);
     }
@@ -2396,7 +2388,7 @@ namespace Realm {
     //  the model (MachineImpl::add_proc_mem_affinity), and its node is in its
     //  id. The candidates come in id order, so one node's are contiguous and
     //  its list is looked up once
-    const bool need_info = is_restricted_kind || (predicates.size() > 1);
+    const bool need_info = restricted_kind.has_value() || (predicates.size() > 1);
     bool have_node = false;
     NodeID node = 0;
     const std::map<Processor, MachineProcInfo *> *plist = NULL;
@@ -2405,7 +2397,7 @@ namespace Realm {
       const Processor p = it->first;
       const NodeID n = ID(p).proc_owner_node();
       visited++;
-      if(is_restricted_node && (n != NodeID(restricted_node_id)))
+      if(restricted_node_id && (n != NodeID(*restricted_node_id)))
         break; // past the node's run
       const Machine::ProcessorMemoryAffinity *pma = it->second;
       if(((anchor->min_bandwidth != 0) && (pma->bandwidth < anchor->min_bandwidth)) ||
@@ -2454,8 +2446,7 @@ namespace Realm {
     proc_anchored++;
     // nothing on this node follows a processor of another node, as in the
     //  walk and in next_in_run()
-    if(is_restricted_node &&
-       (NodeID(ID(after).proc_owner_node()) != NodeID(restricted_node_id)))
+    if(restricted_node_id && (ID(after).proc_owner_node() != *restricted_node_id))
       return Processor::NO_PROC;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     Processor found = Processor::NO_PROC;
@@ -2496,7 +2487,7 @@ namespace Realm {
   Processor ProcessorQueryImpl::first_match(void) const
   {
 #ifdef USE_OLD_AFFINITIES
-    if(is_restricted_node && (restricted_node_id < 0))
+    if(conflict)
       return Processor::NO_PROC;
     Processor lowest = Processor::NO_PROC;
     {
@@ -2506,12 +2497,11 @@ namespace Realm {
               machine->proc_mem_affinities.begin();
           it != machine->proc_mem_affinities.end(); it++) {
         Processor p = (*it).p;
-        if(is_restricted_node &&
-           (ID(p).proc_owner_node() != (unsigned)restricted_node_id))
+        if(restricted_node_id && (ID(p).proc_owner_node() != *restricted_node_id))
           continue;
         Processor::Kind p_kind =
             ProcessorImpl::get_processor_kind(machine->get_runtime_impl(), p);
-        if(is_restricted_kind && (p_kind != restricted_kind))
+        if(restricted_kind && (p_kind != *restricted_kind))
           continue;
         bool ok = true;
         for(std::vector<ProcQueryPredicate *>::const_iterator it2 = predicates.begin();
@@ -2544,22 +2534,26 @@ namespace Realm {
     if(anchored())
       return anchored_first();
 
+    // a conflicting query matches nothing, so there is nothing to walk
+    if(conflict)
+      return Processor::NO_PROC;
+
     // general case where restricted_node_id or predicates are defined
     proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
-    if(is_restricted_node)
-      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    if(restricted_node_id)
+      it = machine->nodeinfos.lower_bound(NodeID(*restricted_node_id));
     else
       it = machine->nodeinfos.begin();
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(restricted_node_id && (it->first != NodeID(*restricted_node_id)))
         break;
 
       const std::map<Processor, MachineProcInfo *> *plist = 0;
-      if(is_restricted_kind) {
+      if(restricted_kind) {
         std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
-            it2 = it->second->proc_by_kind.find(restricted_kind);
+            it2 = it->second->proc_by_kind.find(*restricted_kind);
         if(it2 != it->second->proc_by_kind.end())
           plist = &(it2->second);
         else
@@ -2568,8 +2562,8 @@ namespace Realm {
         plist = &(it->second->procs);
 
       if(plist) {
-        // if restricted node id is set or is_restricted_kind && predicates.size() == 0
-        if((is_restricted_node || is_restricted_kind) && predicates.empty() &&
+        // if restricted node id is set or restricted_kind && predicates.size() == 0
+        if((restricted_node_id || restricted_kind) && predicates.empty() &&
            !plist->empty())
           return plist->begin()->first;
 
@@ -2599,7 +2593,7 @@ namespace Realm {
     if(!after.exists())
       return Processor::NO_PROC;
 #ifdef USE_OLD_AFFINITIES
-    if(is_restricted_node && (restricted_node_id < 0))
+    if(conflict)
       return Processor::NO_PROC;
     Processor lowest = Processor::NO_PROC;
     {
@@ -2611,12 +2605,11 @@ namespace Realm {
         Processor p = (*it).p;
         if(p.id <= after.id)
           continue;
-        if(is_restricted_node &&
-           (ID(p).proc_owner_node() != (unsigned)restricted_node_id))
+        if(restricted_node_id && (ID(p).proc_owner_node() != *restricted_node_id))
           continue;
         Processor::Kind p_kind =
             ProcessorImpl::get_processor_kind(machine->get_runtime_impl(), p);
-        if(is_restricted_kind && (p_kind != restricted_kind))
+        if(restricted_kind && (p_kind != *restricted_kind))
           continue;
         bool ok = true;
         for(std::vector<ProcQueryPredicate *>::const_iterator it2 = predicates.begin();
@@ -2635,19 +2628,22 @@ namespace Realm {
     if(anchored())
       return anchored_next(after);
 
+    if(conflict)
+      return Processor::NO_PROC; // see first_match
+
     proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
     // start where we left off
     it = machine->nodeinfos.find(ID(after).proc_owner_node());
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(restricted_node_id && (it->first != NodeID(*restricted_node_id)))
         break;
 
       const std::map<Processor, MachineProcInfo *> *plist;
-      if(is_restricted_kind) {
+      if(restricted_kind) {
         std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
-            it2 = it->second->proc_by_kind.find(restricted_kind);
+            it2 = it->second->proc_by_kind.find(*restricted_kind);
         if(it2 != it->second->proc_by_kind.end())
           plist = &(it2->second);
         else
@@ -2705,7 +2701,7 @@ namespace Realm {
   size_t ProcessorQueryImpl::count_matches(void) const
   {
 #ifdef USE_OLD_AFFINITIES
-    if(is_restricted_node && (restricted_node_id < 0))
+    if(conflict)
       return 0;
     std::set<Processor> pset;
     {
@@ -2715,12 +2711,11 @@ namespace Realm {
               machine->proc_mem_affinities.begin();
           it != machine->proc_mem_affinities.end(); it++) {
         Processor p = (*it).p;
-        if(is_restricted_node &&
-           (ID(p).proc_owner_node() != (unsigned)restricted_node_id))
+        if(restricted_node_id && (ID(p).proc_owner_node() != *restricted_node_id))
           continue;
         Processor::Kind p_kind =
             ProcessorImpl::get_processor_kind(machine->get_runtime_impl(), p);
-        if(is_restricted_kind && (p_kind != restricted_kind))
+        if(restricted_kind && (p_kind != *restricted_kind))
           continue;
         bool ok = true;
         for(std::vector<ProcQueryPredicate *>::const_iterator it2 = predicates.begin();
@@ -2742,22 +2737,24 @@ namespace Realm {
       return count;
     if(anchored())
       return anchored_count_matches(); // see first_match
+    if(conflict)
+      return 0; // see first_match
 
     proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
-    if(is_restricted_node)
-      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    if(restricted_node_id)
+      it = machine->nodeinfos.lower_bound(NodeID(*restricted_node_id));
     else
       it = machine->nodeinfos.begin();
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(restricted_node_id && (it->first != NodeID(*restricted_node_id)))
         break;
 
       const std::map<Processor, MachineProcInfo *> *plist;
-      if(is_restricted_kind) {
+      if(restricted_kind) {
         std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
-            it2 = it->second->proc_by_kind.find(restricted_kind);
+            it2 = it->second->proc_by_kind.find(*restricted_kind);
         if(it2 != it->second->proc_by_kind.end())
           plist = &(it2->second);
         else
@@ -2769,7 +2766,7 @@ namespace Realm {
         // no predicates: the whole list matches; a node-restricted query is
         // done, an unrestricted one must keep summing over the other nodes
         if(predicates.empty()) {
-          if(is_restricted_node)
+          if(restricted_node_id)
             return plist->size();
           count += plist->size();
           ++it;
@@ -2801,7 +2798,7 @@ namespace Realm {
   {
     Processor chosen = Processor::NO_PROC;
 #ifdef USE_OLD_AFFINITIES
-    if(is_restricted_node && (restricted_node_id < 0))
+    if(conflict)
       return Processor::NO_PROC;
     int count = 0;
     {
@@ -2811,12 +2808,11 @@ namespace Realm {
               machine->proc_mem_affinities.begin();
           it != machine->proc_mem_affinities.end(); it++) {
         Processor p = (*it).p;
-        if(is_restricted_node &&
-           (ID(p).proc_owner_node() != (unsigned)restricted_node_id))
+        if(restricted_node_id && (ID(p).proc_owner_node() != *restricted_node_id))
           continue;
         Processor::Kind p_kind =
             ProcessorImpl::get_processor_kind(machine->get_runtime_impl(), p);
-        if(is_restricted_kind && (p_kind != restricted_kind))
+        if(restricted_kind && (p_kind != *restricted_kind))
           continue;
         bool ok = true;
         for(std::vector<ProcQueryPredicate *>::const_iterator it2 = predicates.begin();
@@ -2848,22 +2844,24 @@ namespace Realm {
       return pval;
     if(anchored())
       return anchored_random(); // see first_match
+    if(conflict)
+      return Processor::NO_PROC; // see first_match
     proc_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     int count = 0;
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
-    if(is_restricted_node)
-      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    if(restricted_node_id)
+      it = machine->nodeinfos.lower_bound(NodeID(*restricted_node_id));
     else
       it = machine->nodeinfos.begin();
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(restricted_node_id && (it->first != NodeID(*restricted_node_id)))
         break;
 
       const std::map<Processor, MachineProcInfo *> *plist;
-      if(is_restricted_kind) {
+      if(restricted_kind) {
         std::map<Processor::Kind, std::map<Processor, MachineProcInfo *>>::const_iterator
-            it2 = it->second->proc_by_kind.find(restricted_kind);
+            it2 = it->second->proc_by_kind.find(*restricted_kind);
         if(it2 != it->second->proc_by_kind.end())
           plist = &(it2->second);
         else
@@ -3005,26 +3003,21 @@ namespace Realm {
   MemoryQueryImpl::MemoryQueryImpl(const MachineImpl *_machine_impl)
     : references(1)
     , machine(_machine_impl)
-    , is_restricted_node(false)
-    , is_restricted_kind(false)
+    , conflict(false)
     , restricted_min_capacity(0)
     , attached(nullptr)
-    , cached_mem(Memory::NO_MEMORY)
-    , is_cached_mem(false)
   {}
 
   // see ProcessorQueryImpl's copy constructor
   MemoryQueryImpl::MemoryQueryImpl(const MemoryQueryImpl &copy_from)
     : references(1)
     , machine(copy_from.machine)
-    , is_restricted_node(copy_from.is_restricted_node)
     , restricted_node_id(copy_from.restricted_node_id)
-    , is_restricted_kind(copy_from.is_restricted_kind)
     , restricted_kind(copy_from.restricted_kind)
+    , conflict(copy_from.conflict)
     , restricted_min_capacity(copy_from.restricted_min_capacity)
     , attached(nullptr)
     , cached_mem(copy_from.cached_mem)
-    , is_cached_mem(copy_from.is_cached_mem)
     , anchor_proc(copy_from.anchor_proc)
     , anchor_mem(copy_from.anchor_mem)
     , best_proc_affinity_cost(copy_from.best_proc_affinity_cost)
@@ -3067,29 +3060,25 @@ namespace Realm {
     }
   }
 
-  void MemoryQueryImpl::restrict_to_node(int new_node_id)
+  void MemoryQueryImpl::restrict_to_node(AddressSpace new_node_id)
   {
-    // attempts to restrict to two different nodes results in no possible match
-    if(is_restricted_node && (new_node_id != restricted_node_id)) {
-      restricted_node_id = -1;
-    } else {
-      is_restricted_node = true;
+    // attempts to restrict to two different nodes, or to a node no id can
+    //  name, result in no possible match
+    if((new_node_id > ID::MAX_NODE_ID) ||
+       (restricted_node_id && (new_node_id != *restricted_node_id)))
+      conflict = true;
+    else
       restricted_node_id = new_node_id;
-    }
     reset_cached_list();
   }
 
   void MemoryQueryImpl::restrict_to_kind(Memory::Kind new_kind)
   {
-    // attempts to restrict to two different kind results in no possible match
-    // (use node restriction to enforce this)
-    if(is_restricted_kind && (new_kind != restricted_kind)) {
-      is_restricted_node = true;
-      restricted_node_id = -1;
-    } else {
-      is_restricted_kind = true;
+    // attempts to restrict to two different kinds result in no possible match
+    if(restricted_kind && (new_kind != *restricted_kind))
+      conflict = true;
+    else
       restricted_kind = new_kind;
-    }
     reset_cached_list();
   }
 
@@ -3104,7 +3093,7 @@ namespace Realm {
     // a writer is always unique, so no need for mutexes
     predicates.push_back(pred);
     if(predicates.size() > 1)
-      is_cached_mem = false; // the by-memory lists serve a lone predicate only
+      cached_mem.reset(); // the by-memory lists serve a lone predicate only
     reset_cached_list();
   }
 
@@ -3183,16 +3172,16 @@ namespace Realm {
   const std::map<Memory, MachineMemInfo *> *
   MemoryQueryImpl::candidate_list(NodeID node) const
   {
-    if(is_restricted_node && (node != NodeID(restricted_node_id)))
+    if(restricted_node_id && (node != NodeID(*restricted_node_id)))
       return NULL;
     std::map<NodeID, MachineNodeInfo *>::const_iterator nit =
         machine->nodeinfos.find(node);
     if(nit == machine->nodeinfos.end())
       return NULL;
-    if(!is_restricted_kind)
+    if(!restricted_kind)
       return &(nit->second->mems);
     std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator kit =
-        nit->second->mem_by_kind.find(restricted_kind);
+        nit->second->mem_by_kind.find(*restricted_kind);
     return (kit != nit->second->mem_by_kind.end()) ? &(kit->second) : NULL;
   }
 
@@ -3204,12 +3193,9 @@ namespace Realm {
     typename Map::const_iterator it =
         after.exists() ? map.upper_bound(after) : map.begin();
     // ids sort by owner node first, so a query restricted to one node finds
-    //  its candidates in that node's run of the map; a node that does not
-    //  exist has none (restrict_to_node)
-    if(is_restricted_node) {
-      if(restricted_node_id < 0)
-        return;
-      const Memory node_first = ID::make_memory(restricted_node_id, 0).convert<Memory>();
+    //  its candidates in that node's run of the map
+    if(restricted_node_id) {
+      const Memory node_first = ID::make_memory(*restricted_node_id, 0).convert<Memory>();
       if((it != map.end()) && (it->first < node_first))
         it = map.lower_bound(node_first);
     }
@@ -3220,7 +3206,7 @@ namespace Realm {
     //  enumerate_mem_mem_affinities add it first), and its node is in its
     //  id. The candidates come in id order, so one node's are contiguous and
     //  its list is looked up once
-    const bool need_info = is_restricted_kind || (predicates.size() > 1);
+    const bool need_info = restricted_kind.has_value() || (predicates.size() > 1);
     bool have_node = false;
     NodeID node = 0;
     const std::map<Memory, MachineMemInfo *> *plist = NULL;
@@ -3229,7 +3215,7 @@ namespace Realm {
       const Memory m = it->first;
       const NodeID n = ID(m).memory_owner_node();
       visited++;
-      if(is_restricted_node && (n != NodeID(restricted_node_id)))
+      if(restricted_node_id && (n != NodeID(*restricted_node_id)))
         break; // past the node's run
       if(((min_bandwidth != 0) && (it->second->bandwidth < min_bandwidth)) ||
          ((max_latency != 0) && (it->second->latency > max_latency)))
@@ -3271,7 +3257,10 @@ namespace Realm {
   {
     // a match has an affinity to every anchor, so any anchor's map holds
     //  every match: the smallest is scanned, the processor's on a tie. A
-    //  target that is not in the model has no map, and nothing matches
+    //  target that is not in the model has no map, and nothing matches; nor
+    //  does anything match a conflicting query
+    if(conflict)
+      return;
     const std::map<Memory, Machine::ProcessorMemoryAffinity *> *pmas = NULL;
     if(anchor_proc) {
       pmas = anchor_affinities(anchor_proc->target, false /*!local_only*/);
@@ -3324,8 +3313,7 @@ namespace Realm {
     mem_anchored++;
     // nothing on this node follows a memory of another node, as in the walk
     //  and in next_in_run()
-    if(is_restricted_node &&
-       (NodeID(ID(after).memory_owner_node()) != NodeID(restricted_node_id)))
+    if(restricted_node_id && (ID(after).memory_owner_node() != *restricted_node_id))
       return Memory::NO_MEMORY;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     Memory found = Memory::NO_MEMORY;
@@ -3367,16 +3355,16 @@ namespace Realm {
   bool MemoryQueryImpl::candidate_matches(Memory m) const
   {
     const NodeID node = ID(m).memory_owner_node();
-    if(is_restricted_node && (node != NodeID(restricted_node_id)))
+    if(restricted_node_id && (node != NodeID(*restricted_node_id)))
       return false;
     std::map<NodeID, MachineNodeInfo *>::const_iterator nit =
         machine->nodeinfos.find(node);
     if(nit == machine->nodeinfos.end())
       return false;
     const MachineMemInfo *info = NULL;
-    if(is_restricted_kind) {
+    if(restricted_kind) {
       std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator kit =
-          nit->second->mem_by_kind.find(restricted_kind);
+          nit->second->mem_by_kind.find(*restricted_kind);
       if(kit == nit->second->mem_by_kind.end())
         return false;
       std::map<Memory, MachineMemInfo *>::const_iterator mit = kit->second.find(m);
@@ -3405,7 +3393,7 @@ namespace Realm {
   const MemoryQueryImpl::CachedList *MemoryQueryImpl::cached_list_lookup() const
   {
     const unsigned generation = cache_invalid_count.load();
-    if(!is_cached_mem) {
+    if(!cached_mem) {
       const KindCache *kc = kind_cache.get(generation);
       if(kc)
         return attach(list_in(kc));
@@ -3421,15 +3409,15 @@ namespace Realm {
   MemoryQueryImpl::list_in(const AffinityCache *ac) const
   {
     const std::map<Memory, CachedList> &by_mem =
-        is_restricted_kind ? ac->by_kind_and_mem[restricted_kind] : ac->by_mem;
-    std::map<Memory, CachedList>::const_iterator it = by_mem.find(cached_mem);
+        restricted_kind ? ac->by_kind_and_mem[*restricted_kind] : ac->by_mem;
+    std::map<Memory, CachedList>::const_iterator it = by_mem.find(*cached_mem);
     return (it != by_mem.end()) ? &it->second : &ac->none;
   }
 
   const MemoryQueryImpl::CachedList *
   MemoryQueryImpl::cached_list_miss(unsigned generation) const
   {
-    if(!is_cached_mem) {
+    if(!cached_mem) {
       const KindCache *kc =
           kind_cache.get_or_build(generation, cache_invalid_count,
                                   [this](unsigned g) { return build_kind_cache(g); });
@@ -3547,17 +3535,17 @@ namespace Realm {
     const std::vector<Memory> &items = clist->items;
     switch(q) {
     case QUERY_FIRST:
-      if(!is_restricted_node) {
+      if(!restricted_node_id) {
         mval = items.empty() ? Memory::NO_MEMORY : items.front();
         hint_position(items, 0);
       } else
-        mval = first_in_run(items, restricted_node_id, Memory::NO_MEMORY);
+        mval = first_in_run(items, *restricted_node_id, Memory::NO_MEMORY);
       break;
     case QUERY_RANDOM:
-      if(!is_restricted_node)
+      if(!restricted_node_id)
         mval = items.empty() ? Memory::NO_MEMORY : items[lrand48() % items.size()];
       else
-        mval = random_in_run(items, restricted_node_id, Memory::NO_MEMORY);
+        mval = random_in_run(items, *restricted_node_id, Memory::NO_MEMORY);
       break;
     default:
       log_query.fatal() << "unexpected cached query type " << int(q);
@@ -3574,10 +3562,10 @@ namespace Realm {
     if(!clist)
       return false;
     const std::vector<Memory> &items = clist->items;
-    if(!is_restricted_node)
+    if(!restricted_node_id)
       mval = successor(items, m, Memory::NO_MEMORY);
     else
-      mval = next_in_run(items, m, restricted_node_id, Memory::NO_MEMORY);
+      mval = next_in_run(items, m, *restricted_node_id, Memory::NO_MEMORY);
     return true;
   }
 
@@ -3588,7 +3576,7 @@ namespace Realm {
     const CachedList *clist = cached_list();
     if(!clist)
       return false;
-    count = is_restricted_node ? run_size(clist->items, restricted_node_id)
+    count = restricted_node_id ? run_size(clist->items, *restricted_node_id)
                                : clist->items.size();
     return true;
   }
@@ -3622,13 +3610,15 @@ namespace Realm {
   Memory MemoryQueryImpl::own_list_next(Memory after) const
   {
     const std::vector<Memory> &items = own_list()->items;
-    if(is_restricted_node)
-      return next_in_run(items, after, restricted_node_id, Memory::NO_MEMORY);
+    if(restricted_node_id)
+      return next_in_run(items, after, *restricted_node_id, Memory::NO_MEMORY);
     return successor(items, after, Memory::NO_MEMORY);
   }
 
   void MemoryQueryImpl::build_own_list(std::vector<Memory> &result) const
   {
+    if(conflict)
+      return; // no matches, and no best among them
     if(best_proc_affinity_cost.has_value() || best_mem_affinity_cost.has_value())
       build_best_affinity_list(result);
     else
@@ -3649,17 +3639,17 @@ namespace Realm {
     // otherwise the walk of count_matches(), collecting
     mem_walks++;
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
-    if(is_restricted_node)
-      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    if(restricted_node_id)
+      it = machine->nodeinfos.lower_bound(NodeID(*restricted_node_id));
     else
       it = machine->nodeinfos.begin();
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(restricted_node_id && (it->first != NodeID(*restricted_node_id)))
         break;
       const std::map<Memory, MachineMemInfo *> *plist;
-      if(is_restricted_kind) {
+      if(restricted_kind) {
         std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
-            it->second->mem_by_kind.find(restricted_kind);
+            it->second->mem_by_kind.find(*restricted_kind);
         plist = (it2 != it->second->mem_by_kind.end()) ? &(it2->second) : 0;
       } else
         plist = &(it->second->mems);
@@ -3742,8 +3732,8 @@ namespace Realm {
     std::optional<int> best_score;
     std::vector<Memory> candidates;
     const Memory target = best_mem_affinity_cost->memory;
-    if(is_restricted_node && target.exists() &&
-       (NodeID(ID(target).memory_owner_node()) != NodeID(restricted_node_id)))
+    if(restricted_node_id && target.exists() &&
+       (ID(target).memory_owner_node() != *restricted_node_id))
       return; // the candidates are all on the target's node
     const std::map<Memory, Machine::MemoryMemoryAffinity *> *mmas =
         local_mem_affinities(target); // null for "no memory" (see above)
@@ -3771,7 +3761,7 @@ namespace Realm {
   Memory MemoryQueryImpl::first_match(void) const
   {
 #if USE_OLD_AFFINITIES
-    if(is_restricted_node && (restricted_node_id < 0))
+    if(conflict)
       return Memory::NO_MEMORY;
     Memory lowest = Memory::NO_MEMORY;
     {
@@ -3781,11 +3771,10 @@ namespace Realm {
               machine->proc_mem_affinities.begin();
           it != machine->proc_mem_affinities.end(); it++) {
         Memory m = (*it).m;
-        if(is_restricted_node &&
-           (ID(m).memory_owner_node() != (unsigned)restricted_node_id))
+        if(restricted_node_id && (ID(m).memory_owner_node() != *restricted_node_id))
           continue;
         Memory::Kind m_kind = MemoryImpl::get_memory_kind(machine->get_runtime_impl(), m);
-        if(is_restricted_kind && (m_kind != restricted_kind))
+        if(restricted_kind && (m_kind != *restricted_kind))
           continue;
         size_t m_capacity = MemoryImpl::get_memory_size(machine->get_runtime_impl(), m);
         if((restricted_min_capacity > 0) && (m_capacity < restricted_min_capacity))
@@ -3823,22 +3812,25 @@ namespace Realm {
     //  order like the walk's (see ProcessorQueryImpl::first_match)
     if(anchored())
       return anchored_first();
+    // a conflicting query matches nothing, so there is nothing to walk
+    if(conflict)
+      return Memory::NO_MEMORY;
 
     mem_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
-    if(is_restricted_node)
-      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    if(restricted_node_id)
+      it = machine->nodeinfos.lower_bound(NodeID(*restricted_node_id));
     else
       it = machine->nodeinfos.begin();
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(restricted_node_id && (it->first != NodeID(*restricted_node_id)))
         break;
 
       const std::map<Memory, MachineMemInfo *> *plist;
-      if(is_restricted_kind) {
+      if(restricted_kind) {
         std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
-            it->second->mem_by_kind.find(restricted_kind);
+            it->second->mem_by_kind.find(*restricted_kind);
         if(it2 != it->second->mem_by_kind.end())
           plist = &(it2->second);
         else
@@ -3847,7 +3839,7 @@ namespace Realm {
         plist = &(it->second->mems);
 
       if(plist) {
-        if(is_restricted_node && predicates.empty() && (restricted_min_capacity == 0) &&
+        if(restricted_node_id && predicates.empty() && (restricted_min_capacity == 0) &&
            !plist->empty())
           return plist->begin()->first;
 
@@ -3881,7 +3873,7 @@ namespace Realm {
     if(!after.exists())
       return Memory::NO_MEMORY;
 #ifdef USE_OLD_AFFINITIES
-    if(is_restricted_node && (restricted_node_id < 0))
+    if(conflict)
       return Memory::NO_MEMORY;
     Memory lowest = Memory::NO_MEMORY;
     {
@@ -3893,11 +3885,10 @@ namespace Realm {
         Memory m = (*it).m;
         if(m.id <= after.id)
           continue;
-        if(is_restricted_node &&
-           (ID(m).memory_owner_node() != (unsigned)restricted_node_id))
+        if(restricted_node_id && (ID(m).memory_owner_node() != *restricted_node_id))
           continue;
         Memory::Kind m_kind = MemoryImpl::get_memory_kind(machine->get_runtime_impl(), m);
-        if(is_restricted_kind && (m_kind != restricted_kind))
+        if(restricted_kind && (m_kind != *restricted_kind))
           continue;
         size_t m_capacity = MemoryImpl::get_memory_size(machine->get_runtime_impl(), m);
         if((restricted_min_capacity > 0) && (m_capacity < restricted_min_capacity))
@@ -3918,6 +3909,8 @@ namespace Realm {
 
     if(anchored())
       return anchored_next(after);
+    if(conflict)
+      return Memory::NO_MEMORY; // see first_match
 
     mem_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
@@ -3925,13 +3918,13 @@ namespace Realm {
     // start where we left off
     it = machine->nodeinfos.find(ID(after).memory_owner_node());
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(restricted_node_id && (it->first != NodeID(*restricted_node_id)))
         break;
 
       const std::map<Memory, MachineMemInfo *> *plist;
-      if(is_restricted_kind) {
+      if(restricted_kind) {
         std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
-            it->second->mem_by_kind.find(restricted_kind);
+            it->second->mem_by_kind.find(*restricted_kind);
         if(it2 != it->second->mem_by_kind.end())
           plist = &(it2->second);
         else
@@ -3994,7 +3987,7 @@ namespace Realm {
   size_t MemoryQueryImpl::count_matches(void) const
   {
 #ifdef USE_OLD_AFFINITIES
-    if(is_restricted_node && (restricted_node_id < 0))
+    if(conflict)
       return 0;
     std::set<Memory> pset;
     {
@@ -4004,11 +3997,10 @@ namespace Realm {
               machine->proc_mem_affinities.begin();
           it != machine->proc_mem_affinities.end(); it++) {
         Memory m = (*it).m;
-        if(is_restricted_node &&
-           (ID(m).memory_owner_node() != (unsigned)restricted_node_id))
+        if(restricted_node_id && (ID(m).memory_owner_node() != *restricted_node_id))
           continue;
         Memory::Kind m_kind = MemoryImpl::get_memory_kind(machine->get_runtime_impl(), m);
-        if(is_restricted_kind && (m_kind != restricted_kind))
+        if(restricted_kind && (m_kind != *restricted_kind))
           continue;
         size_t m_capacity = MemoryImpl::get_memory_size(machine->get_runtime_impl(), m);
         if((restricted_min_capacity > 0) && (m_capacity < restricted_min_capacity))
@@ -4035,21 +4027,23 @@ namespace Realm {
       return count;
     if(anchored())
       return anchored_count_matches();
+    if(conflict)
+      return 0; // see first_match
     mem_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
-    if(is_restricted_node)
-      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    if(restricted_node_id)
+      it = machine->nodeinfos.lower_bound(NodeID(*restricted_node_id));
     else
       it = machine->nodeinfos.begin();
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(restricted_node_id && (it->first != NodeID(*restricted_node_id)))
         break;
 
       const std::map<Memory, MachineMemInfo *> *plist;
-      if(is_restricted_kind) {
+      if(restricted_kind) {
         std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
-            it->second->mem_by_kind.find(restricted_kind);
+            it->second->mem_by_kind.find(*restricted_kind);
         if(it2 != it->second->mem_by_kind.end())
           plist = &(it2->second);
         else
@@ -4094,7 +4088,7 @@ namespace Realm {
   {
     Memory chosen = Memory::NO_MEMORY;
 #ifdef USE_OLD_AFFINITIES
-    if(is_restricted_node && (restricted_node_id < 0))
+    if(conflict)
       return Memory::NO_MEMORY;
     int count = 0;
     {
@@ -4104,11 +4098,10 @@ namespace Realm {
               machine->proc_mem_affinities.begin();
           it != machine->proc_mem_affinities.end(); it++) {
         Memory m = (*it).m;
-        if(is_restricted_node &&
-           (ID(m).memory_owner_node() != (unsigned)restricted_node_id))
+        if(restricted_node_id && (ID(m).memory_owner_node() != *restricted_node_id))
           continue;
         Memory::Kind m_kind = MemoryImpl::get_memory_kind(machine->get_runtime_impl(), m);
-        if(is_restricted_kind && (m_kind != restricted_kind))
+        if(restricted_kind && (m_kind != *restricted_kind))
           continue;
         size_t m_capacity = MemoryImpl::get_memory_size(machine->get_runtime_impl(), m);
         if((restricted_min_capacity > 0) && (m_capacity < restricted_min_capacity))
@@ -4143,23 +4136,25 @@ namespace Realm {
       return mval;
     if(anchored())
       return anchored_random();
+    if(conflict)
+      return Memory::NO_MEMORY; // see first_match
 
     mem_walks++;
     StripedRWLock::AutoReaderLock al(machine->mutex);
     size_t count = 0;
     std::map<NodeID, MachineNodeInfo *>::const_iterator it;
-    if(is_restricted_node)
-      it = machine->nodeinfos.lower_bound(restricted_node_id);
+    if(restricted_node_id)
+      it = machine->nodeinfos.lower_bound(NodeID(*restricted_node_id));
     else
       it = machine->nodeinfos.begin();
     while(it != machine->nodeinfos.end()) {
-      if(is_restricted_node && (it->first != restricted_node_id))
+      if(restricted_node_id && (it->first != NodeID(*restricted_node_id)))
         break;
 
       const std::map<Memory, MachineMemInfo *> *plist;
-      if(is_restricted_kind) {
+      if(restricted_kind) {
         std::map<Memory::Kind, std::map<Memory, MachineMemInfo *>>::const_iterator it2 =
-            it->second->mem_by_kind.find(restricted_kind);
+            it->second->mem_by_kind.find(*restricted_kind);
         if(it2 != it->second->mem_by_kind.end())
           plist = &(it2->second);
         else
