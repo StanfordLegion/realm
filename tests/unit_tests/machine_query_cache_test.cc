@@ -2628,3 +2628,137 @@ TEST_F(MachineQueryCacheMultiNodeTest, AddressSpaceQueries)
   MachineQueryCacheTest::expect_cache_agrees_with_walk(sharing1);
   EXPECT_EQ(MachineQueryCacheTest::results(sharing0), (PSet{procs[0], procs[1]}));
 }
+
+namespace {
+  // every accessor of a query that must match nothing finds nothing, with the
+  //  shared cache and without; next() also runs before first(), so that a
+  //  query the shared cache does not serve builds its own list first
+  template <typename Q, typename T>
+  void expect_matches_nothing(const Q &q, T after, const char *what)
+  {
+    const bool saved = Config::use_machine_query_cache;
+    for(bool cache : {true, false}) {
+      Config::use_machine_query_cache = cache;
+      EXPECT_FALSE(q.next(after).exists()) << what << ", cache " << cache;
+      EXPECT_TRUE(MachineQueryCacheTest::results(q).empty())
+          << what << ", cache " << cache;
+      EXPECT_FALSE(q.next(after).exists()) << what << ", cache " << cache;
+    }
+    Config::use_machine_query_cache = saved;
+  }
+} // namespace
+
+// conflicting restrictions - two different kinds, two different address
+//  spaces, or an address space no id can name - match nothing on every path
+//  (the shared cache, an anchor's map, a best-affinity list, the walk), and
+//  without walking the machine
+TEST_F(MachineQueryCacheMultiNodeTest, ConflictingQueries)
+{
+  Machine machine = Machine::get_machine();
+  const unsigned long pwalks = ProcessorQueryImpl::walk_count();
+  const unsigned long mwalks = MemoryQueryImpl::walk_count();
+  // an id's node field is 16 bits wide: this one names node 1 there
+  const AddressSpace alias1 = (1u << 16) + 1;
+
+  // two kinds, the first of which both nodes have
+  auto two_kinds = [&]() {
+    return Machine::ProcessorQuery(machine)
+        .only_kind(Processor::LOC_PROC)
+        .only_kind(Processor::TOC_PROC);
+  };
+  expect_matches_nothing(two_kinds(), procs[0], "two kinds");
+  expect_matches_nothing(two_kinds().only_kind(Processor::LOC_PROC), procs[0],
+                         "two kinds, then the first again");
+  expect_matches_nothing(two_kinds().address_space(0), procs[0], "two kinds, a node");
+  expect_matches_nothing(two_kinds().has_affinity_to(mems[0]), procs[0],
+                         "two kinds, an affinity");
+  expect_matches_nothing(two_kinds().has_affinity_to(mems[0], 0, 2000), procs[0],
+                         "two kinds, a bounded affinity");
+  expect_matches_nothing(two_kinds().best_affinity_to(mems[0]), procs[0],
+                         "two kinds, a best affinity");
+
+  // two nodes, and nodes no id can name
+  auto on_node = [&](AddressSpace a) {
+    return Machine::ProcessorQuery(machine)
+        .only_kind(Processor::LOC_PROC)
+        .address_space(a);
+  };
+  expect_matches_nothing(on_node(0).address_space(1).has_affinity_to(mems[0]), procs[0],
+                         "two nodes, an affinity");
+  expect_matches_nothing(on_node(0).address_space(1).best_affinity_to(mems[0]), procs[0],
+                         "two nodes, a best affinity");
+  expect_matches_nothing(on_node(ID::MAX_NODE_ID + 1), procs[0], "node MAX_NODE_ID + 1");
+  expect_matches_nothing(on_node(alias1), procs[0], "node 2^16 + 1");
+  expect_matches_nothing(on_node(alias1).has_affinity_to(mems[0], 0, 2000), procs[0],
+                         "node 2^16 + 1, a bounded affinity");
+  expect_matches_nothing(Machine::ProcessorQuery(machine).address_space(AddressSpace(-1)),
+                         procs[0], "node 2^32 - 1, no kind");
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), pwalks) << "a conflicting query walked";
+
+  // the largest node an id can name is a node, if not one this machine has
+  expect_matches_nothing(on_node(ID::MAX_NODE_ID), procs[0], "node MAX_NODE_ID");
+
+  // a conflict stays with the copy that was refined, and its copies
+  Machine::ProcessorQuery cpus(machine);
+  cpus.only_kind(Processor::LOC_PROC);
+  EXPECT_EQ(cpus.count(), 4u);
+  Machine::ProcessorQuery none(cpus);
+  none.only_kind(Processor::TOC_PROC);
+  EXPECT_EQ(MachineQueryCacheTest::results(cpus).size(), 4u);
+  expect_matches_nothing(none, procs[0], "a refined copy");
+  expect_matches_nothing(Machine::ProcessorQuery(none), procs[0],
+                         "a copy of a conflicting query");
+  // and an unrestricted query refined through a copy
+  Machine::ProcessorQuery all(machine);
+  Machine::ProcessorQuery node1(all);
+  node1.address_space(1);
+  EXPECT_EQ(MachineQueryCacheTest::results(node1),
+            (std::set<Processor>{procs[2], procs[3]}));
+  EXPECT_EQ(all.count(), 4u);
+
+  // memories
+  auto two_mem_kinds = [&]() {
+    return Machine::MemoryQuery(machine)
+        .only_kind(Memory::SYSTEM_MEM)
+        .only_kind(Memory::GPU_FB_MEM);
+  };
+  expect_matches_nothing(two_mem_kinds(), mems[0], "two memory kinds");
+  expect_matches_nothing(two_mem_kinds().address_space(0), mems[0],
+                         "two memory kinds, a node");
+  expect_matches_nothing(two_mem_kinds().has_affinity_to(procs[2]), mems[0],
+                         "two memory kinds, a processor affinity");
+  expect_matches_nothing(two_mem_kinds().has_affinity_to(procs[2], 0, 2000), mems[0],
+                         "two memory kinds, a bounded processor affinity");
+  expect_matches_nothing(two_mem_kinds().has_affinity_to(mems[0]), mems[0],
+                         "two memory kinds, a memory affinity");
+  expect_matches_nothing(two_mem_kinds().has_capacity(1), mems[0],
+                         "two memory kinds, a capacity");
+  expect_matches_nothing(two_mem_kinds().best_affinity_to(procs[0]), mems[0],
+                         "two memory kinds, a best processor affinity");
+  expect_matches_nothing(two_mem_kinds().best_affinity_to(mems[0]), mems[0],
+                         "two memory kinds, a best memory affinity");
+  auto on_mem_node = [&](AddressSpace a) {
+    return Machine::MemoryQuery(machine).only_kind(Memory::SYSTEM_MEM).address_space(a);
+  };
+  expect_matches_nothing(on_mem_node(0).address_space(1).has_capacity(1), mems[0],
+                         "two nodes, a capacity");
+  expect_matches_nothing(on_mem_node(ID::MAX_NODE_ID + 1), mems[0],
+                         "node MAX_NODE_ID + 1");
+  expect_matches_nothing(on_mem_node(alias1).has_affinity_to(procs[2]), mems[0],
+                         "node 2^16 + 1, a processor affinity");
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), mwalks) << "a conflicting query walked";
+  expect_matches_nothing(on_mem_node(ID::MAX_NODE_ID), mems[0], "node MAX_NODE_ID");
+
+  Machine::MemoryQuery sysmems(machine);
+  sysmems.only_kind(Memory::SYSTEM_MEM);
+  EXPECT_EQ(sysmems.count(), 2u);
+  Machine::MemoryQuery no_mems(sysmems);
+  no_mems.only_kind(Memory::GPU_FB_MEM);
+  EXPECT_EQ(MachineQueryCacheTest::results(sysmems).size(), 2u);
+  expect_matches_nothing(no_mems, mems[0], "a refined memory copy");
+  Machine::MemoryQuery all_mems(machine);
+  Machine::MemoryQuery mem_node1(all_mems);
+  mem_node1.address_space(1);
+  EXPECT_EQ(MachineQueryCacheTest::results(mem_node1), (std::set<Memory>{mems[1]}));
+  EXPECT_EQ(all_mems.count(), 2u);
+}

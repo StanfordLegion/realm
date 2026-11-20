@@ -862,16 +862,21 @@ void test_address_space(Machine machine, int &errors)
     }
   }
 
-  // an address space past the end of the machine matches nothing
-  AddressSpace past_end = AddressSpace(num_spaces);
-  if(Machine::ProcessorQuery(machine).address_space(past_end).count() != 0) {
-    log_app.error() << "ERROR: Processors found in nonexistent address space "
-                    << past_end;
-    errors++;
-  }
-  if(Machine::MemoryQuery(machine).address_space(past_end).count() != 0) {
-    log_app.error() << "ERROR: Memories found in nonexistent address space " << past_end;
-    errors++;
+  // an address space past the end of the machine matches nothing, as does
+  //  one too large for any id to name
+  for(AddressSpace past_end : {AddressSpace(num_spaces), AddressSpace(-1)}) {
+    if((Machine::ProcessorQuery(machine).address_space(past_end).count() != 0) ||
+       Machine::ProcessorQuery(machine).address_space(past_end).first().exists()) {
+      log_app.error() << "ERROR: Processors found in nonexistent address space "
+                      << past_end;
+      errors++;
+    }
+    if((Machine::MemoryQuery(machine).address_space(past_end).count() != 0) ||
+       Machine::MemoryQuery(machine).address_space(past_end).first().exists()) {
+      log_app.error() << "ERROR: Memories found in nonexistent address space "
+                      << past_end;
+      errors++;
+    }
   }
 
   log_app.print() << "  address_space tests: "
