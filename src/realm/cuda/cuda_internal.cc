@@ -928,9 +928,19 @@ namespace Realm {
                             << " out_is_ipc=" << out_is_ipc << " fields=" << fields_total
                             << " needs_multi:" << needs_fast_multifield;
 
-          stream->get_gpu()->launch_batch_affine_kernel(&copy_infos, 3, min_align,
-                                                        (copy_info_total / min_align),
-                                                        needs_fast_multifield, stream);
+          GPU *gpu = stream->get_gpu();
+          uint64_t max_blocks = 0;
+          if(gpu->host_copy_max_blocks != 0 && !out_is_ipc) {
+            const bool src_host = gpu->is_accessible_host_mem(in_port->mem);
+            const bool dst_host = gpu->is_accessible_host_mem(out_port->mem);
+            if(src_host != dst_host &&
+               gpu->is_accessible_gpu_mem(src_host ? out_port->mem : in_port->mem)) {
+              max_blocks = gpu->host_copy_max_blocks;
+            }
+          }
+          gpu->launch_batch_affine_kernel(&copy_infos, 3, min_align,
+                                          copy_info_total / min_align,
+                                          needs_fast_multifield, stream, max_blocks);
           bytes_to_fence += copy_info_total;
         } else if(copy_infos.num_rects == 1) {
           // Then the affine copies to/from the device

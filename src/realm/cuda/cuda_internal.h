@@ -422,8 +422,8 @@ namespace Realm {
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elemSize,
                                            size_t volume, GPUStream *stream);
       void launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elemSize,
-                                      size_t volume, bool multified_optimized,
-                                      GPUStream *stream);
+                                      size_t volume, bool multifield_optimized,
+                                      GPUStream *stream, uint64_t max_blocks);
       void launch_transpose_kernel(MemcpyTransposeInfo<size_t> &copy_info,
                                    size_t elemSize, GPUStream *stream);
 
@@ -484,6 +484,7 @@ namespace Realm {
       GPUFuncInfo fill_affine_large_kernels[REALM_MAX_DIM]
                                            [CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo transpose_kernels[CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
+      uint64_t host_copy_max_blocks = 0; // blocks per SM times this GPU's SM count
 
       CUdeviceptr fbmem_base = 0;
 

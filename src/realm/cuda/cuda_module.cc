@@ -1407,8 +1407,8 @@ namespace Realm {
     }
 
     void GPU::launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elem_size,
-                                         size_t volume, bool mutlfield_optimized,
-                                         GPUStream *stream)
+                                         size_t volume, bool multifield_optimized,
+                                         GPUStream *stream, uint64_t max_blocks)
     {
       size_t log_elem_size = std::min(static_cast<size_t>(ctz(elem_size)),
                                       CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
@@ -1417,13 +1417,15 @@ namespace Realm {
       assert(dim <= REALM_MAX_DIM);
       assert(dim >= 1);
 
-      if(!mutlfield_optimized) {
-        GPUFuncInfo &func_info = batch_affine_kernels[dim - 1][log_elem_size];
-        launch_kernel(func_info, copy_info, volume, stream);
-      } else {
-        GPUFuncInfo &func_info = multi_batch_affine_kernels[dim - 1][log_elem_size];
-        launch_kernel(func_info, copy_info, volume, stream);
+      GPUFuncInfo func_info = multifield_optimized
+                                 ? multi_batch_affine_kernels[dim - 1][log_elem_size]
+                                 : batch_affine_kernels[dim - 1][log_elem_size];
+      // The kernel loops over the copy, so reducing the grid still covers every element.
+      if(max_blocks != 0) {
+        func_info.occ_num_blocks = static_cast<int>(
+            std::min<uint64_t>(func_info.occ_num_blocks, max_blocks));
       }
+      launch_kernel(func_info, copy_info, volume, stream);
     }
 
     const GPU::CudaIpcMapping *GPU::find_ipc_mapping(Memory mem) const
@@ -2325,16 +2327,13 @@ namespace Realm {
             new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
       }
 
-      CUdevice dev;
-      int numSMs;
-
-#if CUDA_VERSION >= 13000
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxGetDevice)(&dev, _context));
-#else
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxGetDevice)(&dev));
-#endif
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGetAttribute)(
-          &numSMs, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, dev));
+      if(module->config->cfg_host_copy_blocks_per_sm != 0) {
+        int num_sms = 0;
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGetAttribute)(
+            &num_sms, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, info->device));
+        host_copy_max_blocks =
+            static_cast<uint64_t>(module->config->cfg_host_copy_blocks_per_sm) * num_sms;
+      }
 
       CHECK_CU(CUDA_DRIVER_FNPTR(cuModuleLoadDataEx)(&device_module, realm_fatbin, 0,
                                                      NULL, NULL));
@@ -2356,8 +2355,6 @@ namespace Realm {
             &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func,
             blocksize_to_sharedmem, 0, 0));
 
-        // func_info.occ_num_blocks *=
-        //  numSMs; // Fill up the GPU with the number of blocks if possible
         transpose_kernels[log_bit_sz] = func_info;
 
         for(unsigned int d = 1; d <= CUDA_MAX_DIM; d++) {
@@ -2816,6 +2813,7 @@ namespace Realm {
       config_map.insert({"d2d_streams", &cfg_d2d_streams});
       config_map.insert({"p2p_streams", &cfg_p2p_streams});
       config_map.insert({"hd_streams", &cfg_hd_streams});
+      config_map.insert({"host_copy_blocks_per_sm", &cfg_host_copy_blocks_per_sm});
 
       resource_map.insert({"gpu", &res_num_gpus});
       resource_map.insert({"fbmem", &res_min_fbmem_size});
@@ -2880,6 +2878,7 @@ namespace Realm {
           .add_option_int("-cuda:lmemresize", cfg_lmem_resize_to_max)
           .add_option_int("-cuda:mtdma", cfg_multithread_dma)
           .add_option_int_units("-cuda:hostreg", cfg_hostreg_limit, 'm')
+          .add_option_int("-cuda:host_copy_blocks_per_sm", cfg_host_copy_blocks_per_sm)
           .add_option_int("-cuda:pageable_access", cfg_pageable_access)
           .add_option_int("-cuda:cupti", cfg_enable_cupti)
           .add_option_int("-cuda:ipc", cfg_use_cuda_ipc)

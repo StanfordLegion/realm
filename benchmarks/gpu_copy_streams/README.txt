@@ -25,6 +25,12 @@ including field/allocation alignment. Preflight includes background destinations
 and every selected GPU's load buffer. It cannot account for unrelated concurrent
 allocations outside this benchmark.
 
+On CUDA, try -cuda:host_copy_blocks_per_sm 1 with sparse H2D or D2H copies under
+compute load. This caps each affine host/device copy kernel's grid at the SM
+count of the GPU running it. Larger values allow more blocks per SM in the grid.
+The default 0 uses the occupancy-based grid. Compare task spans and copy latency
+together. Dense copy-engine transfers are unaffected by this option.
+
 On HIP, ROCm maps the streams of each priority onto at most GPU_MAX_HW_QUEUES
 hardware queues per device (default 4). Streams beyond that add no concurrency,
 and task and DMA streams of the same priority can share a hardware queue, so a

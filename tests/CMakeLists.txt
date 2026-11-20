@@ -445,7 +445,8 @@ if(TEST_USE_GPU)
     3
   )
   if(REALM_USE_CUDA)
-    list(APPEND machine_config_test_ARGS -cuda:dynfb 1 -cuda:dynfb_max 128)
+    list(APPEND machine_config_test_ARGS -cuda:dynfb 1 -cuda:dynfb_max 128
+         -cuda:host_copy_blocks_per_sm 1)
   endif()
   if(REALM_USE_HIP)
     list(APPEND machine_config_test_ARGS -hip:dynfb 1 -hip:dynfb_max 128)
