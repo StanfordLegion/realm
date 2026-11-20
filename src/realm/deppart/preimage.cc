@@ -427,8 +427,10 @@ namespace Realm {
       if(overlap_tester != 0) {
 	tester_ready = true;
       } else {
-	std::vector<Rect<N2,T2> >& r = pending_sparse_images[index];
-	r.insert(r.end(), rects, rects + count);
+        // Keep an entry for an empty image so it counts toward completion.
+        std::vector<Rect<N2,T2> >& r = pending_sparse_images[index];
+        if(count != 0)
+          r.insert(r.end(), rects, rects + count);
       }
     }
 
@@ -502,8 +504,8 @@ namespace Realm {
 	size_t idx = it->first;
 	// see which of the targets that image overlaps
 	std::set<int> overlaps;
-	overlap_tester->test_overlap(&it->second[0], it->second.size(), overlaps);
-	if(idx < domain_transform.ptr_data.size()) {
+        overlap_tester->test_overlap(it->second.data(), it->second.size(), overlaps);
+        if(idx < domain_transform.ptr_data.size()) {
 	  log_part.info() << "image of ptr_data[" << idx << "] overlaps " << overlaps.size() << " targets";
           PreimageMicroOp<N, T, N2, T2> *uop =
               new PreimageMicroOp<N, T, N2, T2>(
