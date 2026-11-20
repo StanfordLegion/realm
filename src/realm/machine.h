@@ -203,7 +203,10 @@ namespace Realm {
     // return the first matched processor, or NO_PROC
     Processor first(void) const;
 
-    // return the next matched processor after the one given, or NO_PROC
+    // return the next matched processor after the one given, or NO_PROC; meant
+    //  for continuing an iteration from first(): given a processor the query
+    //  would not return, it may return NO_PROC even though later matches exist
+    //  (e.g. a processor of another address space, for a query restricted to one)
     Processor next(Processor after) const;
 
     // return a random matched processor, or NO_PROC if none exist
@@ -273,7 +276,10 @@ namespace Realm {
     // return the first matched processor, or NO_PROC
     Memory first(void) const;
 
-    // return the next matched processor after the one given, or NO_PROC
+    // return the next matched memory after the one given, or NO_MEMORY; meant
+    //  for continuing an iteration from first(): given a memory the query would
+    //  not return, it may return NO_MEMORY even though later matches exist (e.g.
+    //  a memory of another address space, for a query restricted to one)
     Memory next(Memory after) const;
 
     // return a random matched processor, or NO_PROC if none exist
