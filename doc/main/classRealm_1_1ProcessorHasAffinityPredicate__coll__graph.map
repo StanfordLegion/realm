@@ -1,8 +1,10 @@
 <map id="Realm::ProcessorHasAffinityPredicate" name="Realm::ProcessorHasAffinityPredicate">
-<area shape="rect" id="Node000001" title=" " alt="" coords="28,106,234,151"/>
-<area shape="rect" id="Node000002" href="$classRealm_1_1QueryPredicate.html" title=" " alt="" coords="5,5,155,33"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="94,45,123,105,118,105,91,49"/>
-<area shape="rect" id="Node000003" href="$classRealm_1_1Memory.html" title=" " alt="" coords="179,5,304,33"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="220,43,155,107,152,103,214,45"/>
-<area shape="poly" id="edge3_Node000003_Node000003" title=" " alt="" coords="320,10,331,19,323,28,305,31,304,26,320,23,325,19,319,15"/>
+<area shape="rect" id="Node000001" title=" " alt="" coords="33,224,239,268"/>
+<area shape="rect" id="Node000002" href="$classRealm_1_1QueryPredicate.html" title=" " alt="" coords="5,114,155,142"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="94,154,128,223,123,223,91,158"/>
+<area shape="rect" id="Node000003" href="$structRealm_1_1AffinityAnchor.html" title=" " alt="" coords="178,106,342,151"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="228,161,161,225,158,221,223,162"/>
+<area shape="rect" id="Node000004" href="$classRealm_1_1Memory.html" title=" " alt="" coords="197,5,323,33"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="261,47,262,106,258,104,259,51"/>
+<area shape="poly" id="edge4_Node000004_Node000004" title=" " alt="" coords="338,10,349,19,341,28,324,31,322,26,339,23,344,19,338,15"/>
 </map>

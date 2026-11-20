@@ -507,6 +507,7 @@ var annotated_dup =
       [ "MachineMemInfo", "structRealm_1_1MachineMemInfo.html", "structRealm_1_1MachineMemInfo" ],
       [ "MachineNodeInfo", "structRealm_1_1MachineNodeInfo.html", "structRealm_1_1MachineNodeInfo" ],
       [ "MachineImpl", "classRealm_1_1MachineImpl.html", "classRealm_1_1MachineImpl" ],
+      [ "AffinityAnchor", "structRealm_1_1AffinityAnchor.html", "structRealm_1_1AffinityAnchor" ],
       [ "QueryPredicate", "classRealm_1_1QueryPredicate.html", "classRealm_1_1QueryPredicate" ],
       [ "ProcessorHasAffinityPredicate", "classRealm_1_1ProcessorHasAffinityPredicate.html", "classRealm_1_1ProcessorHasAffinityPredicate" ],
       [ "QueryResultList", "structRealm_1_1QueryResultList.html", "structRealm_1_1QueryResultList" ],

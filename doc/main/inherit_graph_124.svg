@@ -11,10 +11,10 @@
 <!-- Node0 -->
 <g id="Node000000" class="node">
 <title>Node0</title>
-<g id="a_Node000000"><a xlink:href="classRealm_1_1ControlPort_1_1Encoder.html" target="_top" xlink:title=" ">
+<g id="a_Node000000"><a xlink:href="classRealm_1_1ControlPort_1_1Decoder.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="108.25,-33.5 0,-33.5 0,0 108.25,0 108.25,-33.5"/>
 <text xml:space="preserve" text-anchor="start" x="8" y="-20" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::ControlPort</text>
-<text xml:space="preserve" text-anchor="middle" x="54.12" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00">::Encoder</text>
+<text xml:space="preserve" text-anchor="middle" x="54.12" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00">::Decoder</text>
 </a>
 </g>
 </g>

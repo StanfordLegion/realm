@@ -63,7 +63,7 @@ var searchData=
   ['nodeinfos_60',['nodeinfos',['../classRealm_1_1MachineImpl.html#a99da7174492873c36fd8980f30dc8fe7',1,'Realm::MachineImpl']]],
   ['nodes_61',['nodes',['../classRealm_1_1IncomingMessageManager.html#acc3b7c9c3994b03a11887e6630a23bde',1,'Realm::IncomingMessageManager::nodes'],['../classRealm_1_1RuntimeImpl.html#a309b32f208eacc5501e5c25f2ce0eaf6',1,'Realm::RuntimeImpl::nodes']]],
   ['nodeset_62',['nodeset',['../classRealm_1_1NodeSetIterator.html#a486fcc19818d0d9b764711a5b6bd26df',1,'Realm::NodeSetIterator']]],
-  ['none_63',['none',['../structRealm_1_1ProcessorQueryImpl_1_1AffinityCache.html#a2de5d0a3f3604f84c802fceecaf0eec9',1,'Realm::ProcessorQueryImpl::AffinityCache']]],
+  ['none_63',['none',['../structRealm_1_1ProcessorQueryImpl_1_1AffinityCache.html#a2de5d0a3f3604f84c802fceecaf0eec9',1,'Realm::ProcessorQueryImpl::AffinityCache::none'],['../structRealm_1_1MemoryQueryImpl_1_1AffinityCache.html#abf836a2b1cdb65689e5c8b56be22543d',1,'Realm::MemoryQueryImpl::AffinityCache::none']]],
   ['notification_64',['notification',['../structRealm_1_1Cuda_1_1GPUStream_1_1PendingEvent.html#a61570e8219bdb94b0fc0cf42393123f9',1,'Realm::Cuda::GPUStream::PendingEvent::notification'],['../structRealm_1_1Hip_1_1GPUStream_1_1PendingEvent.html#a229efa4f298006985d7f33710bd59eae',1,'Realm::Hip::GPUStream::PendingEvent::notification']]],
   ['nplanes_65',['nplanes',['../classRealm_1_1Request.html#ae2ffb43b88d14fb1e30298e97f63c0cf',1,'Realm::Request']]],
   ['num_5favailable_5fblocks_66',['num_available_blocks',['../classRealm_1_1IncomingMessageManager.html#ab3e2f503ebe308a60409f0f11f97f15a',1,'Realm::IncomingMessageManager']]],

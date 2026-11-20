@@ -11,11 +11,11 @@
 <!-- Node0 -->
 <g id="Node000000" class="node">
 <title>Node0</title>
-<g id="a_Node000000"><a xlink:href="structRealm_1_1FLDTYPES__AUG_1_1PointDemux3.html" target="_top" xlink:title=" ">
+<g id="a_Node000000"><a xlink:href="structRealm_1_1FLDTYPES__AUG_1_1PointDemux2.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="140.5,-46.25 0,-46.25 0,0 140.5,0 140.5,-46.25"/>
 <text xml:space="preserve" text-anchor="start" x="8" y="-32.75" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::FLDTYPES_AUG</text>
-<text xml:space="preserve" text-anchor="start" x="8" y="-20" font-family="Helvetica,sans-Serif" font-size="10.00">::PointDemux3&lt; TARGET,</text>
-<text xml:space="preserve" text-anchor="middle" x="70.25" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00"> T1, T2, T3 &gt;</text>
+<text xml:space="preserve" text-anchor="start" x="8" y="-20" font-family="Helvetica,sans-Serif" font-size="10.00">::PointDemux2&lt; TARGET,</text>
+<text xml:space="preserve" text-anchor="middle" x="70.25" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00"> T1, T2 &gt;</text>
 </a>
 </g>
 </g>

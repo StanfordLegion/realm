@@ -5,7 +5,7 @@ var searchData=
   ['cache_5finvalid_5fcount_2',['cache_invalid_count',['../classRealm_1_1ProcessorQueryImpl.html#ae035e2c05526bd036e7d049957b4fe8f',1,'Realm::ProcessorQueryImpl::cache_invalid_count'],['../classRealm_1_1MemoryQueryImpl.html#aae8a164a8fc46b1caf5295b785c912ea',1,'Realm::MemoryQueryImpl::cache_invalid_count']]],
   ['cache_5fline_5fsize_3',['CACHE_LINE_SIZE',['../classRealm_1_1FastReservation.html#a855de23ec4c98685bb9f9c8684058644',1,'Realm::FastReservation']]],
   ['cached_5fdomain_5fsize_4',['cached_domain_size',['../classRealm_1_1IndirectionInfoTyped.html#a4156887fc67c91241a44f0d1b9f676b6',1,'Realm::IndirectionInfoTyped']]],
-  ['cached_5fmem_5',['cached_mem',['../classRealm_1_1ProcessorQueryImpl.html#a87f6a02c9e3e98779d73ade8e5d825f5',1,'Realm::ProcessorQueryImpl']]],
+  ['cached_5fmem_5',['cached_mem',['../classRealm_1_1ProcessorQueryImpl.html#a87f6a02c9e3e98779d73ade8e5d825f5',1,'Realm::ProcessorQueryImpl::cached_mem'],['../classRealm_1_1MemoryQueryImpl.html#a8140bcb1ce814365914922652f83fa7b',1,'Realm::MemoryQueryImpl::cached_mem']]],
   ['cachingallocator_3c_20t_2c_20n_20_3e_3a_3afree_5fblocks_6',['free_blocks',['../namespaceRealm.html#ad86497cd2b5961f0d4ae266c4c48162c',1,'Realm']]],
   ['callable_7',['callable',['../classRealm_1_1CompletionCallback.html#a9ac15bdaf829817bb5553c688b5ba42a',1,'Realm::CompletionCallback']]],
   ['callback_5fdata1_8',['callback_data1',['../structRealm_1_1IncomingMessageManager_1_1Message.html#a2c4e322c1bcb861fca594c964b2f4be6',1,'Realm::IncomingMessageManager::Message']]],

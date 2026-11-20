@@ -42,7 +42,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+e247505d</button>
+     <button class="dropbtn">Version 26.9.1+71cd9f0b</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -139,11 +139,12 @@ $(function(){initNavTree('classRealm_1_1MemoryQueryImpl.html','','classRealm_1_1
 <div class="dynheader">
 Collaboration diagram for Realm::MemoryQueryImpl:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" loading="lazy" frameborder="0" src="classRealm_1_1MemoryQueryImpl__coll__graph.svg" width="3331" height="2138"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><iframe scrolling="no" loading="lazy" frameborder="0" src="classRealm_1_1MemoryQueryImpl__coll__graph.svg" width="3271" height="2227"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
+<tr class="memitem:AffinityCache" id="r_AffinityCache"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1MemoryQueryImpl_1_1AffinityCache.html">AffinityCache</a></td></tr>
 <tr class="memitem:BestProcAffinityCostFn" id="r_BestProcAffinityCostFn"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1MemoryQueryImpl_1_1BestProcAffinityCostFn.html">BestProcAffinityCostFn</a></td></tr>
 <tr class="memitem:BestMemAffinityCostFn" id="r_BestMemAffinityCostFn"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="structRealm_1_1MemoryQueryImpl_1_1BestMemAffinityCostFn.html">BestMemAffinityCostFn</a></td></tr>
 </table><table class="memberdecls">
@@ -163,7 +164,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a7af09230e41bbf55014bde07931875ae" id="r_a7af09230e41bbf55014bde07931875ae"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a7af09230e41bbf55014bde07931875ae">restrict_to_kind</a> (<a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a> new_kind)</td></tr>
 <tr class="memitem:a088463ee7be14da841f7ad3442399841" id="r_a088463ee7be14da841f7ad3442399841"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a088463ee7be14da841f7ad3442399841">restrict_by_capacity</a> (size_t new_min_bytes)</td></tr>
 <tr class="memitem:a4b2b580cd5337f725e1bde0e27dae313" id="r_a4b2b580cd5337f725e1bde0e27dae313"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a4b2b580cd5337f725e1bde0e27dae313">add_predicate</a> (<a class="el" href="namespaceRealm.html#af5685ecad651601b884c7805ff713eb6">MemoryQueryPredicate</a> *pred)</td></tr>
-<tr class="memitem:a768cadf54967b5b00662c80fcc4a95b7" id="r_a768cadf54967b5b00662c80fcc4a95b7"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a768cadf54967b5b00662c80fcc4a95b7">set_affinity_proc</a> (<a class="el" href="classRealm_1_1Processor.html">Processor</a> p)</td></tr>
+<tr class="memitem:a93aa12e4fea0e3b7f5233cb9e4d6ad43" id="r_a93aa12e4fea0e3b7f5233cb9e4d6ad43"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a93aa12e4fea0e3b7f5233cb9e4d6ad43">set_anchor_proc</a> (<a class="el" href="classRealm_1_1Processor.html">Processor</a> p, unsigned min_bandwidth, unsigned max_latency)</td></tr>
+<tr class="memitem:a8d1cd47376a6c26f97d53df1771ec1ec" id="r_a8d1cd47376a6c26f97d53df1771ec1ec"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a8d1cd47376a6c26f97d53df1771ec1ec">add_anchor_mem</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> m, unsigned min_bandwidth, unsigned max_latency)</td></tr>
+<tr class="memitem:ad77451adeb6eb56e080649240869d3e3" id="r_ad77451adeb6eb56e080649240869d3e3"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ad77451adeb6eb56e080649240869d3e3">set_cached_mem</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> m)</td></tr>
+<tr class="memitem:aff2fc760182dc1321052c3c2086de045" id="r_aff2fc760182dc1321052c3c2086de045"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aff2fc760182dc1321052c3c2086de045">reset_cached_mem</a> ()</td></tr>
 <tr class="memitem:a1714f6d7cc2e514ab24a5a3275582910" id="r_a1714f6d7cc2e514ab24a5a3275582910"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a1714f6d7cc2e514ab24a5a3275582910">first_match</a> (void) const</td></tr>
 <tr class="memitem:ad352011bba971626109ee6aad667b3fe" id="r_ad352011bba971626109ee6aad667b3fe"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ad352011bba971626109ee6aad667b3fe">next_match</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> after) const</td></tr>
 <tr class="memitem:af0cef2043a56c61e034777956cf91563" id="r_af0cef2043a56c61e034777956cf91563"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#af0cef2043a56c61e034777956cf91563">count_matches</a> (void) const</td></tr>
@@ -173,27 +177,50 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:ae0ea9fa08e99c877ff3d9d201f0cc10f" id="r_ae0ea9fa08e99c877ff3d9d201f0cc10f"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ae0ea9fa08e99c877ff3d9d201f0cc10f">cached_query</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> &amp;pval, <a class="el" href="namespaceRealm.html#a34b2a2d63f97a39ba58fcaea0dbb68d9">QueryType</a> q) const</td></tr>
 <tr class="memitem:a443f48abaadb02fa638eccb4546a1e42" id="r_a443f48abaadb02fa638eccb4546a1e42"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a443f48abaadb02fa638eccb4546a1e42">cached_query</a> (size_t &amp;count) const</td></tr>
 </table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
+Static Public Member Functions</h2></td></tr>
+<tr class="memitem:aedc9bbe3ea5ff2db947f306f644098c3" id="r_aedc9bbe3ea5ff2db947f306f644098c3"><td class="memItemLeft" align="right" valign="top">static unsigned long&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aedc9bbe3ea5ff2db947f306f644098c3">walk_count</a> (void)</td></tr>
+<tr class="memitem:ad351d26ff0472473732f1c80af2fb0b6" id="r_ad351d26ff0472473732f1c80af2fb0b6"><td class="memItemLeft" align="right" valign="top">static unsigned long&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ad351d26ff0472473732f1c80af2fb0b6">anchored_count</a> (void)</td></tr>
+<tr class="memitem:a205a8a466b0ad2d51683d953f5e5e220" id="r_a205a8a466b0ad2d51683d953f5e5e220"><td class="memItemLeft" align="right" valign="top">static unsigned long&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a205a8a466b0ad2d51683d953f5e5e220">anchored_visits</a> (void)</td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-static-attribs" class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
 Static Public Attributes</h2></td></tr>
 <tr class="memitem:aae8a164a8fc46b1caf5295b785c912ea" id="r_aae8a164a8fc46b1caf5295b785c912ea"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; unsigned int &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aae8a164a8fc46b1caf5295b785c912ea">cache_invalid_count</a></td></tr>
 <tr class="memitem:adc5e45ee87ee8c355935c9ef6dc89eb3" id="r_adc5e45ee87ee8c355935c9ef6dc89eb3"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="classRealm_1_1QueryCacheSlot.html">QueryCacheSlot</a>&lt; <a class="el" href="#ab61db433734b3dfbe74c6b1aac906102">KindCache</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#adc5e45ee87ee8c355935c9ef6dc89eb3">kind_cache</a></td></tr>
+<tr class="memitem:a16a61552ac75aa67f4f3ea2a52f76c75" id="r_a16a61552ac75aa67f4f3ea2a52f76c75"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="classRealm_1_1QueryCacheSlot.html">QueryCacheSlot</a>&lt; <a class="el" href="structRealm_1_1MemoryQueryImpl_1_1AffinityCache.html">AffinityCache</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a16a61552ac75aa67f4f3ea2a52f76c75">affinity_cache</a></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pro-methods" class="groupheader"><a id="pro-methods" name="pro-methods"></a>
 Protected Member Functions</h2></td></tr>
 <tr class="memitem:ab668c2439382edd1fbec165e197dc4e4" id="r_ab668c2439382edd1fbec165e197dc4e4"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ab668c2439382edd1fbec165e197dc4e4">MemoryQueryImpl</a> (const MemoryQueryImpl &amp;copy_from)</td></tr>
 <tr class="memitem:aed233843d80cbf8d7b4389ce0688c029" id="r_aed233843d80cbf8d7b4389ce0688c029"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aed233843d80cbf8d7b4389ce0688c029">~MemoryQueryImpl</a> (void)</td></tr>
+<tr class="memitem:acfc0febea8a39670a2cc3267a5e14ebd" id="r_acfc0febea8a39670a2cc3267a5e14ebd"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#acfc0febea8a39670a2cc3267a5e14ebd">anchored</a> () const</td></tr>
 <tr class="memitem:a4dc3f9107348320981e7b2c14eb0ef1a" id="r_a4dc3f9107348320981e7b2c14eb0ef1a"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a4dc3f9107348320981e7b2c14eb0ef1a">shared_cache_covers</a> () const</td></tr>
+<tr class="memitem:a875df43c62f15697d762ed249465d151" id="r_a875df43c62f15697d762ed249465d151"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a875df43c62f15697d762ed249465d151">list_in</a> (const <a class="el" href="#ab61db433734b3dfbe74c6b1aac906102">KindCache</a> *kc) const</td></tr>
+<tr class="memitem:a1653188ddb7e26d5e4799ca8f153409c" id="r_a1653188ddb7e26d5e4799ca8f153409c"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a1653188ddb7e26d5e4799ca8f153409c">list_in</a> (const <a class="el" href="structRealm_1_1MemoryQueryImpl_1_1AffinityCache.html">AffinityCache</a> *ac) const</td></tr>
 <tr class="memitem:ace17bb5e2b678091af9acc5022e8f2a5" id="r_ace17bb5e2b678091af9acc5022e8f2a5"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ace17bb5e2b678091af9acc5022e8f2a5">cached_list</a> () const</td></tr>
 <tr class="memitem:a226dd45baef2ca66c1e64a9c094c61eb" id="r_a226dd45baef2ca66c1e64a9c094c61eb"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a226dd45baef2ca66c1e64a9c094c61eb">REALM_ATTR_NOINLINE</a> (const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> *cached_list_lookup() const)</td></tr>
 <tr class="memitem:a525625e57e982bf77eac2790615a1690" id="r_a525625e57e982bf77eac2790615a1690"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a525625e57e982bf77eac2790615a1690">REALM_ATTR_NOINLINE</a> (const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> *cached_list_miss(unsigned generation) const)</td></tr>
 <tr class="memitem:a60830a5a890659c8853fad288332be6b" id="r_a60830a5a890659c8853fad288332be6b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="#ab61db433734b3dfbe74c6b1aac906102">KindCache</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a60830a5a890659c8853fad288332be6b">build_kind_cache</a> (unsigned generation) const</td></tr>
-<tr class="memitem:a334b221c16694387288b52e7c9284038" id="r_a334b221c16694387288b52e7c9284038"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a334b221c16694387288b52e7c9284038">best_affinity_list</a> () const</td></tr>
-<tr class="memitem:abcc6c6519250e24168146b930ba41f8f" id="r_abcc6c6519250e24168146b930ba41f8f"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#abcc6c6519250e24168146b930ba41f8f">REALM_ATTR_NOINLINE</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> best_affinity_next(<a class="el" href="classRealm_1_1Memory.html">Memory</a> after) const)</td></tr>
+<tr class="memitem:a790c7884992d7c1dc29fd45166d40634" id="r_a790c7884992d7c1dc29fd45166d40634"><td class="memItemLeft" align="right" valign="top"><a class="el" href="structRealm_1_1MemoryQueryImpl_1_1AffinityCache.html">AffinityCache</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a790c7884992d7c1dc29fd45166d40634">build_affinity_cache</a> (unsigned generation) const</td></tr>
+<tr class="memitem:a74ab3d99e3dd35f15f11ac06b1f5a11c" id="r_a74ab3d99e3dd35f15f11ac06b1f5a11c"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a74ab3d99e3dd35f15f11ac06b1f5a11c">own_list</a> () const</td></tr>
+<tr class="memitem:abf4f04bff09e97adb6ce884b8dc4afb4" id="r_abf4f04bff09e97adb6ce884b8dc4afb4"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#abf4f04bff09e97adb6ce884b8dc4afb4">REALM_ATTR_NOINLINE</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> own_list_next(<a class="el" href="classRealm_1_1Memory.html">Memory</a> after) const)</td></tr>
+<tr class="memitem:aa8e96d372bcf4ed80f953198a32c7407" id="r_aa8e96d372bcf4ed80f953198a32c7407"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aa8e96d372bcf4ed80f953198a32c7407">build_own_list</a> (std::vector&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a> &gt; &amp;result) const</td></tr>
 <tr class="memitem:af59128a31235199c0ffb441525636df5" id="r_af59128a31235199c0ffb441525636df5"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#af59128a31235199c0ffb441525636df5">build_best_affinity_list</a> (std::vector&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a> &gt; &amp;result) const</td></tr>
+<tr class="memitem:a718bbd431553a79e4b800782ce60ce35" id="r_a718bbd431553a79e4b800782ce60ce35"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a718bbd431553a79e4b800782ce60ce35">build_match_list</a> (std::vector&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a> &gt; &amp;result) const</td></tr>
 <tr class="memitem:a1870afcb278999de76e6867258051568" id="r_a1870afcb278999de76e6867258051568"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a1870afcb278999de76e6867258051568">attach</a> (const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> *list) const</td></tr>
 <tr class="memitem:ae35243ed26b95113f337d9cab5b46b20" id="r_ae35243ed26b95113f337d9cab5b46b20"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ae35243ed26b95113f337d9cab5b46b20">attached_list</a> () const</td></tr>
 <tr class="memitem:ada0af5c1af922317347c4f9464bd35d8" id="r_ada0af5c1af922317347c4f9464bd35d8"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ada0af5c1af922317347c4f9464bd35d8">reset_cached_list</a> ()</td></tr>
 <tr class="memitem:a9411afdf243effc731dfa6e09eb3924b" id="r_a9411afdf243effc731dfa6e09eb3924b"><td class="memItemLeft" align="right" valign="top">const std::map&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a>, <a class="el" href="structRealm_1_1Machine_1_1ProcessorMemoryAffinity.html">Machine::ProcessorMemoryAffinity</a> * &gt; *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a9411afdf243effc731dfa6e09eb3924b">anchor_affinities</a> (<a class="el" href="classRealm_1_1Processor.html">Processor</a> p, bool local_only) const</td></tr>
+<tr class="memitem:a79e634a0b723c875029f56b611e95cbd" id="r_a79e634a0b723c875029f56b611e95cbd"><td class="memItemLeft" align="right" valign="top">const std::map&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a>, <a class="el" href="structRealm_1_1Machine_1_1MemoryMemoryAffinity.html">Machine::MemoryMemoryAffinity</a> * &gt; *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a79e634a0b723c875029f56b611e95cbd">anchor_sources</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> m) const</td></tr>
+<tr class="memitem:aeccc0270fe4472286fd59df879d3941a" id="r_aeccc0270fe4472286fd59df879d3941a"><td class="memItemLeft" align="right" valign="top">const std::map&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a>, <a class="el" href="structRealm_1_1MachineMemInfo.html">MachineMemInfo</a> * &gt; *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aeccc0270fe4472286fd59df879d3941a">candidate_list</a> (<a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a> node) const</td></tr>
+<tr class="memitem:a22a0e1b7375df5269e73bb839b18cc40" id="r_a22a0e1b7375df5269e73bb839b18cc40"><td class="memTemplParams" colspan="2">template&lt;typename Fn&gt; </td></tr>
+<tr class="memitem:a22a0e1b7375df5269e73bb839b18cc40 template"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a22a0e1b7375df5269e73bb839b18cc40">for_each_anchored</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> after, Fn &amp;&amp;fn) const</td></tr>
+<tr class="memitem:aa8e5f19a4aec2b453e9a9d76d2afff19" id="r_aa8e5f19a4aec2b453e9a9d76d2afff19"><td class="memTemplParams" colspan="2">template&lt;typename Map, typename Fn&gt; </td></tr>
+<tr class="memitem:aa8e5f19a4aec2b453e9a9d76d2afff19 template"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aa8e5f19a4aec2b453e9a9d76d2afff19">scan_anchor</a> (const Map &amp;map, unsigned min_bandwidth, unsigned max_latency, <a class="el" href="classRealm_1_1Memory.html">Memory</a> after, Fn &amp;&amp;fn) const</td></tr>
+<tr class="memitem:acc05f295f0f1ea00cc2cb85e05c454ac" id="r_acc05f295f0f1ea00cc2cb85e05c454ac"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#acc05f295f0f1ea00cc2cb85e05c454ac">anchored_first</a> (void) const</td></tr>
+<tr class="memitem:a046bef7d65ff9bb8aed04994012e0fe7" id="r_a046bef7d65ff9bb8aed04994012e0fe7"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a046bef7d65ff9bb8aed04994012e0fe7">anchored_next</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> after) const</td></tr>
+<tr class="memitem:ac4b6a94355e7ff89b0a084cf36ffb426" id="r_ac4b6a94355e7ff89b0a084cf36ffb426"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ac4b6a94355e7ff89b0a084cf36ffb426">anchored_count_matches</a> (void) const</td></tr>
+<tr class="memitem:ad19248efd55a9b932f756bb0bcbf9a6f" id="r_ad19248efd55a9b932f756bb0bcbf9a6f"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ad19248efd55a9b932f756bb0bcbf9a6f">anchored_random</a> (void) const</td></tr>
 <tr class="memitem:a3f95675ec3d3a0b1b8d8d24aa015a781" id="r_a3f95675ec3d3a0b1b8d8d24aa015a781"><td class="memItemLeft" align="right" valign="top">const std::map&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a>, <a class="el" href="structRealm_1_1Machine_1_1MemoryMemoryAffinity.html">Machine::MemoryMemoryAffinity</a> * &gt; *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a3f95675ec3d3a0b1b8d8d24aa015a781">local_mem_affinities</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> m) const</td></tr>
 <tr class="memitem:abad2acf84905223c78f4da7dd139a0b2" id="r_abad2acf84905223c78f4da7dd139a0b2"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#abad2acf84905223c78f4da7dd139a0b2">candidate_matches</a> (<a class="el" href="classRealm_1_1Memory.html">Memory</a> m) const</td></tr>
 </table><table class="memberdecls">
@@ -211,7 +238,10 @@ Protected Attributes</h2></td></tr>
 <tr class="memitem:aab745bcccec223f4c95f7b9addd8f51c" id="r_aab745bcccec223f4c95f7b9addd8f51c"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aab745bcccec223f4c95f7b9addd8f51c">first_own</a></td></tr>
 <tr class="memitem:a208c0da0249d3f69ad7996fad58ed92f" id="r_a208c0da0249d3f69ad7996fad58ed92f"><td class="memItemLeft" align="right" valign="top">std::vector&lt; std::unique_ptr&lt; <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a208c0da0249d3f69ad7996fad58ed92f">own_lists</a></td></tr>
 <tr class="memitem:a749e31209b13e40177316a956efb2bea" id="r_a749e31209b13e40177316a956efb2bea"><td class="memItemLeft" align="right" valign="top">std::vector&lt; <a class="el" href="namespaceRealm.html#af5685ecad651601b884c7805ff713eb6">MemoryQueryPredicate</a> * &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a749e31209b13e40177316a956efb2bea">predicates</a></td></tr>
-<tr class="memitem:a79e9e04d7824d648306e5c9548a2051e" id="r_a79e9e04d7824d648306e5c9548a2051e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Processor.html">Processor</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a79e9e04d7824d648306e5c9548a2051e">affinity_proc</a></td></tr>
+<tr class="memitem:a8140bcb1ce814365914922652f83fa7b" id="r_a8140bcb1ce814365914922652f83fa7b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a8140bcb1ce814365914922652f83fa7b">cached_mem</a></td></tr>
+<tr class="memitem:a0245686fe6e28fbf0fca050fe252ba55" id="r_a0245686fe6e28fbf0fca050fe252ba55"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a0245686fe6e28fbf0fca050fe252ba55">is_cached_mem</a></td></tr>
+<tr class="memitem:aef7ccb2c7480df4b75fd8e093a9af4aa" id="r_aef7ccb2c7480df4b75fd8e093a9af4aa"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="structRealm_1_1AffinityAnchor.html">AffinityAnchor</a>&lt; <a class="el" href="classRealm_1_1Processor.html">Processor</a> &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aef7ccb2c7480df4b75fd8e093a9af4aa">anchor_proc</a></td></tr>
+<tr class="memitem:ad22888bc274f190ffb854702d8312627" id="r_ad22888bc274f190ffb854702d8312627"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="structRealm_1_1AffinityAnchor.html">AffinityAnchor</a>&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a> &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ad22888bc274f190ffb854702d8312627">anchor_mem</a></td></tr>
 <tr class="memitem:acf1b996f6b78e2c9bfe75d5d9b7fdd1c" id="r_acf1b996f6b78e2c9bfe75d5d9b7fdd1c"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="structRealm_1_1MemoryQueryImpl_1_1BestProcAffinityCostFn.html">BestProcAffinityCostFn</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#acf1b996f6b78e2c9bfe75d5d9b7fdd1c">best_proc_affinity_cost</a></td></tr>
 <tr class="memitem:a753b82b64c834de74aeb928f501d656e" id="r_a753b82b64c834de74aeb928f501d656e"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="structRealm_1_1MemoryQueryImpl_1_1BestMemAffinityCostFn.html">BestMemAffinityCostFn</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a753b82b64c834de74aeb928f501d656e">best_mem_affinity_cost</a></td></tr>
 </table><table class="memberdecls">
@@ -335,6 +365,40 @@ Friends</h2></td></tr>
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<a id="a8d1cd47376a6c26f97d53df1771ec1ec" name="a8d1cd47376a6c26f97d53df1771ec1ec"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8d1cd47376a6c26f97d53df1771ec1ec">&#9670;&#160;</a></span>add_anchor_mem()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::MemoryQueryImpl::add_anchor_mem </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a></td>          <td class="paramname"><span class="paramname"><em>m</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">unsigned</td>          <td class="paramname"><span class="paramname"><em>min_bandwidth</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">unsigned</td>          <td class="paramname"><span class="paramname"><em>max_latency</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a4b2b580cd5337f725e1bde0e27dae313" name="a4b2b580cd5337f725e1bde0e27dae313"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4b2b580cd5337f725e1bde0e27dae313">&#9670;&#160;</a></span>add_predicate()</h2>
 
@@ -398,6 +462,206 @@ Friends</h2></td></tr>
 
 </div>
 </div>
+<a id="a79e634a0b723c875029f56b611e95cbd" name="a79e634a0b723c875029f56b611e95cbd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a79e634a0b723c875029f56b611e95cbd">&#9670;&#160;</a></span>anchor_sources()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const std::map&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a>, <a class="el" href="structRealm_1_1Machine_1_1MemoryMemoryAffinity.html">Machine::MemoryMemoryAffinity</a> * &gt; * Realm::MemoryQueryImpl::anchor_sources </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a></td>          <td class="paramname"><span class="paramname"><em>m</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="acfc0febea8a39670a2cc3267a5e14ebd" name="acfc0febea8a39670a2cc3267a5e14ebd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acfc0febea8a39670a2cc3267a5e14ebd">&#9670;&#160;</a></span>anchored()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::MemoryQueryImpl::anchored </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ad351d26ff0472473732f1c80af2fb0b6" name="ad351d26ff0472473732f1c80af2fb0b6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad351d26ff0472473732f1c80af2fb0b6">&#9670;&#160;</a></span>anchored_count()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">unsigned long Realm::MemoryQueryImpl::anchored_count </td>
+          <td>(</td>
+          <td class="paramtype">void</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ac4b6a94355e7ff89b0a084cf36ffb426" name="ac4b6a94355e7ff89b0a084cf36ffb426"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac4b6a94355e7ff89b0a084cf36ffb426">&#9670;&#160;</a></span>anchored_count_matches()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">size_t Realm::MemoryQueryImpl::anchored_count_matches </td>
+          <td>(</td>
+          <td class="paramtype">void</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="acc05f295f0f1ea00cc2cb85e05c454ac" name="acc05f295f0f1ea00cc2cb85e05c454ac"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acc05f295f0f1ea00cc2cb85e05c454ac">&#9670;&#160;</a></span>anchored_first()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="classRealm_1_1Memory.html">Memory</a> Realm::MemoryQueryImpl::anchored_first </td>
+          <td>(</td>
+          <td class="paramtype">void</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a046bef7d65ff9bb8aed04994012e0fe7" name="a046bef7d65ff9bb8aed04994012e0fe7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a046bef7d65ff9bb8aed04994012e0fe7">&#9670;&#160;</a></span>anchored_next()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="classRealm_1_1Memory.html">Memory</a> Realm::MemoryQueryImpl::anchored_next </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a></td>          <td class="paramname"><span class="paramname"><em>after</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ad19248efd55a9b932f756bb0bcbf9a6f" name="ad19248efd55a9b932f756bb0bcbf9a6f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad19248efd55a9b932f756bb0bcbf9a6f">&#9670;&#160;</a></span>anchored_random()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="classRealm_1_1Memory.html">Memory</a> Realm::MemoryQueryImpl::anchored_random </td>
+          <td>(</td>
+          <td class="paramtype">void</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a205a8a466b0ad2d51683d953f5e5e220" name="a205a8a466b0ad2d51683d953f5e5e220"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a205a8a466b0ad2d51683d953f5e5e220">&#9670;&#160;</a></span>anchored_visits()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">unsigned long Realm::MemoryQueryImpl::anchored_visits </td>
+          <td>(</td>
+          <td class="paramtype">void</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a1870afcb278999de76e6867258051568" name="a1870afcb278999de76e6867258051568"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a1870afcb278999de76e6867258051568">&#9670;&#160;</a></span>attach()</h2>
 
@@ -448,8 +712,8 @@ Friends</h2></td></tr>
 
 </div>
 </div>
-<a id="a334b221c16694387288b52e7c9284038" name="a334b221c16694387288b52e7c9284038"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a334b221c16694387288b52e7c9284038">&#9670;&#160;</a></span>best_affinity_list()</h2>
+<a id="a790c7884992d7c1dc29fd45166d40634" name="a790c7884992d7c1dc29fd45166d40634"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a790c7884992d7c1dc29fd45166d40634">&#9670;&#160;</a></span>build_affinity_cache()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -458,9 +722,9 @@ Friends</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> * Realm::MemoryQueryImpl::best_affinity_list </td>
+          <td class="memname"><a class="el" href="structRealm_1_1MemoryQueryImpl_1_1AffinityCache.html">AffinityCache</a> * Realm::MemoryQueryImpl::build_affinity_cache </td>
           <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td class="paramtype">unsigned</td>          <td class="paramname"><span class="paramname"><em>generation</em></span></td><td>)</td>
           <td> const</td>
         </tr>
       </table>
@@ -511,6 +775,56 @@ Friends</h2></td></tr>
           <td class="memname"><a class="el" href="#ab61db433734b3dfbe74c6b1aac906102">KindCache</a> * Realm::MemoryQueryImpl::build_kind_cache </td>
           <td>(</td>
           <td class="paramtype">unsigned</td>          <td class="paramname"><span class="paramname"><em>generation</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a718bbd431553a79e4b800782ce60ce35" name="a718bbd431553a79e4b800782ce60ce35"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a718bbd431553a79e4b800782ce60ce35">&#9670;&#160;</a></span>build_match_list()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::MemoryQueryImpl::build_match_list </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a> &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>result</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="aa8e96d372bcf4ed80f953198a32c7407" name="aa8e96d372bcf4ed80f953198a32c7407"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa8e96d372bcf4ed80f953198a32c7407">&#9670;&#160;</a></span>build_own_list()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::MemoryQueryImpl::build_own_list </td>
+          <td>(</td>
+          <td class="paramtype">std::vector&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a> &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>result</em></span></td><td>)</td>
           <td> const</td>
         </tr>
       </table>
@@ -624,6 +938,31 @@ Friends</h2></td></tr>
 
 </div>
 </div>
+<a id="aeccc0270fe4472286fd59df879d3941a" name="aeccc0270fe4472286fd59df879d3941a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aeccc0270fe4472286fd59df879d3941a">&#9670;&#160;</a></span>candidate_list()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const std::map&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a>, <a class="el" href="structRealm_1_1MachineMemInfo.html">MachineMemInfo</a> * &gt; * Realm::MemoryQueryImpl::candidate_list </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="namespaceRealm.html#a4ae47f41d88cffb2debee742cbbfe2dd">NodeID</a></td>          <td class="paramname"><span class="paramname"><em>node</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="abad2acf84905223c78f4da7dd139a0b2" name="abad2acf84905223c78f4da7dd139a0b2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abad2acf84905223c78f4da7dd139a0b2">&#9670;&#160;</a></span>candidate_matches()</h2>
 
@@ -683,6 +1022,87 @@ Friends</h2></td></tr>
 
 </div>
 </div>
+<a id="a22a0e1b7375df5269e73bb839b18cc40" name="a22a0e1b7375df5269e73bb839b18cc40"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a22a0e1b7375df5269e73bb839b18cc40">&#9670;&#160;</a></span>for_each_anchored()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Fn&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::MemoryQueryImpl::for_each_anchored </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a></td>          <td class="paramname"><span class="paramname"><em>after</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">Fn &amp;&amp;</td>          <td class="paramname"><span class="paramname"><em>fn</em></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a1653188ddb7e26d5e4799ca8f153409c" name="a1653188ddb7e26d5e4799ca8f153409c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1653188ddb7e26d5e4799ca8f153409c">&#9670;&#160;</a></span>list_in() <span class="overload">[1/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> * Realm::MemoryQueryImpl::list_in </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="structRealm_1_1MemoryQueryImpl_1_1AffinityCache.html">AffinityCache</a> *</td>          <td class="paramname"><span class="paramname"><em>ac</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a875df43c62f15697d762ed249465d151" name="a875df43c62f15697d762ed249465d151"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a875df43c62f15697d762ed249465d151">&#9670;&#160;</a></span>list_in() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> * Realm::MemoryQueryImpl::list_in </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="#ab61db433734b3dfbe74c6b1aac906102">KindCache</a> *</td>          <td class="paramname"><span class="paramname"><em>kc</em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="a3f95675ec3d3a0b1b8d8d24aa015a781" name="a3f95675ec3d3a0b1b8d8d24aa015a781"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3f95675ec3d3a0b1b8d8d24aa015a781">&#9670;&#160;</a></span>local_mem_affinities()</h2>
 
@@ -721,6 +1141,31 @@ Friends</h2></td></tr>
           <td> const</td>
         </tr>
       </table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a74ab3d99e3dd35f15f11ac06b1f5a11c" name="a74ab3d99e3dd35f15f11ac06b1f5a11c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a74ab3d99e3dd35f15f11ac06b1f5a11c">&#9670;&#160;</a></span>own_list()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> * Realm::MemoryQueryImpl::own_list </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
 </div><div class="memdoc">
 
 </div>
@@ -792,8 +1237,8 @@ Friends</h2></td></tr>
 
 </div>
 </div>
-<a id="abcc6c6519250e24168146b930ba41f8f" name="abcc6c6519250e24168146b930ba41f8f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#abcc6c6519250e24168146b930ba41f8f">&#9670;&#160;</a></span>REALM_ATTR_NOINLINE() <span class="overload">[3/3]</span></h2>
+<a id="abf4f04bff09e97adb6ce884b8dc4afb4" name="abf4f04bff09e97adb6ce884b8dc4afb4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abf4f04bff09e97adb6ce884b8dc4afb4">&#9670;&#160;</a></span>REALM_ATTR_NOINLINE() <span class="overload">[3/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -804,7 +1249,7 @@ Friends</h2></td></tr>
         <tr>
           <td class="memname">Realm::MemoryQueryImpl::REALM_ATTR_NOINLINE </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a> best_affinity_next(<a class="el" href="classRealm_1_1Memory.html">Memory</a> after) const</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a> own_list_next(<a class="el" href="classRealm_1_1Memory.html">Memory</a> after) const</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -853,6 +1298,31 @@ Friends</h2></td></tr>
   </td>
   <td class="mlabels-right">
 <span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="aff2fc760182dc1321052c3c2086de045" name="aff2fc760182dc1321052c3c2086de045"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aff2fc760182dc1321052c3c2086de045">&#9670;&#160;</a></span>reset_cached_mem()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::MemoryQueryImpl::reset_cached_mem </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -910,19 +1380,107 @@ Friends</h2></td></tr>
 
 </div>
 </div>
-<a id="a768cadf54967b5b00662c80fcc4a95b7" name="a768cadf54967b5b00662c80fcc4a95b7"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a768cadf54967b5b00662c80fcc4a95b7">&#9670;&#160;</a></span>set_affinity_proc()</h2>
+<a id="aa8e5f19a4aec2b453e9a9d76d2afff19" name="aa8e5f19a4aec2b453e9a9d76d2afff19"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa8e5f19a4aec2b453e9a9d76d2afff19">&#9670;&#160;</a></span>scan_anchor()</h2>
 
 <div class="memitem">
 <div class="memproto">
+<div class="memtemplate">
+template&lt;typename Map, typename Fn&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void Realm::MemoryQueryImpl::set_affinity_proc </td>
+          <td class="memname">void Realm::MemoryQueryImpl::scan_anchor </td>
           <td>(</td>
-          <td class="paramtype"><a class="el" href="classRealm_1_1Processor.html">Processor</a></td>          <td class="paramname"><span class="paramname"><em>p</em></span></td><td>)</td>
+          <td class="paramtype">const Map &amp;</td>          <td class="paramname"><span class="paramname"><em>map</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">unsigned</td>          <td class="paramname"><span class="paramname"><em>min_bandwidth</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">unsigned</td>          <td class="paramname"><span class="paramname"><em>max_latency</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a></td>          <td class="paramname"><span class="paramname"><em>after</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">Fn &amp;&amp;</td>          <td class="paramname"><span class="paramname"><em>fn</em></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a93aa12e4fea0e3b7f5233cb9e4d6ad43" name="a93aa12e4fea0e3b7f5233cb9e4d6ad43"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a93aa12e4fea0e3b7f5233cb9e4d6ad43">&#9670;&#160;</a></span>set_anchor_proc()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::MemoryQueryImpl::set_anchor_proc </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Processor.html">Processor</a></td>          <td class="paramname"><span class="paramname"><em>p</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">unsigned</td>          <td class="paramname"><span class="paramname"><em>min_bandwidth</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">unsigned</td>          <td class="paramname"><span class="paramname"><em>max_latency</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ad77451adeb6eb56e080649240869d3e3" name="ad77451adeb6eb56e080649240869d3e3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad77451adeb6eb56e080649240869d3e3">&#9670;&#160;</a></span>set_cached_mem()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::MemoryQueryImpl::set_cached_mem </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="classRealm_1_1Memory.html">Memory</a></td>          <td class="paramname"><span class="paramname"><em>m</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
 </div><div class="memdoc">
 
 </div>
@@ -946,6 +1504,31 @@ Friends</h2></td></tr>
   </td>
   <td class="mlabels-right">
 <span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="aedc9bbe3ea5ff2db947f306f644098c3" name="aedc9bbe3ea5ff2db947f306f644098c3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aedc9bbe3ea5ff2db947f306f644098c3">&#9670;&#160;</a></span>walk_count()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">unsigned long Realm::MemoryQueryImpl::walk_count </td>
+          <td>(</td>
+          <td class="paramtype">void</td>          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -1039,8 +1622,8 @@ Friends</h2></td></tr>
 </div>
 </div>
 <a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
-<a id="a79e9e04d7824d648306e5c9548a2051e" name="a79e9e04d7824d648306e5c9548a2051e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a79e9e04d7824d648306e5c9548a2051e">&#9670;&#160;</a></span>affinity_proc</h2>
+<a id="a16a61552ac75aa67f4f3ea2a52f76c75" name="a16a61552ac75aa67f4f3ea2a52f76c75"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a16a61552ac75aa67f4f3ea2a52f76c75">&#9670;&#160;</a></span>affinity_cache</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1049,7 +1632,51 @@ Friends</h2></td></tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="classRealm_1_1Processor.html">Processor</a> Realm::MemoryQueryImpl::affinity_proc</td>
+          <td class="memname"><a class="el" href="classRealm_1_1QueryCacheSlot.html">QueryCacheSlot</a>&lt;<a class="el" href="structRealm_1_1MemoryQueryImpl_1_1AffinityCache.html">AffinityCache</a>&gt; Realm::MemoryQueryImpl::affinity_cache</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="ad22888bc274f190ffb854702d8312627" name="ad22888bc274f190ffb854702d8312627"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad22888bc274f190ffb854702d8312627">&#9670;&#160;</a></span>anchor_mem</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="structRealm_1_1AffinityAnchor.html">AffinityAnchor</a>&lt;<a class="el" href="classRealm_1_1Memory.html">Memory</a>&gt; &gt; Realm::MemoryQueryImpl::anchor_mem</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="aef7ccb2c7480df4b75fd8e093a9af4aa" name="aef7ccb2c7480df4b75fd8e093a9af4aa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aef7ccb2c7480df4b75fd8e093a9af4aa">&#9670;&#160;</a></span>anchor_proc</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="structRealm_1_1AffinityAnchor.html">AffinityAnchor</a>&lt;<a class="el" href="classRealm_1_1Processor.html">Processor</a>&gt; &gt; Realm::MemoryQueryImpl::anchor_proc</td>
         </tr>
       </table>
   </td>
@@ -1171,6 +1798,28 @@ Friends</h2></td></tr>
 
 </div>
 </div>
+<a id="a8140bcb1ce814365914922652f83fa7b" name="a8140bcb1ce814365914922652f83fa7b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8140bcb1ce814365914922652f83fa7b">&#9670;&#160;</a></span>cached_mem</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="classRealm_1_1Memory.html">Memory</a> Realm::MemoryQueryImpl::cached_mem</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
 <a id="aab745bcccec223f4c95f7b9addd8f51c" name="aab745bcccec223f4c95f7b9addd8f51c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aab745bcccec223f4c95f7b9addd8f51c">&#9670;&#160;</a></span>first_own</h2>
 
@@ -1187,6 +1836,28 @@ Friends</h2></td></tr>
   </td>
   <td class="mlabels-right">
 <span class="mlabels"><span class="mlabel mutable">mutable</span><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="a0245686fe6e28fbf0fca050fe252ba55" name="a0245686fe6e28fbf0fca050fe252ba55"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0245686fe6e28fbf0fca050fe252ba55">&#9670;&#160;</a></span>is_cached_mem</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::MemoryQueryImpl::is_cached_mem</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">

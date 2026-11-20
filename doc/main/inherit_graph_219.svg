@@ -11,12 +11,12 @@
 <!-- Node0 -->
 <g id="Node000000" class="node">
 <title>Node0</title>
-<g id="a_Node000000"><a xlink:href="structRealm_1_1DynamicTemplates_1_1TypeListElem_1_1TypeToIndex_3_01HEAD_00_01ORIG_01_4.html" target="_top" xlink:title=" ">
+<g id="a_Node000000"><a xlink:href="structRealm_1_1DynamicTemplates_1_1TypeListElem_1_1TypePresent.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="147.25,-59 0,-59 0,0 147.25,0 147.25,-59"/>
 <text xml:space="preserve" text-anchor="start" x="8" y="-45.5" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::DynamicTemplates</text>
 <text xml:space="preserve" text-anchor="start" x="8" y="-32.75" font-family="Helvetica,sans-Serif" font-size="10.00">::TypeListElem&lt; _HEAD,</text>
-<text xml:space="preserve" text-anchor="start" x="8" y="-20" font-family="Helvetica,sans-Serif" font-size="10.00"> _TAIL &gt;::TypeToIndex&lt;</text>
-<text xml:space="preserve" text-anchor="middle" x="73.62" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00"> HEAD, ORIG &gt;</text>
+<text xml:space="preserve" text-anchor="start" x="8" y="-20" font-family="Helvetica,sans-Serif" font-size="10.00"> _TAIL &gt;::TypePresent&lt;</text>
+<text xml:space="preserve" text-anchor="middle" x="73.62" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00"> T, ORIG &gt;</text>
 </a>
 </g>
 </g>

@@ -11,10 +11,10 @@
 <!-- Node0 -->
 <g id="Node000000" class="node">
 <title>Node0</title>
-<g id="a_Node000000"><a xlink:href="structRealm_1_1BasicRangeAllocator_1_1Range.html" target="_top" xlink:title=" ">
+<g id="a_Node000000"><a xlink:href="structRealm_1_1BasicRangeAllocator_1_1MemoryStats.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="154,-33.5 0,-33.5 0,0 154,0 154,-33.5"/>
 <text xml:space="preserve" text-anchor="start" x="8" y="-20" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::BasicRangeAllocator</text>
-<text xml:space="preserve" text-anchor="middle" x="77" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00">&lt; RT, TT &gt;::Range</text>
+<text xml:space="preserve" text-anchor="middle" x="77" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00">&lt; RT, TT &gt;::MemoryStats</text>
 </a>
 </g>
 </g>

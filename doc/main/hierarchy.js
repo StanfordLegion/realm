@@ -60,6 +60,8 @@ var hierarchy =
     [ "Realm::Cuda::AffineSubRect&lt; N, Offset_t &gt;", "structRealm_1_1Cuda_1_1AffineSubRect.html", null ],
     [ "Realm::Hip::AffineSubRect&lt; N, Offset_t &gt;", "structRealm_1_1Hip_1_1AffineSubRect.html", null ],
     [ "Realm::AffineTransform&lt; M, N, T &gt;", "classRealm_1_1AffineTransform.html", null ],
+    [ "Realm::AffinityAnchor&lt; T &gt;", "structRealm_1_1AffinityAnchor.html", null ],
+    [ "Realm::MemoryQueryImpl::AffinityCache", "structRealm_1_1MemoryQueryImpl_1_1AffinityCache.html", null ],
     [ "Realm::ProcessorQueryImpl::AffinityCache", "structRealm_1_1ProcessorQueryImpl_1_1AffinityCache.html", null ],
     [ "Realm::AsyncFileIOContext::AIOOperation", "classRealm_1_1AsyncFileIOContext_1_1AIOOperation.html", null ],
     [ "Realm::MPI::AM_msg", "structRealm_1_1MPI_1_1AM__msg.html", null ],
