@@ -346,6 +346,50 @@ namespace {
                              .has_affinity_to(sysmem));
         },
         n);
+    // the processors of every kind with an affinity to a memory
+    iterate(Machine::ProcessorQuery(machine).has_affinity_to(sysmem), &n);
+    add(
+        "procs_affinity_iter_global",
+        [=]() -> uint64_t {
+          return iterate(Machine::ProcessorQuery(machine).has_affinity_to(sysmem));
+        },
+        n);
+    add(
+        "procs_affinity_count_global",
+        [=]() -> uint64_t {
+          return Machine::ProcessorQuery(machine).has_affinity_to(sysmem).count();
+        },
+        n);
+    // with a bandwidth bound, which the shared lists do not answer
+    iterate(Machine::ProcessorQuery(machine).has_affinity_to(sysmem, 1 /*min bw*/), &n);
+    add(
+        "procs_affinity_bw_iter_global",
+        [=]() -> uint64_t {
+          return iterate(
+              Machine::ProcessorQuery(machine).has_affinity_to(sysmem, 1 /*min bw*/));
+        },
+        n);
+    add(
+        "procs_affinity_bw_count_global",
+        [=]() -> uint64_t {
+          return Machine::ProcessorQuery(machine).has_affinity_to(sysmem, 1).count();
+        },
+        n);
+    // every processor in the machine, and those of one node
+    iterate(Machine::ProcessorQuery(machine), &n);
+    add(
+        "procs_all_iter",
+        [=]() -> uint64_t { return iterate(Machine::ProcessorQuery(machine)); }, n);
+    add(
+        "procs_all_count",
+        [=]() -> uint64_t { return Machine::ProcessorQuery(machine).count(); }, n);
+    iterate(Machine::ProcessorQuery(machine).local_address_space(), &n);
+    add(
+        "procs_all_iter_local",
+        [=]() -> uint64_t {
+          return iterate(Machine::ProcessorQuery(machine).local_address_space());
+        },
+        n);
 
     // --- memory queries ---------------------------------------------------
     add(
@@ -419,6 +463,75 @@ namespace {
               .id;
         },
         1);
+    // the memories with a copy path to a memory
+    iterate(Machine::MemoryQuery(machine).has_affinity_to(mm_dst), &n);
+    add(
+        "mems_affinity_mem_iter_global",
+        [=]() -> uint64_t {
+          return iterate(Machine::MemoryQuery(machine).has_affinity_to(mm_dst));
+        },
+        n);
+    add(
+        "mems_affinity_mem_count_global",
+        [=]() -> uint64_t {
+          return Machine::MemoryQuery(machine).has_affinity_to(mm_dst).count();
+        },
+        n);
+    iterate(Machine::MemoryQuery(machine).has_affinity_to(mm_dst, 1 /*min bw*/), &n);
+    add(
+        "mems_affinity_mem_bw_iter_global",
+        [=]() -> uint64_t {
+          return iterate(Machine::MemoryQuery(machine).has_affinity_to(mm_dst, 1));
+        },
+        n);
+    add(
+        "mems_affinity_mem_bw_count_global",
+        [=]() -> uint64_t {
+          return Machine::MemoryQuery(machine).has_affinity_to(mm_dst, 1).count();
+        },
+        n);
+    // the same with a target on this node (on one rank, mm_dst is local too)
+    iterate(Machine::MemoryQuery(machine).has_affinity_to(sysmem, 1 /*min bw*/), &n);
+    add(
+        "mems_affinity_sysmem_bw_iter",
+        [=]() -> uint64_t {
+          return iterate(Machine::MemoryQuery(machine).has_affinity_to(sysmem, 1));
+        },
+        n);
+    add(
+        "mems_affinity_sysmem_bw_count",
+        [=]() -> uint64_t {
+          return Machine::MemoryQuery(machine).has_affinity_to(sysmem, 1).count();
+        },
+        n);
+    // every memory, those of one node, and those with room (a walk)
+    iterate(Machine::MemoryQuery(machine), &n);
+    add(
+        "mems_all_iter",
+        [=]() -> uint64_t { return iterate(Machine::MemoryQuery(machine)); }, n);
+    add(
+        "mems_all_count",
+        [=]() -> uint64_t { return Machine::MemoryQuery(machine).count(); }, n);
+    iterate(Machine::MemoryQuery(machine).local_address_space(), &n);
+    add(
+        "mems_all_iter_local",
+        [=]() -> uint64_t {
+          return iterate(Machine::MemoryQuery(machine).local_address_space());
+        },
+        n);
+    iterate(Machine::MemoryQuery(machine).has_capacity(1), &n);
+    add(
+        "mems_capacity_iter_global",
+        [=]() -> uint64_t {
+          return iterate(Machine::MemoryQuery(machine).has_capacity(1));
+        },
+        n);
+    add(
+        "mems_capacity_count_global",
+        [=]() -> uint64_t {
+          return Machine::MemoryQuery(machine).has_capacity(1).count();
+        },
+        n);
 
     // --- direct affinity lookups -----------------------------------------
     add(
