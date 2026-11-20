@@ -925,7 +925,7 @@ if(REALM_USE_CUDA)
       ${PROJECT_SOURCE_DIR}/cmake/bin2c.cmake
     VERBATIM
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS realm_cuda_fatbin
+    DEPENDS realm_cuda_fatbin $<TARGET_OBJECTS:realm_cuda_fatbin>
     COMMENT "Embedding binary objects realm_cuda_fatbin -> ${realm_fatbin_cc}"
   )
   add_custom_target(realm_cuda_fatbin_tgt DEPENDS "${realm_fatbin_cc}")
@@ -973,7 +973,7 @@ if(REALM_USE_HIP)
         -P ${PROJECT_SOURCE_DIR}/cmake/bin2c.cmake
     VERBATIM
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS realm_hip_fatbin
+    DEPENDS realm_hip_fatbin $<TARGET_OBJECTS:realm_hip_fatbin>
     COMMENT "Embedding binary objects realm_hip_fatbin -> ${realm_hip_fatbin_cc}"
   )
   add_custom_target(realm_hip_fatbin_tgt DEPENDS "${realm_hip_fatbin_cc}")
