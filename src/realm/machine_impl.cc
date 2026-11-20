@@ -1367,7 +1367,7 @@ namespace Realm {
   Machine::ProcessorQuery &Machine::ProcessorQuery::same_address_space_as(Memory m)
   {
     impl = ((ProcessorQueryImpl *)impl)->writeable_reference();
-    ((ProcessorQueryImpl *)impl)->restrict_to_node(ID(m).proc_owner_node());
+    ((ProcessorQueryImpl *)impl)->restrict_to_node(ID(m).memory_owner_node());
     return *this;
   }
 

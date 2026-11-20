@@ -419,7 +419,7 @@ namespace Realm {
         : rwlock(_rwlock)
       {}
       void lock() { rwlock.wrlock(); }
-      void trylock() { rwlock.trywrlock(); }
+      bool trylock() { return rwlock.trywrlock(); }
       void unlock() { rwlock.unlock(); }
 
     protected:
@@ -431,7 +431,7 @@ namespace Realm {
         : rwlock(_rwlock)
       {}
       void lock() { rwlock.rdlock(); }
-      void trylock() { rwlock.tryrdlock(); }
+      bool trylock() { return rwlock.tryrdlock(); }
       void unlock() { rwlock.unlock(); }
 
     protected:

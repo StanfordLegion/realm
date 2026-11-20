@@ -1190,7 +1190,7 @@ namespace Realm {
     } else
       return false;
 #else
-    int ret = pthread_rwlock_trywrlock(rwlock);
+    int ret = pthread_rwlock_tryrdlock(rwlock);
     return (ret == 0);
 #endif
   }
