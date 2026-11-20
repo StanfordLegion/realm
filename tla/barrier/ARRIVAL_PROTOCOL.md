@@ -373,7 +373,7 @@ single integer, which erases the timestamps.** Three rules follow.
    ALTERING node — whose floor makes every one of its arrivals bypass — into
    eager flush for the life of the barrier. An alterer needs no flush: it is
    in the owner's non-member set, so no future plan gives it a quota and it
-   can strand nobody, which the owner fans down the live tree and
+   can strand nobody, and the owner fans that flush down the live tree and
    re-fans down any tree it builds before the generation triggers. That is
    per-generation and state-free, so neither hole exists. The retirement is kept
    for CONVERGENCE only — it rebuilds a plan that still hands quota to a node
@@ -944,10 +944,10 @@ barrier's actual state, not the issuing rank's private arithmetic. The owner's
 abort on a non-positive count (`:1614-1621`) is the correct response to an
 ill-formed program.
 
-**Consequence for the implementation: none.** No code change, and no `event.h`
-change is required. If anything is added it is a clarifying sentence making the
-chaining rule explicit rather than implied by the sibling and terminal-negative
-paragraphs. Both probes are retained as documentation of what the runtime does
+**Consequence for the implementation: none.** No code change is required, and
+no change to what `event.h` *means*. `event.h` does gain a CHAIN YOUR DECREMENTS
+paragraph, which restates the chaining rule in one place rather than leaving it
+implied by the sibling, reserved-arrival and terminal-negative paragraphs. Both probes are retained as documentation of what the runtime does
 with an ill-formed program: `negmask` variant 0 triggers early and then reports
 both alterations as landing on a triggered generation; `negzero` variant 0
 aborts. Neither is a target to "fix".

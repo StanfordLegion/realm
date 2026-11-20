@@ -625,7 +625,9 @@ RecvInvalidate(m) ==
                       \*  descendant, who additionally never see the invalidation
                       \*  at all - the one node positioned to route it down the
                       \*  dead plan's edges spent it in this very action.
-                      live == dk > m.epoch
+                      \* R3-06: an invalidation older than the installed plan
+                      \* unparks nothing - see the curPlan comment below.
+                      live == (dk > m.epoch) /\ (myEpoch[m.to] <= m.epoch)
                   IN  /\ msgs' = (msgs \ {m})
                                  \cup { [ kind |-> "invalidate", from |-> m.to,
                                           to |-> c, epoch |-> m.epoch ] : c \in kids }
@@ -693,14 +695,23 @@ RecvInvalidate(m) ==
                       \* R2-09: an invalidation OLDER than the installed plan
                       \* is a death notice for a plan this node has moved past;
                       \* clearing on it discards a live newer plan and leaves
-                      \* the subtree eager.  Convergence only.
+                      \* the subtree eager.
+                      \* R3-06: and it must not UNPARK either.  Installing the
+                      \* parked plan replaces the child list before the
+                      \* invalidation that does retire the installed plan
+                      \* arrives, so that one can never be forwarded to the
+                      \* children the old plan named - leaving a child holding
+                      \* a dead plan that no flush reaches, which is exactly
+                      \* what ReachableWhileHolding forbids.
                       /\ curPlan' = IF live THEN [curPlan EXCEPT ![m.to] = Plans[dk][m.to]]
                                      ELSE IF myEpoch[m.to] > m.epoch THEN curPlan
                                      ELSE [curPlan EXCEPT ![m.to] =
                                              [quota |-> 0, inplan |-> FALSE,
                                               kids |-> {}]]
                       /\ myEpoch' = IF live THEN [myEpoch EXCEPT ![m.to] = dk] ELSE myEpoch
-                      /\ deferEpoch' = [deferEpoch EXCEPT ![m.to] = 0]
+                      /\ deferEpoch' = IF myEpoch[m.to] > m.epoch
+                                         THEN deferEpoch  \* R3-06: keep the park
+                                         ELSE [deferEpoch EXCEPT ![m.to] = 0]
               /\ invalEpoch' = [invalEpoch EXCEPT ![m.to] = m.epoch]
     /\ reportTo' = Pin(reportTo, m.to,
                         { g \in Gens : ~triggered[g] /\ Unreported(m.to, g) > 0 })

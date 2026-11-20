@@ -93,7 +93,10 @@ ARRIVAL = [
   [("TargetOf(n, g) == IF reportTo[n][g] # NoTarget THEN reportTo[n][g] ELSE ParentOf(n)",
     "TargetOf(n, g) == ParentOf(n)")]),
  ("no live guard: parked plan installed by its own retirement", "Strand2.cfg", "MCStrand2", "CATCH",
-  [("                      live == dk > m.epoch", "                      live == dk > 0")]),
+  # R3-06 added the myEpoch conjunct; the mutation still removes the liveness
+  #  guard, which is what it tests.
+  [("                      live == (dk > m.epoch) /\\ (myEpoch[m.to] <= m.epoch)",
+    "                      live == (dk > 0) /\\ (myEpoch[m.to] <= m.epoch)")]),
  ("no install guard: newplan installed after its retirement was seen", "Strand2.cfg", "MCStrand2", "CATCH",
   [("    /\\ IF (myEpoch[m.to] >= m.epoch) \\/ (invalEpoch[m.to] >= m.epoch)",
     "    /\\ IF myEpoch[m.to] >= m.epoch")]),

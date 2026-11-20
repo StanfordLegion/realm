@@ -1293,22 +1293,17 @@ namespace Realm {
       //     waits on the barrier; non-zero only on an arrival-only participant.
       uint64_t reclaim_pulls = 0;
 
-      // --- CONTRACT VIOLATION, OBSERVED LATE (review round 2 follow-up).  An
-      //     arrival that reaches the owner for a generation that has ALREADY
-      //     triggered says the generation triggered without it - the same
-      //     "barrier that triggered too early" the alteration path reports as
-      //     fatal (:1605).  The runtime ABORTS on it, so in a correct program
-      //     this counter is always zero; it exists as the exercise-proof that
-      //     licenses the abort - a legal workload that incremented it would
-      //     mean the check is wrong, not the application.  Reports are
-      //     deliberately NOT checked this way: a stale report after a plan
-      //     switch is legitimate (rule 10).  Non-zero means some rank broke
-      //     the arrival contract, typically an unchained decrement (event.h).
-      //     NOTE: this covers only BYPASSED (timestamped) arrivals.  A late
-      //     arrival from a node that never altered travels as an ordinary
-      //     report and cannot be told apart from a stale one, so it is not
-      //     flagged.  A locally-issued extra arrival is caught earlier, by the
-      //     DEBUG-only assert in adjust_arrival (:3818).
+      // --- STALE OR LATE BYPASSED ARRIVALS DROPPED AT THE OWNER.  A ts
+      //     arrival carries a CUMULATIVE count applied replace-if-higher, so a
+      //     value that no longer exceeds what the owner holds is stale by
+      //     design, and two arrivals from one node can reach the owner in
+      //     either order (R3-01).  Once the generation has triggered and its
+      //     record is freed, a stale value and a genuinely late arrival are
+      //     INDISTINGUISHABLE here, so this is a diagnostic, NOT a contract
+      //     check: it is expected to be non-zero on correct programs under
+      //     concurrent arrivals from one node.  An early trigger is caught on
+      //     the alteration side instead (apply_alter_locked), which is
+      //     deterministic.
       uint64_t late_arrivals_dropped = 0;
 
       // has anything at all happened worth reporting?
@@ -1446,6 +1441,13 @@ namespace Realm {
     // R2-04 - retire the live plan before a generation whose expected count
     //  drops, so a plan is never left over-predicting a generation it governs.
     void retire_at_negative_step_locked(PendingSends &sends);
+    // R3-07 - the owner's bypass-slack valve: flush a generation whose
+    //  bypassed arrivals have eaten past what the live plan left for them.
+    void check_bypass_slack_locked(gen_t gen, Generation &g, PendingSends &sends);
+    // R3-05 - legacy (reduction) increments and scalable cumulative arrivals
+    //  from one sender under one gate must not share a ts stream.  Node ids
+    //  stay well below this, so tagging the key's 'from' separates them.
+    static const NodeID LEGACY_STREAM_TAG = (1 << 30);
 
     // ARRIVAL_PROTOCOL rule 5 - install a plan record decoded from a 'newplan'
     //  payload and record the fan-out to this node's children in the new tree.
