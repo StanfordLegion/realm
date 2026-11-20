@@ -624,9 +624,9 @@ namespace Realm {
     //  reduction barrier from a node that has not yet learned 'redop_id': it
     //  takes the scalable route, so the owner poisons the generation, but the
     //  legacy trigger notification carries no poison and subscribers see a
-    //  clean generation.  Closing that needs the bit on the wire.  R2-05 made adjust_arrival ask
-    //  the FAULT-AWARE question, so an already-poisoned precondition no longer
-    //  aborts; on the scalable path the bit reaches the generation, because
+    //  clean generation.  Closing that needs the bit on the wire.  R2-05 made
+    //  adjust_arrival ask the FAULT-AWARE question, so an already-poisoned precondition
+    //  no longer aborts; on the scalable path the bit reaches the generation, because
     //  BarrierTsArrivalMessage carries it.  On the LEGACY path it does not: a
     //  non-owner breaks out to 'forward_to_node' before the generation record
     //  is touched, and BarrierAdjustMessage cannot carry the bit - adding a
@@ -1611,10 +1611,10 @@ namespace Realm {
         //  open generation so later counts stayed consistent.  That is the
         //  wrong trade: it keeps a barrier the application has already
         //  corrupted limping along, and whether this alteration or the late
-        //  arrival (the ts-arrival handler) reaches the owner first is a race - so warning on
-        //  one and continuing on the other makes the failure look
-        //  intermittent and sends the author hunting for a race in their own
-        //  code.  Both sides of that race now terminate.
+        //  arrival (the ts-arrival handler) reaches the owner first is a race - so
+        //  warning on one and continuing on the other makes the failure look intermittent
+        //  and sends the author hunting for a race in their own code.  Both sides of that
+        //  race now terminate.
         log_barrier.fatal() << "barrier alteration for a triggered generation: " << me
                             << "/" << cur.gen << " delta=" << cur.delta
                             << " watermark=" << watermark
@@ -3756,8 +3756,8 @@ namespace Realm {
     //  direction.  Detectable locally two ways: a value-carrying arrival is a
     //  reduction arrival on any node, and the owner knows 'redop_id'.
     if(poisoned && ((reduce_value_size > 0) || (redop_id != 0))) {
-      log_barrier.fatal() << "poisoned precondition on a reduction barrier: " << me
-                          << "/" << barrier_gen
+      log_barrier.fatal() << "poisoned precondition on a reduction barrier: " << me << "/"
+                          << barrier_gen
                           << " - decision Q4 is implemented on the scalable path only;"
                           << " the reduction path cannot carry poison to the result or"
                           << " to subscribers";
@@ -3947,7 +3947,8 @@ namespace Realm {
           //    later rebuild can still hand it a quota for the generation it
           //    has already bypassed in.  The switch-time re-fan then skips
           //    that generation, because the owner's only state for it is a
-          //    bypassed count and subtree_known() excludes ts_acc (subtree_known excludes ts_acc).
+          //    bypassed count and subtree_known() excludes ts_acc (subtree_known excludes
+          //    ts_acc).
           //
           //  * unconditional is too WIDE.  An ALTERING node has a persistent
           //    floor, so every arrival it ever makes bypasses; telling the
@@ -3956,9 +3957,9 @@ namespace Realm {
           //    inbound 372 -> 796).  That is the regression B09 removed.
           //
           //  An alterer needs no flush: the owner puts it in 'ts_bypass_nodes'
-          //  (the ts-arrival handler) and no future plan gives it a quota, so it can strand
-          //  nobody.  A handle-only bypasser is re-admitted by the next
-          //  rebuild and is precisely the node that can.
+          //  (the ts-arrival handler) and no future plan gives it a quota, so it can
+          //  strand nobody.  A handle-only bypasser is re-admitted by the next rebuild
+          //  and is precisely the node that can.
           //
           // ONCE PER GENERATION.  enter_flush_locked is idempotent, but this
           //  send sits outside it, so k arrivals at the same gated generation
