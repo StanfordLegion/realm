@@ -77,6 +77,7 @@ namespace TestConfig {
   unsigned d2d_streams = 2;
   unsigned p2p_streams = 2;
   unsigned hd_streams = 3;
+  unsigned host_copy_blocks_per_sm = 1;
 
   // openmp module
   int num_openmp_cpus = 1;
@@ -237,6 +238,10 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     if(cuda_config) {
       ASSERT_REALM(gpu_config->get_property("uvmem", uvm_mem_size));
       assert(uvm_mem_size == TestConfig::uvm_mem_size);
+      unsigned host_copy_blocks_per_sm = 0;
+      ASSERT_REALM(cuda_config->get_property("host_copy_blocks_per_sm",
+                                             host_copy_blocks_per_sm));
+      assert(host_copy_blocks_per_sm == TestConfig::host_copy_blocks_per_sm);
     }
     ASSERT_REALM(gpu_config->get_property("use_dynamic_fb", use_dynamic_fb));
     assert(use_dynamic_fb == TestConfig::use_dynamic_fb);
@@ -603,6 +608,8 @@ int main(int argc, char **argv)
       // uvm is only available in cuda
       if(cuda_config) {
         ASSERT_REALM(gpu_config->set_property<size_t>("uvmem", TestConfig::uvm_mem_size));
+        ASSERT_REALM(cuda_config->set_property<unsigned>(
+            "host_copy_blocks_per_sm", TestConfig::host_copy_blocks_per_sm));
       }
       ASSERT_REALM(
           gpu_config->set_property<bool>("use_dynamic_fb", TestConfig::use_dynamic_fb));

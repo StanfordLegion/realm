@@ -155,6 +155,10 @@ namespace Realm {
       // hardware.  Note the knob only ever buys ~2x: the residual contention is the copy
       // engine / link, not the stream count.
       unsigned cfg_hd_streams = 2;
+      // Grid limit for affine host/device copy kernels, in blocks per SM. A small
+      // grid can leave room for task kernels when the host link limits throughput.
+      // Zero uses the normal occupancy-based grid.
+      unsigned cfg_host_copy_blocks_per_sm = 0;
       bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
            cfg_pin_sysmem = true;
       bool cfg_fences_use_callbacks = false;
