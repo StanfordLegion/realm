@@ -22,7 +22,9 @@ empty line.
   run_realm_gdb_terminal_tests.py --gdb gdb --program ./realm_gdb_test [-j N] [TEST|GLOB ...]
 
 Each test runs its own sessions, from a fresh temporary directory (also
-HOME).
+HOME).  When a session's gdb doesn't answer, the test's log gets its threads'
+stacks; one found deadlocked in its own SIGINT handler (GDB 15 and 16, see
+SIGINT_DEADLOCK) ends its test as skipped.
 
 Exit status: 0 if every selected test passed (or skipped), 1 if any failed,
 77 if every selected test was skipped (CTest's SKIP_RETURN_CODE).
@@ -39,6 +41,7 @@ import select
 import shutil
 import signal
 import struct
+import subprocess
 import sys
 import tempfile
 import termios
@@ -92,6 +95,97 @@ class Skip(Exception):
     pass
 
 
+# GDB 15 and 16 can deadlock in their own SIGINT handler, with or without
+# realm-gdb: the handler takes a mutex that GDB's main thread takes on each
+# quit check and each entry into Python, and a Ctrl-C landing as the main
+# thread takes or releases it leaves GDB waiting on itself for good (GDB PR
+# python/32167, fixed in GDB 17.1).  A test that finds its GDB so ends as
+# skipped (see Context.unanswered).
+SIGINT_DEADLOCK = "gdb deadlocked in its own SIGINT handler"
+SIGINT_DEADLOCK_GDBS = (15, 16)
+
+
+class GdbDeadlock(Skip):
+    pass
+
+
+def gdb_major(gdb):
+    """`gdb`'s major version number, or None."""
+    try:
+        out = subprocess.run([gdb, "--version"], stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, env=base.clean_env(),
+                             timeout=60).stdout.decode("utf-8", "replace")
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    m = re.search(r"(\d+)\.\d+\S*\s*$", out.split("\n", 1)[0])
+    return int(m.group(1)) if m else None
+
+
+def maybe_in_sigint_handler(pid):
+    """Whether process `pid`'s main thread, where GDB takes Ctrl-C, sleeps on
+    a futex with SIGINT blocked, as it does stuck in GDB's SIGINT handler
+    (Linux's /proc; True where /proc can't tell)."""
+    task = "/proc/{0}/task/{0}/".format(pid)
+    try:
+        with open(task + "status") as f:
+            status = f.read()
+        with open(task + "wchan") as f:
+            wchan = f.read()
+    except OSError:
+        return not os.path.isdir("/proc/self/task")
+    blocked = re.search(r"^SigBlk:\s*([0-9a-fA-F]+)", status, re.M)
+    if blocked is None or not int(blocked.group(1), 16) & (1 << (signal.SIGINT - 1)):
+        return False
+    return "futex" in wchan or wchan.strip() in ("", "0")
+
+
+def thread_stacks(gdb, pid, timeout):
+    """Every thread's backtrace in process `pid`, from a GDB attached to it
+    for a moment (or why it couldn't be had)."""
+    try:
+        return subprocess.run(
+            [gdb, "-nx", "-nh", "-batch", "-p", str(pid), "-ex", "thread apply all bt 30"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=base.clean_env(),
+            timeout=timeout).stdout.decode("utf-8", "replace")
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return "(couldn't attach a gdb to it: {})".format(e)
+
+
+MUTEX_FRAME = re.compile(r"mutex_(?:un)?lock|lll_(?:un)?lock|umutex|umtx")
+
+
+def sigint_handler_deadlock(stacks):
+    """Whether a thread in `stacks` (thread_stacks') waits on a mutex in a
+    signal handler that interrupted it as it took or released one."""
+    for thread in re.split(r"\n(?=Thread \d+ )", stacks):
+        frames = re.findall(r"^#\d+ .*$", thread, re.M)
+        for i, frame in enumerate(frames):
+            if "<signal handler called>" in frame and \
+                    any(MUTEX_FRAME.search(f) for f in frames[:i]) and \
+                    any(MUTEX_FRAME.search(f) for f in frames[i + 1:i + 4]):
+                return True
+    return False
+
+
+def ptracer_setter():
+    """Linux's prctl(), for PR_SET_PTRACER (looked up before a fork, not in
+    the child), or None."""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        import ctypes
+        prctl = ctypes.CDLL(None, use_errno=True).prctl
+        prctl.argtypes = (ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong,
+                          ctypes.c_ulong)
+        return prctl
+    except (ImportError, OSError, AttributeError):
+        return None
+
+
+PRCTL = ptracer_setter()
+PR_SET_PTRACER = 0x59616d61
+
+
 TESTS = {}
 
 
@@ -110,6 +204,10 @@ class Term(object):
         self.out = b""
         # What gdb may print, which finish() takes for an error otherwise.
         self.allowed = []
+        # How many times gdb's threads have been looked at, as it didn't
+        # answer (see Context.unanswered).
+        self.looked = 0
+        tracer = os.getpid()
         self.pid, self.fd = pty.fork()
         if self.pid == 0:
             try:
@@ -117,15 +215,23 @@ class Term(object):
                 # (Not ignored, as a shell's background job has it, which gdb
                 # 10 and older keep: Ctrl-C would do nothing.)
                 signal.signal(signal.SIGINT, signal.SIG_DFL)
+                if PRCTL is not None:
+                    # (So that this driver may attach a gdb to it, where Linux
+                    # lets a process trace only its own descendants.)
+                    try:
+                        PRCTL(PR_SET_PTRACER, tracer, 0, 0, 0)
+                    except Exception:
+                        pass
                 os.chdir(ctx.tmp)
                 os.execve(argv[0], argv, env)
             finally:
                 os._exit(99)
         fcntl.fcntl(self.fd, fcntl.F_SETFL, fcntl.fcntl(self.fd, fcntl.F_GETFL) | os.O_NONBLOCK)
 
-    def read(self, until=PROMPT, timeout=None):
+    def read(self, until=PROMPT, timeout=None, expected=True):
         """What the session shows, until `until` matches it (cleaned) or
-        `timeout` seconds pass."""
+        `timeout` seconds pass.  If `until` was `expected` and didn't come,
+        gdb is looked at (see Context.unanswered)."""
         timeout = self.ctx.args.step_timeout if timeout is None else timeout
         end = time.time() + timeout
         mark = len(self.out)
@@ -144,6 +250,9 @@ class Term(object):
                 continue
             if until is not None and re.search(until, CONTROL.sub(b"", self.out[mark:])):
                 break
+        if until is not None and expected and self.pid is not None and \
+                not re.search(until, CONTROL.sub(b"", self.out[mark:])):
+            self.ctx.unanswered(self)
         return clean(self.out[mark:])
 
     def send(self, keys):
@@ -178,7 +287,7 @@ class Term(object):
         ended cleanly."""
         if quit:
             self.send(quit)
-            self.read(rb"\(y or n\) $", 10)
+            self.read(rb"\(y or n\) $", 10, expected=False)
             if re.search(rb"\(y or n\) $", CONTROL.sub(b"", self.out)):
                 self.send("y\r")
         self.read(None, 3)
@@ -238,6 +347,31 @@ class Context(object):
             self.failures.append(label)
             self.log.append("      " + shown.strip().replace("\n", "\n      ")[-3000:])
         return ok
+
+    def unanswered(self, s):
+        """Session `s` didn't show what a read waited for: look at its gdb's
+        threads, the first time (into the log, for a failure's report), and
+        again while its main thread may be stuck in its SIGINT handler (see
+        maybe_in_sigint_handler), up to three times in all.  A gdb that is
+        stuck there, deadlocked (see SIGINT_DEADLOCK), ends the test as
+        skipped: it will never answer."""
+        if s.looked >= 3 or (s.looked and not maybe_in_sigint_handler(s.pid)):
+            return
+        s.looked += 1
+        stacks = thread_stacks(shutil.which(self.args.gdb) or self.args.gdb, s.pid,
+                               self.args.step_timeout)
+        if s.looked == 1:
+            self.log.append("      (gdb didn't answer; its threads:)\n      " +
+                            stacks.strip().replace("\n", "\n      "))
+        if sigint_handler_deadlock(stacks) and \
+                gdb_major(self.args.gdb) in SIGINT_DEADLOCK_GDBS:
+            if s.looked > 1:
+                self.log.append("      (its threads now:)\n      " +
+                                stacks.strip().replace("\n", "\n      "))
+            raise GdbDeadlock(
+                "{}, waiting on a mutex it was taking or releasing as the signal "
+                "came (GDB PR python/32167, in GDB 15 and 16, fixed in 17.1)".format(
+                    SIGINT_DEADLOCK))
 
     def file(self, name, text):
         path = os.path.join(self.tmp, name)
@@ -1127,7 +1261,7 @@ def run_test(args, name):
     log = "\n".join(t.log)
     if status == "FAIL" and detail.startswith("driver exception"):
         log += "\n" + detail
-    if status == "FAIL":
+    if status == "FAIL" or detail.startswith(SIGINT_DEADLOCK):
         log += "\n----- the sessions' output -----\n" + "\n-----\n".join(
             clean(s.out)[-6000:] for s in t.sessions)
     return status, detail, log
@@ -1188,7 +1322,7 @@ def main():
                 results[name] = status
                 print("{:4}  {:40} {:5.1f}s  {}".format(status, name, time.time() - t0,
                                                        detail.splitlines()[0] if detail else ""))
-                if args.verbose or status == "FAIL":
+                if args.verbose or status == "FAIL" or detail.startswith(SIGINT_DEADLOCK):
                     print("----- log of {} -----\n{}\n----- end of {} -----".format(
                         name, log.rstrip(), name))
                 sys.stdout.flush()
