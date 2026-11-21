@@ -24,6 +24,17 @@
 #include "realm/point.h"
 
 #define HIP_MAX_FIELD_BYTES 64
+
+// Vector registers per wave that the affine copy kernels allocate on gfx9: a multiple of
+// 8 from 8 (what the kernel needs) to 128.  HIP_COPY_KERNEL_VGPRS is for copies within
+// GPU memory, HIP_HOST_COPY_KERNEL_VGPRS for copies that read or write host memory; see
+// hip_memcpy.hip for why they differ.
+#ifndef HIP_COPY_KERNEL_VGPRS
+#define HIP_COPY_KERNEL_VGPRS 8
+#endif
+#ifndef HIP_HOST_COPY_KERNEL_VGPRS
+#define HIP_HOST_COPY_KERNEL_VGPRS 24
+#endif
 #define HIP_MAX_BLOCKS_PER_GRID 2048
 
 namespace Realm {

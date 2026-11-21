@@ -337,11 +337,14 @@ namespace Realm {
       // Round-robin over this GPU's host<->device stream pools (-ll:hd_streams).
       GPUStream *get_next_h2d_stream();
       GPUStream *get_next_d2h_stream();
+      // Threads per block of the batch affine copy kernel, which requires exactly this.
+      static const unsigned COPY_KERNEL_THREADS = 256;
       // blocks_per_cu > 0 caps the grid at that many blocks per compute unit, below the
-      // occupancy limit.
+      // occupancy limit.  host_copy selects the kernels for copies that read or write
+      // host memory (memcpy_affine_host_batch*; see hip_memcpy.hip).
       void launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elemSize,
                                       size_t volume, GPUStream *stream, size_t arg_size,
-                                      int blocks_per_cu = 0);
+                                      int blocks_per_cu = 0, bool host_copy = false);
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elem_size,
                                            size_t volume, size_t arg_size,
                                            GPUStream *stream);
@@ -386,6 +389,8 @@ namespace Realm {
       static const size_t HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES = 5;
 
       GPUFuncInfo batch_affine_kernels[REALM_MAX_DIM][HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
+      GPUFuncInfo batch_affine_host_kernels[REALM_MAX_DIM]
+                                           [HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo batch_affine_fill_kernels[REALM_MAX_DIM]
                                            [HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo fill_affine_large_kernels[REALM_MAX_DIM]

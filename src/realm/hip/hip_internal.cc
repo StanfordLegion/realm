@@ -140,9 +140,11 @@ namespace Realm {
     // CU copied as fast as eight.  With sixteen 16MiB copies queued, a wave of task
     // kernels that takes 77ms on its own took 110-117ms instead of 470ms behind
     // host->device copies and 95-102ms instead of 350ms behind device->host copies.
-    // Copies within one GPU or between GPUs stay at the occupancy limit: capping them
-    // barely changed the task kernels within one GPU, and between GPUs it made a small
-    // copy issued while large copies were running take 372us instead of 226us.
+    // Copies within one GPU or between GPUs stay at the occupancy limit.  Two blocks per
+    // CU cut the delay to the task kernels within one GPU (a 77ms wave took 83ms instead
+    // of 91ms), but made a copy queued behind four concurrent 16MiB copies take 1.4x as
+    // long within a GPU and 1.9x between GPUs: capped copy kernels share the GPU instead
+    // of each taking it in turn, so the first copy ahead finishes last.
     static const int HOST_COPY_BLOCKS_PER_CU = 1;
 
     // Picks the stream for a copy.  peer_on_dst runs copies between peer GPUs on the
@@ -559,9 +561,11 @@ namespace Realm {
       // Maximum amount to transfer in a single quantum in order to ensure other requests
       // have a chance to make forward progress.  This should be large enough that the
       // overhead of splitting the copy shouldn't be noticable in terms of latency (4GiB
-      // should be good here for most purposes)
+      // should be good here for most purposes).  Kept 64 bytes under 4GiB, which keeps
+      // every rectangle of a copy kernel launch under 2^32 elements (the kernel's tile
+      // counts are 32-bit) without changing the copy's alignment.
       // TODO: make controllable
-      const size_t flow_control_bytes = 4ULL * 1024ULL * 1024ULL * 1024ULL;
+      const size_t flow_control_bytes = 4ULL * 1024ULL * 1024ULL * 1024ULL - 64;
 
       ReadSequenceCache rseqcache(this, 2 << 20);
       WriteSequenceCache wseqcache(this, 2 << 20);
@@ -850,7 +854,7 @@ namespace Realm {
                             << " out_is_ipc=" << out_is_ipc;
           stream->get_gpu()->launch_batch_affine_kernel(
               &copy_infos, 3, min_align, copy_info_total / min_align, stream, arg_size,
-              host_copy ? HOST_COPY_BLOCKS_PER_CU : 0);
+              host_copy ? HOST_COPY_BLOCKS_PER_CU : 0, host_copy);
           bytes_to_fence += copy_info_total;
         }
         if(bytes_to_fence > 0) {

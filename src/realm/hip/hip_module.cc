@@ -1844,7 +1844,8 @@ namespace Realm {
 
     void GPU::launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elem_size,
                                          size_t volume, GPUStream *stream,
-                                         size_t arg_size, int blocks_per_cu)
+                                         size_t arg_size, int blocks_per_cu,
+                                         bool host_copy)
     {
       size_t log_elem_size = std::min(static_cast<size_t>(ctz(elem_size)),
                                       HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
@@ -1853,13 +1854,27 @@ namespace Realm {
       assert(dim <= REALM_MAX_DIM);
       assert(dim >= 1);
       log_gpudma.info() << "launching batch affine kernel ";
-      GPUFuncInfo func_info = batch_affine_kernels[dim - 1][log_elem_size];
-      // The kernel loops over the copy, so a smaller grid is still correct.
-      if((blocks_per_cu > 0) && (num_cus > 0)) {
-        func_info.occ_num_blocks =
-            std::min(func_info.occ_num_blocks, blocks_per_cu * num_cus);
+      const GPUFuncInfo &func_info =
+          host_copy ? batch_affine_host_kernels[dim - 1][log_elem_size]
+                    : batch_affine_kernels[dim - 1][log_elem_size];
+      if(volume == 0) {
+        return; // no rectangles; the kernel copies the first one without checking
       }
-      launch_kernel(func_info, copy_info, volume, arg_size, stream);
+      // The kernel works in 256-thread blocks (on gfx9 each of the four waves copies
+      // whole tiles of the copy; see hip_memcpy.hip), so the blocks are always full
+      // size, and it loops over the copy, so a smaller grid is still correct.
+      const unsigned num_threads = COPY_KERNEL_THREADS;
+      unsigned max_blocks = static_cast<unsigned>(func_info.occ_num_blocks);
+      if((blocks_per_cu > 0) && (num_cus > 0)) {
+        max_blocks = std::min(max_blocks, static_cast<unsigned>(blocks_per_cu * num_cus));
+      }
+      const unsigned num_blocks = static_cast<unsigned>(std::min(
+          (volume + num_threads - 1) / num_threads, static_cast<size_t>(max_blocks)));
+      void *config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER, copy_info,
+                        HIP_LAUNCH_PARAM_BUFFER_SIZE, &arg_size, HIP_LAUNCH_PARAM_END};
+      CHECK_HIP(hipModuleLaunchKernel(func_info.func, num_blocks, 1, 1, num_threads, 1, 1,
+                                      /* shared_mem_bytes */ 0, stream->get_stream(),
+                                      nullptr, config));
     }
 
     void GPU::launch_indirect_copy_kernel(void *copy_info, size_t dim, size_t addr_size,
@@ -1980,7 +1995,7 @@ namespace Realm {
           log_bit_sz++) {
         const unsigned int bit_sz = 8U << log_bit_sz;
         GPUFuncInfo func_info;
-        char name[30];
+        char name[64];
         std::snprintf(name, sizeof(name), "memcpy_transpose%u", bit_sz);
         CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
 
@@ -2021,6 +2036,12 @@ namespace Realm {
           CHECK_HIP(occupancy_max_block_size(
               &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func, 0));
           batch_affine_kernels[d - 1][log_bit_sz] = func_info;
+
+          std::snprintf(name, sizeof(name), "memcpy_affine_host_batch%uD_%u", d, bit_sz);
+          CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
+          CHECK_HIP(occupancy_max_block_size(
+              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func, 0));
+          batch_affine_host_kernels[d - 1][log_bit_sz] = func_info;
 
           std::snprintf(name, sizeof(name), "fill_affine_large%uD_%u", d, bit_sz);
           CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
