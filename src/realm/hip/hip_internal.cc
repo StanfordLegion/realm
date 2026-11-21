@@ -132,14 +132,31 @@ namespace Realm {
              ((owner == this) || (info->peers.count(owner->info->device) > 0));
     }
 
+    // Grid cap, in blocks per compute unit, for copy kernels that read or write host
+    // memory (see GPU::launch_batch_affine_kernel).  At the occupancy limit (eight blocks
+    // per CU on MI250X) a copy kernel fills every CU, and at the default high DMA stream
+    // priority it takes them from the application's kernels for as long as the copy
+    // runs.  A host<->device copy is limited by the host link, so on MI250X one block per
+    // CU copied as fast as eight.  With sixteen 16MiB copies queued, a wave of task
+    // kernels that takes 77ms on its own took 110-117ms instead of 470ms behind
+    // host->device copies and 95-102ms instead of 350ms behind device->host copies.
+    // Copies within one GPU or between GPUs stay at the occupancy limit: capping them
+    // barely changed the task kernels within one GPU, and between GPUs it made a small
+    // copy issued while large copies were running take 372us instead of 226us.
+    static const int HOST_COPY_BLOCKS_PER_CU = 1;
+
     // Picks the stream for a copy.  peer_on_dst runs copies between peer GPUs on the
-    // destination GPU; leave it false for kernels launched on the source GPU.
+    // destination GPU; leave it false for kernels launched on the source GPU.  *host_copy
+    // (if given) is set to whether the copy reads or writes host memory.
     static GPUStream *select_stream(GPU *dst, GPU *src, GPU *channel_gpu,
                                     const GPU::HipIpcMapping *dst_mapping,
                                     MemoryImpl *src_mem, MemoryImpl *dst_mem,
-                                    bool peer_on_dst = false)
+                                    bool peer_on_dst = false, bool *host_copy = nullptr)
     {
       assert(channel_gpu != nullptr);
+      if(host_copy != nullptr) {
+        *host_copy = false;
+      }
       // Assume the channel_gpu is always available and will fill in the role for when src
       // or dst is null.  This could be the case if the src/dst mem is pageable and we
       // have pageable access
@@ -170,6 +187,9 @@ namespace Realm {
           return dst->get_next_p2p_stream(src->info->index);
         }
         return src->get_next_p2p_stream(dst->info->index);
+      }
+      if(host_copy != nullptr) {
+        *host_copy = true;
       }
       // D2H copy
       if(src_gpu_mem) {
@@ -546,6 +566,7 @@ namespace Realm {
       ReadSequenceCache rseqcache(this, 2 << 20);
       WriteSequenceCache wseqcache(this, 2 << 20);
       GPUStream *stream = 0;
+      bool host_copy = false;
       size_t total_bytes = 0;
 
       AffineCopyInfo<3> copy_infos;
@@ -645,8 +666,9 @@ namespace Realm {
           }
         }
 
-        stream = select_stream(out_gpu, in_gpu, channel->get_gpu(), out_mapping,
-                               in_port->mem, out_port->mem, /*peer_on_dst=*/true);
+        stream =
+            select_stream(out_gpu, in_gpu, channel->get_gpu(), out_mapping, in_port->mem,
+                          out_port->mem, /*peer_on_dst=*/true, &host_copy);
         assert(stream != NULL);
 
         AutoGPUContext agc(stream->get_gpu());
@@ -827,7 +849,8 @@ namespace Realm {
                             << copy_infos.num_rects << " bytes=" << copy_info_total
                             << " out_is_ipc=" << out_is_ipc;
           stream->get_gpu()->launch_batch_affine_kernel(
-              &copy_infos, 3, min_align, copy_info_total / min_align, stream, arg_size);
+              &copy_infos, 3, min_align, copy_info_total / min_align, stream, arg_size,
+              host_copy ? HOST_COPY_BLOCKS_PER_CU : 0);
           bytes_to_fence += copy_info_total;
         }
         if(bytes_to_fence > 0) {

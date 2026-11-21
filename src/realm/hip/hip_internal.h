@@ -337,8 +337,11 @@ namespace Realm {
       // Round-robin over this GPU's host<->device stream pools (-ll:hd_streams).
       GPUStream *get_next_h2d_stream();
       GPUStream *get_next_d2h_stream();
+      // blocks_per_cu > 0 caps the grid at that many blocks per compute unit, below the
+      // occupancy limit.
       void launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elemSize,
-                                      size_t volume, GPUStream *stream, size_t arg_size);
+                                      size_t volume, GPUStream *stream, size_t arg_size,
+                                      int blocks_per_cu = 0);
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elem_size,
                                            size_t volume, size_t arg_size,
                                            GPUStream *stream);
@@ -366,6 +369,7 @@ namespace Realm {
       // hipCtx_t context;
       int device_id = -1;
       hipModule_t device_module = nullptr;
+      int num_cus = 0; // compute units, for launch_batch_affine_kernel's grid cap
 
       struct GPUFuncInfo {
         hipFunction_t func;
