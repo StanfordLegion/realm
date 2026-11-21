@@ -132,20 +132,26 @@ namespace Realm {
              ((owner == this) || (info->peers.count(owner->info->device) > 0));
     }
 
-    // Grid cap, in blocks per compute unit, for copy kernels that read or write host
-    // memory (see GPU::launch_batch_affine_kernel).  At the occupancy limit (eight blocks
-    // per CU on MI250X) a copy kernel fills every CU, and at the default high DMA stream
-    // priority it takes them from the application's kernels for as long as the copy
-    // runs.  A host<->device copy is limited by the host link, so on MI250X one block per
-    // CU copied as fast as eight.  With sixteen 16MiB copies queued, a wave of task
-    // kernels that takes 77ms on its own took 110-117ms instead of 470ms behind
-    // host->device copies and 95-102ms instead of 350ms behind device->host copies.
-    // Copies within one GPU or between GPUs stay at the occupancy limit.  Two blocks per
-    // CU cut the delay to the task kernels within one GPU (a 77ms wave took 83ms instead
-    // of 91ms), but made a copy queued behind four concurrent 16MiB copies take 1.4x as
-    // long within a GPU and 1.9x between GPUs: capped copy kernels share the GPU instead
-    // of each taking it in turn, so the first copy ahead finishes last.
-    static const int HOST_COPY_BLOCKS_PER_CU = 1;
+    // Grid cap, in blocks, for copy kernels that read or write host memory (see
+    // GPU::launch_batch_affine_kernel).  A host<->device copy is limited by the host
+    // link, and a block keeps about 4KiB of it in flight (one 16-byte element per
+    // thread), so the grid only needs to cover the link's bandwidth-delay product.  On
+    // MI250X one block moved about 5GB/s, and 16 reached the link's full bandwidth for
+    // contiguous, strided and 4-rectangle copies in both directions; more moved no more.
+    // Every block beyond that only spreads the copy's host accesses, which take
+    // microseconds, over more CUs, and an application kernel's memory instructions on
+    // those CUs wait behind them.  With sixteen 16MiB copies queued, a wave of task
+    // kernels that takes 78ms on its own took 79ms beside host<->device copies at 16
+    // blocks against 102-111ms at one block per CU (110 blocks), and a wave of
+    // 232-register task kernels 144-146ms against 270-338ms.  The count is a property of
+    // the host link: a faster one may need more blocks, and on a GPU whose host memory is
+    // its own memory (MI300A) these copies are not link-bound at all.  Copies within one
+    // GPU or between GPUs stay at the occupancy limit.  Two blocks per CU cut the delay
+    // to the task kernels within one GPU (a 77ms wave took 83ms instead of 91ms), but
+    // made a copy queued behind four concurrent 16MiB copies take 1.4x as long within a
+    // GPU and 1.9x between GPUs: capped copy kernels share the GPU instead of each taking
+    // it in turn, so the first copy ahead finishes last.
+    static const unsigned HOST_COPY_BLOCKS = 16;
 
     // Picks the stream for a copy.  peer_on_dst runs copies between peer GPUs on the
     // destination GPU; leave it false for kernels launched on the source GPU.  *host_copy
@@ -854,7 +860,7 @@ namespace Realm {
                             << " out_is_ipc=" << out_is_ipc;
           stream->get_gpu()->launch_batch_affine_kernel(
               &copy_infos, 3, min_align, copy_info_total / min_align, stream, arg_size,
-              host_copy ? HOST_COPY_BLOCKS_PER_CU : 0, host_copy);
+              host_copy ? HOST_COPY_BLOCKS : 0, host_copy);
           bytes_to_fence += copy_info_total;
         }
         if(bytes_to_fence > 0) {

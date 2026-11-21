@@ -1844,7 +1844,7 @@ namespace Realm {
 
     void GPU::launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elem_size,
                                          size_t volume, GPUStream *stream,
-                                         size_t arg_size, int blocks_per_cu,
+                                         size_t arg_size, unsigned max_blocks,
                                          bool host_copy)
     {
       size_t log_elem_size = std::min(static_cast<size_t>(ctz(elem_size)),
@@ -1864,12 +1864,12 @@ namespace Realm {
       // whole tiles of the copy; see hip_memcpy.hip), so the blocks are always full
       // size, and it loops over the copy, so a smaller grid is still correct.
       const unsigned num_threads = COPY_KERNEL_THREADS;
-      unsigned max_blocks = static_cast<unsigned>(func_info.occ_num_blocks);
-      if((blocks_per_cu > 0) && (num_cus > 0)) {
-        max_blocks = std::min(max_blocks, static_cast<unsigned>(blocks_per_cu * num_cus));
+      unsigned grid_cap = static_cast<unsigned>(func_info.occ_num_blocks);
+      if(max_blocks > 0) {
+        grid_cap = std::min(grid_cap, max_blocks);
       }
       const unsigned num_blocks = static_cast<unsigned>(std::min(
-          (volume + num_threads - 1) / num_threads, static_cast<size_t>(max_blocks)));
+          (volume + num_threads - 1) / num_threads, static_cast<size_t>(grid_cap)));
       void *config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER, copy_info,
                         HIP_LAUNCH_PARAM_BUFFER_SIZE, &arg_size, HIP_LAUNCH_PARAM_END};
       CHECK_HIP(hipModuleLaunchKernel(func_info.func, num_blocks, 1, 1, num_threads, 1, 1,
@@ -1973,8 +1973,6 @@ namespace Realm {
       hipDevice_t dev;
 
       CHECK_HIP(hipGetDevice(&dev));
-      CHECK_HIP(
-          hipDeviceGetAttribute(&num_cus, hipDeviceAttributeMultiprocessorCount, dev));
       CHECK_HIP(hipModuleLoadData(&device_module, (void *)realm_hip_fatbin));
 
       // hipModuleOccupancyMaxPotentialBlockSize ignores __launch_bounds__ on HIP (unlike

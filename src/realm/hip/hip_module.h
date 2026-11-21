@@ -161,14 +161,15 @@ namespace Realm {
       // were running waited for the whole task wave (75ms) at priority 0 and took
       // about 130us at -1, and copies that small did not slow the task kernels.  With
       // sixteen 16MiB copies queued ahead of each of 40 measured copies, a wave of
-      // task kernels that takes 77ms on its own finished 1.4-1.5x later at -1 than at
-      // 0 for host->device copies, 1.2-1.3x for device->host, 1.5x for peer copies (on
-      // the destination GPU, which runs them) and 1.17x within the GPU.  This was 6.2x,
-      // 4.6x, 1.4x and 1.1x before host<->device copy kernels were capped (see
-      // HOST_COPY_BLOCKS_PER_CU in hip_internal.cc) and before peer and intra-GPU copies
-      // used their own streams; with 64KiB copies the delay was under 1%.  Raising
-      // GPU_MAX_HW_QUEUES to 16 made the task kernels about 4% slower at -1 and gave
-      // copies occasional stalls of tens of milliseconds.
+      // task kernels that takes 77ms on its own finished 1.02x later at -1 than at 0
+      // for host->device and device->host copies, 1.5x for peer copies (on the
+      // destination GPU, which runs them) and 1.17x within the GPU.  For host<->device
+      // copies this was 6.2x and 4.6x with copy kernels at the occupancy limit and 1.4x
+      // and 1.3x at one block per CU (see HOST_COPY_BLOCKS in hip_internal.cc); for peer
+      // and intra-GPU copies it was 1.4x and 1.1x before they used their own streams.
+      // With 64KiB copies the delay was under 1%.  Raising GPU_MAX_HW_QUEUES to 16 made
+      // the task kernels about 4% slower at -1 and gave copies occasional stalls of tens
+      // of milliseconds.
       int cfg_dma_stream_priority = -1;
       bool cfg_use_hip_ipc = true;
 
