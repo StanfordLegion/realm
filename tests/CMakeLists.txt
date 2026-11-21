@@ -107,6 +107,7 @@ list(
   striped_rwlock_test.cc
   actmsg_fragmentation_test.cc
   actmsg_chunked_send_test.cc
+  bgwork_test.cc
   fragmented_message_test.cc
   incoming_message_manager_test.cc
   memcpy_channel_test.cc
