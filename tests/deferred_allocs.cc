@@ -63,6 +63,7 @@ struct TestConfig {
   int buckets_max;
   bool all_memories;
   bool check_alloc_result;
+  int fix_tests; // bitmask selecting deferred-alloc fix regression tests
 };
 
 struct InstanceInfo {
@@ -70,6 +71,9 @@ struct InstanceInfo {
   Event create_event;
   bool alloc_result;
   UserEvent destroy_event;
+  UserEvent create_precond;
+  UserEvent alloc_result_event;
+  bool alloc_result_pending;
   enum State
   {
     ALLOC_PENDING,
@@ -85,6 +89,9 @@ struct InstanceInfo {
     , create_event(_create_event)
     , alloc_result(_alloc_result)
     , destroy_event(UserEvent::NO_USER_EVENT)
+    , create_precond(UserEvent::NO_USER_EVENT)
+    , alloc_result_event(UserEvent::NO_USER_EVENT)
+    , alloc_result_pending(false)
     , state(ALLOC_PENDING)
   {}
 };
@@ -180,8 +187,6 @@ void directed_test_memory(const TestConfig &config, Memory m, Processor p,
       InstanceInfo &ii = insts[amt];
       assert(ii.state == InstanceInfo::ALLOC_PENDING);
       log_app.debug() << "success #" << amt << " inst=" << ii.inst;
-      if(config.check_alloc_result)
-        assert(ii.alloc_result);
       bool poisoned = false;
       // normal apps should not call external_wait, but we do it here to
       //  detect hangs more easily and we know nothing else wants to run
@@ -199,7 +204,22 @@ void directed_test_memory(const TestConfig &config, Memory m, Processor p,
                         << " test=" << name << " (" << testdesc << ")";
         abort();
       }
-      ii.state = InstanceInfo::ALLOCED;
+      // a create with a deferred precondition gets its alloc result no
+      //  earlier than the precondition trigger - resolve it now
+      if(ii.alloc_result_pending) {
+        alarm(10);
+        bool rpoisoned = false;
+        ii.alloc_result_event.wait_faultaware(rpoisoned);
+        alarm(0);
+        ii.alloc_result = !rpoisoned;
+        ii.alloc_result_pending = false;
+      }
+      if(config.check_alloc_result)
+        assert(ii.alloc_result);
+      // a destroy may already have been requested while the create was
+      //  still pending
+      ii.state = (ii.destroy_event.exists() ? InstanceInfo::DEST_PENDING
+                                            : InstanceInfo::ALLOCED);
       break;
     }
 
@@ -209,8 +229,6 @@ void directed_test_memory(const TestConfig &config, Memory m, Processor p,
       InstanceInfo &ii = insts[amt];
       assert(ii.state == InstanceInfo::ALLOC_PENDING);
       log_app.debug() << "failed #" << amt << " inst=" << ii.inst;
-      if(config.check_alloc_result)
-        assert(ii.alloc_result == (cmd == 'u'));
       bool poisoned = false;
       // normal apps should not call external_wait, but we do it here to
       //  detect hangs more easily and we know nothing else wants to run
@@ -228,6 +246,18 @@ void directed_test_memory(const TestConfig &config, Memory m, Processor p,
                         << " test=" << name << " (" << testdesc << ")";
         abort();
       }
+      // a create with a deferred precondition gets its alloc result no
+      //  earlier than the precondition trigger - resolve it now
+      if(ii.alloc_result_pending) {
+        alarm(10);
+        bool rpoisoned = false;
+        ii.alloc_result_event.wait_faultaware(rpoisoned);
+        alarm(0);
+        ii.alloc_result = !rpoisoned;
+        ii.alloc_result_pending = false;
+      }
+      if(config.check_alloc_result)
+        assert(ii.alloc_result == (cmd == 'u'));
       ii.state = InstanceInfo::ALLOC_FAILED;
       ii.inst.destroy();
       break;
@@ -254,12 +284,90 @@ void directed_test_memory(const TestConfig &config, Memory m, Processor p,
     case 'd': // destroy
     {
       InstanceInfo &ii = insts[amt];
-      assert(ii.state == InstanceInfo::ALLOCED);
+      // a deferred destroy may legally be requested while the creation is
+      //  still pending - it stays ALLOC_PENDING until the creation outcome
+      //  is observed ('s' then moves it to DEST_PENDING)
+      assert((ii.state == InstanceInfo::ALLOCED) ||
+             ((ii.state == InstanceInfo::ALLOC_PENDING) && !ii.destroy_event.exists()));
       ii.destroy_event = UserEvent::create_user_event();
       log_app.debug() << "destroy #" << amt << " inst=" << ii.inst
                       << " event=" << ii.destroy_event;
       ii.inst.destroy(ii.destroy_event);
+      if(ii.state == InstanceInfo::ALLOCED)
+        ii.state = InstanceInfo::DEST_PENDING;
+      break;
+    }
+
+    case 'p': // allocate with an untriggered user-event precondition
+    {
+      size_t idx = insts.size();
+      Rect<1> rect(1, amt * bucket_size);
+
+      // we need a profiling request set that ignores failures
+      ProfilingRequestSet prs;
+      prs.add_request(Processor::NO_PROC, 0 /*ignore*/)
+          .add_measurement<ProfilingMeasurements::InstanceStatus>();
+      UserEvent alloc_result_event = UserEvent::NO_USER_EVENT;
+      if(config.check_alloc_result) {
+        alloc_result_event = UserEvent::create_user_event();
+        prs.add_request(p, ALLOC_RESULT_TASK, &alloc_result_event,
+                        sizeof(alloc_result_event))
+            .add_measurement<ProfilingMeasurements::InstanceAllocResult>();
+      }
+
+      UserEvent precond = UserEvent::create_user_event();
+      RegionInstance inst;
+      Event e = RegionInstance::create_instance(inst, m, rect, field_sizes, 0 /*SOA*/,
+                                                prs, precond);
+
+      // the alloc result cannot arrive before the precondition triggers, so
+      //  defer checking it until the outcome ('s'/'f'/'u') is tested
+      InstanceInfo ii(inst, e, true /*tbd*/);
+      ii.create_precond = precond;
+      ii.alloc_result_event = alloc_result_event;
+      ii.alloc_result_pending = config.check_alloc_result;
+      insts.push_back(ii);
+      log_app.debug() << "alloc #" << idx << ": size=" << amt << " inst=" << inst
+                      << " ready=" << e << " precond=" << precond;
+
+      break;
+    }
+
+    case 'g': // trigger a pending creation's precondition
+    {
+      InstanceInfo &ii = insts[amt];
+      assert(ii.state == InstanceInfo::ALLOC_PENDING);
+      assert(ii.create_precond.exists());
+      log_app.debug() << "go #" << amt << " inst=" << ii.inst
+                      << " precond=" << ii.create_precond;
+      ii.create_precond.trigger();
+      break;
+    }
+
+    case 'D': // destroy, preconditioned on another instance's creation event
+    {
+      assert(*pos == ',');
+      pos++;
+      int amt2 = strtol(pos, (char **)&pos, 10);
+      InstanceInfo &ii = insts[amt];
+      assert(ii.state == InstanceInfo::ALLOCED);
+      log_app.debug() << "destroy #" << amt << " inst=" << ii.inst << " precond=create(#"
+                      << amt2 << ")=" << insts[amt2].create_event;
+      ii.destroy_event = UserEvent::NO_USER_EVENT;
+      ii.inst.destroy(insts[amt2].create_event);
       ii.state = InstanceInfo::DEST_PENDING;
+      break;
+    }
+
+    case 'z': // a cross-preconditioned destroy was dropped (its precondition
+              //  poisoned) - the instance is still alive, so fix up the
+              //  test's bookkeeping to match
+    {
+      InstanceInfo &ii = insts[amt];
+      assert(ii.state == InstanceInfo::DEST_PENDING);
+      assert(!ii.destroy_event.exists());
+      log_app.debug() << "dropped destroy #" << amt << " inst=" << ii.inst;
+      ii.state = InstanceInfo::ALLOCED;
       break;
     }
 
@@ -322,7 +430,10 @@ void directed_test_memory(const TestConfig &config, Memory m, Processor p,
 
     case InstanceInfo::DEST_PENDING:
     {
-      it->destroy_event.trigger();
+      // cross-preconditioned destroys ('D') have no user event to trigger -
+      //  tests must resolve those themselves before finishing
+      if(it->destroy_event.exists())
+        it->destroy_event.trigger();
       break;
     }
 
@@ -604,6 +715,57 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
                            "  i0 s4"                   // 4123
       );
 
+      // ---- regression tests for the deferred-allocation fix bundle ----
+      // (request-time capped admission, stranded-ready sweep, trailing
+      //  replay in remove_pending_release)
+
+      // #1 fills memory; #1 is created on an untriggered user event, and
+      //  #0's destruction legally depends on #1's creation (the
+      //  copy-then-free migration idiom).  Unfixed Realm funds #1 from #0's
+      //  pending release - a release that can only happen after #1 exists -
+      //  and hangs forever ('f1' detects the hang via its bounded wait).
+      //  Fixed Realm caps #1's funding at its request time, so #1 fails
+      //  honestly, the dependent destroy is dropped (poisoned), and #0
+      //  remains usable.
+      if((config.fix_tests & 1) != 0)
+        directed_test_memory(config, m, p, "capped admission vs migration cycle",
+                             "1 a1 s0 p1 D0,1 g1 f1 z0 i0");
+
+      // GC-ripple pattern: the funding destroy is requested after the
+      //  preconditioned create but is APPLIED before the create's
+      //  precondition triggers, so the capped admission must still succeed
+      //  via the current heap state.  The probe alloc/destroy (#2) proves
+      //  #0's release reached the heap before #1's precondition fires.
+      if((config.fix_tests & 2) != 0)
+        directed_test_memory(config, m, p, "gc ripple still succeeds",
+                             "1 a1 s0 p1 d0 t0 a1 s2 i2 g1 s1");
+
+      // Stranded-ready recipe (BUG-6): #0+#1 fill memory; #2 defers against
+      //  #0's pending release; #2's own destroy is requested while pending;
+      //  #1's instant destroy fails release-reordering and is pushed back
+      //  READY; #0's trigger then drains the queue, placing #2 and leaving
+      //  the ready entry stranded behind #2's non-ready one.  In unfixed
+      //  DEBUG builds the next deferral-needing create (#3) fires
+      //  assert(!it->is_ready) in the future rebuild; fixed Realm sweeps
+      //  the stranded entry when the pending-alloc queue empties, and #3
+      //  proceeds normally.  All ordering here is enforced by user events
+      //  and bounded waits, so the interleaving is deterministic.
+      if((config.fix_tests & 4) != 0)
+        directed_test_memory(config, m, p, "stranded ready release sweep",
+                             "3 a2 s0 a1 s1 d0 a2 d2 i1 t0 s2 a2 n3 t2 s3");
+
+      // Trigger-inversion (monotone-cap guard + trailing replay): two
+      //  preconditioned creates whose user events fire in inverted order.
+      //  #2 (requested after #0's dependent destroy) legally defers against
+      //  it; #1 (requested before) then triggers with an older cap and must
+      //  fail instantly - unfixed Realm admits it and deadlocks ('f1'
+      //  catches the hang).  The poisoned cascade then removes #0's
+      //  destroy, and the trailing replay must fail #2 cleanly ('u2')
+      //  instead of stranding it forever.
+      if((config.fix_tests & 8) != 0)
+        directed_test_memory(config, m, p, "monotone cap guard vs inversion",
+                             "3 a3 s0 p1 D0,1 p2 g2 n2 g1 f1 u2 z0 i0");
+
 #ifdef REALM_REORDER_DEFERRED_ALLOCATIONS
       directed_test_memory(config, m, p, "out of order success",
                            "3 a1 s0 a2 s1 d0 d1 a2 a1 t1 s3 t0 s2");
@@ -651,6 +813,7 @@ int main(int argc, const char **argv)
   config.buckets_max = 4;
   config.all_memories = false;
   config.check_alloc_result = true;
+  config.fix_tests = 15;
 
   CommandLineParser clp;
   clp.add_option_int("-seed", config.seed);
@@ -660,6 +823,7 @@ int main(int argc, const char **argv)
   clp.add_option_int("-min", config.buckets_min);
   clp.add_option_int("-max", config.buckets_max);
   clp.add_option_bool("-all", config.all_memories);
+  clp.add_option_int("-fixtests", config.fix_tests);
 
   bool ok = clp.parse_command_line(argc, argv);
   assert(ok);
