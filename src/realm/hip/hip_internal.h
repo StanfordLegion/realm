@@ -332,8 +332,16 @@ namespace Realm {
       get_null_task_stream(void) const; // needed by librealm_kokkos.so
       GPUStream *get_next_task_stream(bool create = false);
       GPUStream *get_next_d2d_stream();
+      // Round-robins over the cfg_p2p_streams streams dedicated to `target_index`.
+      GPUStream *get_next_p2p_stream(int target_index);
+      // Round-robin over this GPU's host<->device stream pools (-ll:hd_streams).
+      GPUStream *get_next_h2d_stream();
+      GPUStream *get_next_d2h_stream();
+      // blocks_per_cu > 0 caps the grid at that many blocks per compute unit, below the
+      // occupancy limit.
       void launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elemSize,
-                                      size_t volume, GPUStream *stream, size_t arg_size);
+                                      size_t volume, GPUStream *stream, size_t arg_size,
+                                      int blocks_per_cu = 0);
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elem_size,
                                            size_t volume, size_t arg_size,
                                            GPUStream *stream);
@@ -361,6 +369,7 @@ namespace Realm {
       // hipCtx_t context;
       int device_id = -1;
       hipModule_t device_module = nullptr;
+      int num_cus = 0; // compute units, for launch_batch_affine_kernel's grid cap
 
       struct GPUFuncInfo {
         hipFunction_t func;
@@ -399,14 +408,29 @@ namespace Realm {
       std::set<Memory> peer_fbs;
 
       // streams for different copy types and a pile for actual tasks
-      GPUStream *host_to_device_stream = nullptr;
-      GPUStream *device_to_host_stream = nullptr;
+      // One pool per direction, so that a small host<->device copy does not have to
+      // queue behind a bulk transfer in the same direction.  hd_streams_per_dir is
+      // clamped to >=1 so the round-robin modulo cannot divide by zero.
+      std::vector<GPUStream *> host_to_device_streams;
+      std::vector<GPUStream *> device_to_host_streams;
+      unsigned hd_streams_per_dir = 1; // == max(1, cfg_hd_streams), fixed at ctor
+      atomic<unsigned> next_h2d_stream = atomic<unsigned>(0);
+      atomic<unsigned> next_d2h_stream = atomic<unsigned>(0);
       GPUStream *device_to_device_stream = nullptr;
       std::vector<GPUStream *> device_to_device_streams;
-      std::vector<GPUStream *> peer_to_peer_streams; // indexed by target
+      // flat: [target_index * p2p_streams_per_peer + k].  Entries for devices we have
+      // no peer access to (including this GPU itself) stay null.
+      std::vector<GPUStream *> peer_to_peer_streams;
+      unsigned p2p_streams_per_peer = 1; // == max(1, cfg_p2p_streams), fixed at ctor
       std::vector<GPUStream *> task_streams;
       atomic<unsigned> next_task_stream = atomic<unsigned>(0);
       atomic<unsigned> next_d2d_stream = atomic<unsigned>(0);
+      // One rotation counter PER TARGET.  A single shared counter (as the d2d path
+      // uses, where there is only ever one target) would correlate with the target:
+      // with 2 streams and 2 active peers the counter alternates, so one peer would
+      // always land on stream 0 and the other always on stream 1 -- each peer would
+      // use exactly one stream and the extra streams would do nothing.
+      std::vector<atomic<unsigned>> next_p2p_stream;
 
       GPUEventPool event_pool;
 
@@ -414,14 +438,30 @@ namespace Realm {
       //  in practice)
       int least_stream_priority, greatest_stream_priority;
 
+      // All imported memories from one remote GPU share a pool. The pool is
+      // constructed during IPC setup and remains stable until GPU shutdown.
+      struct IpcStreamPool {
+        std::vector<GPUStream *> streams;
+        atomic<unsigned> next_stream = atomic<unsigned>(0);
+
+        GPUStream *get_next_stream()
+        {
+          assert(!streams.empty());
+          return streams[next_stream.fetch_add(1) % streams.size()];
+        }
+      };
+
       struct HipIpcMapping {
         NodeID owner;
+        IpcStreamPool *stream_pool = nullptr;
         Memory mem;
         uintptr_t local_base;
         uintptr_t address_offset; // add to convert from original to local base
       };
       std::vector<HipIpcMapping> hipipc_mappings;
-      std::map<NodeID, GPUStream *> hipipc_streams;
+      // HIP currently exports one framebuffer per GPU, so Memory identifies
+      // the remote peer independently of its owning rank.
+      std::map<Memory, IpcStreamPool> hipipc_streams;
 
       const HipIpcMapping *find_ipc_mapping(Memory mem) const;
     };

@@ -440,9 +440,14 @@ if(TEST_USE_GPU)
     2
     -ll:d2d_streams
     2
+    -ll:p2p_streams
+    2
+    -ll:hd_streams
+    3
   )
   if(REALM_USE_CUDA)
-    list(APPEND machine_config_test_ARGS -cuda:dynfb 1 -cuda:dynfb_max 128)
+    list(APPEND machine_config_test_ARGS -cuda:dynfb 1 -cuda:dynfb_max 128
+         -cuda:host_copy_blocks_per_sm 1)
   endif()
   if(REALM_USE_HIP)
     list(APPEND machine_config_test_ARGS -hip:dynfb 1 -hip:dynfb_max 128)
@@ -585,6 +590,17 @@ target_compile_features(c_external_inst PUBLIC cxx_std_20)
 target_link_libraries(c_external_inst ${TEST_GPU_LIBS})
 
 add_integration_test(c_event_poisoned "${REALM_TEST_DIR}/c/test_event_poisoned.cc")
+
+if(REALM_USE_CUDA OR REALM_USE_HIP)
+  set(gpu_ipc_streams_ARGS -ll:p2p_streams 3)
+  add_integration_test(gpu_ipc_streams "${REALM_TEST_DIR}/gpu_ipc_streams.cc")
+  target_link_libraries(gpu_ipc_streams ${TEST_GPU_LIBS}
+                        $<TARGET_NAME_IF_EXISTS:CUDA::cuda_driver>)
+  if(REALM_USE_CUDA)
+    target_include_directories(gpu_ipc_streams PRIVATE ${CUDAToolkit_CUPTI_INCLUDE_DIR})
+  endif()
+  set_tests_properties(gpu_ipc_streams PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
 if(REALM_USE_CUDA)
   target_link_libraries(

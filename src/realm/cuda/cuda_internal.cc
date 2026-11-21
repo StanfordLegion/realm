@@ -200,7 +200,7 @@ namespace Realm {
 
       // IPC copy
       if(dst_mapping != nullptr) {
-        return src->cudaipc_streams[dst_mapping->owner];
+        return dst_mapping->stream_pool->get_next_stream();
       }
 
       const bool src_gpu_mem = src->is_accessible_gpu_mem(src_mem);
@@ -211,16 +211,16 @@ namespace Realm {
           return src->get_next_d2d_stream();
         }
         // P2P copy
-        return src->peer_to_peer_streams[dst->info->index];
+        return src->get_next_p2p_stream(dst->info->index);
       }
       // D2H copy
       if(src_gpu_mem) {
-        return src->device_to_host_stream;
+        return src->get_next_d2h_stream();
       }
       // H2D or H2H copy.  We use the destination gpu here instead, since it does not
       // matter what GPU actually accesses the host memory, as we want to minimize any
       // peer traffic that might occur
-      return dst->host_to_device_stream;
+      return dst->get_next_h2d_stream();
     }
 
     static void get_nonaffine_strides(size_t &pitch, size_t &height,
@@ -928,9 +928,19 @@ namespace Realm {
                             << " out_is_ipc=" << out_is_ipc << " fields=" << fields_total
                             << " needs_multi:" << needs_fast_multifield;
 
-          stream->get_gpu()->launch_batch_affine_kernel(&copy_infos, 3, min_align,
-                                                        (copy_info_total / min_align),
-                                                        needs_fast_multifield, stream);
+          GPU *gpu = stream->get_gpu();
+          uint64_t max_blocks = 0;
+          if(gpu->host_copy_max_blocks != 0 && !out_is_ipc) {
+            const bool src_host = gpu->is_accessible_host_mem(in_port->mem);
+            const bool dst_host = gpu->is_accessible_host_mem(out_port->mem);
+            if(src_host != dst_host &&
+               gpu->is_accessible_gpu_mem(src_host ? out_port->mem : in_port->mem)) {
+              max_blocks = gpu->host_copy_max_blocks;
+            }
+          }
+          gpu->launch_batch_affine_kernel(&copy_infos, 3, min_align,
+                                          copy_info_total / min_align,
+                                          needs_fast_multifield, stream, max_blocks);
           bytes_to_fence += copy_info_total;
         } else if(copy_infos.num_rects == 1) {
           // Then the affine copies to/from the device

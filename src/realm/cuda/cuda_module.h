@@ -127,6 +127,38 @@ namespace Realm {
       int cfg_num_gpus = 0;
       std::string cfg_gpu_idxs;
       unsigned cfg_task_streams = 12, cfg_d2d_streams = 4;
+      // Number of streams per peer GPU, including imported CUDA IPC memories.
+      // With a single stream per (src,dst) pair --
+      // the historical behaviour, still available as -ll:p2p_streams 1 -- copies to
+      // the same peer queue behind one another, and a small copy can wait for an
+      // unrelated bulk transfer to drain.  8 is the measured floor of that effect:
+      // a contended peer copy runs at 1.02x its uncontended time at 8 streams,
+      // versus 7.07x at 4 and 14.85x at 1, with no measurable cost when idle.
+      // The requirement scales as (queued transfers + batches of the copy in
+      // flight), which is why 4 is not enough.
+      unsigned cfg_p2p_streams = 8;
+
+      // Number of streams per direction for host<->device copies.  With a single stream
+      // each -- the historical behaviour, still available as -ll:hd_streams 1 -- every
+      // host->FB copy for a GPU queues on one stream and every FB->host copy on another,
+      // so a small copy waits for whatever bulk transfer is already in flight.  Measured
+      // on P100: a 256 KiB host->FB copy takes 49.5 us alone and 2786 us behind 32 MiB of
+      // same-GPU traffic (56x), while 96 MiB on OTHER GPUs' streams costs only 2.7x.
+      //
+      // 2 is the measured optimum, and the sweep {1,2,4,8,16} is the reason it is not
+      // higher.  Going 1 -> 2 raises AGGREGATE host<->device bandwidth by ~1.5x (h2d
+      // 11.26 -> 17.07 GiB/s, d2h 12.43 -> 18.75 GiB/s), i.e. one stream cannot saturate
+      // PCIe on its own, and roughly halves the head-of-line penalty.  Beyond 2 the d2h
+      // direction merely plateaus, but h2d REGRESSES all the way back to single-stream
+      // throughput (11.23 GiB/s at 4, 8 and 16) -- reproducible to <1.5 % and not yet
+      // explained, so do not raise this default without re-measuring on the target
+      // hardware.  Note the knob only ever buys ~2x: the residual contention is the copy
+      // engine / link, not the stream count.
+      unsigned cfg_hd_streams = 2;
+      // Grid limit for affine host/device copy kernels, in blocks per SM. A small
+      // grid can leave room for task kernels when the host link limits throughput.
+      // Zero uses the normal occupancy-based grid.
+      unsigned cfg_host_copy_blocks_per_sm = 0;
       bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
            cfg_pin_sysmem = true;
       bool cfg_fences_use_callbacks = false;
@@ -140,7 +172,12 @@ namespace Realm {
       bool cfg_lmem_resize_to_max = false;
       bool cfg_multithread_dma = false;
       size_t cfg_hostreg_limit = 1 << 30;
-      int cfg_d2d_stream_priority = -1;
+      // Relative priority of every stream used for DMA: intra-GPU, peer, host<->device
+      // and CUDA IPC copies.  Lower values are higher priority, and task streams are
+      // always created at relative priority 0.  CUDA dispatches the pending blocks of
+      // higher-priority streams first, so the default of -1 keeps a copy kernel from
+      // waiting behind every block of the task kernels that were launched before it.
+      int cfg_dma_stream_priority = -1;
       bool cfg_use_cuda_ipc = true;
       int cfg_pageable_access = 0;
       bool cfg_enable_cupti = false;

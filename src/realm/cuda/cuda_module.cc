@@ -1304,6 +1304,25 @@ namespace Realm {
       return device_to_device_streams[d2d_stream_index];
     }
 
+    GPUStream *GPU::get_next_h2d_stream()
+    {
+      unsigned k = (next_h2d_stream.fetch_add(1) % hd_streams_per_dir);
+      return host_to_device_streams[k];
+    }
+
+    GPUStream *GPU::get_next_d2h_stream()
+    {
+      unsigned k = (next_d2h_stream.fetch_add(1) % hd_streams_per_dir);
+      return device_to_host_streams[k];
+    }
+
+    GPUStream *GPU::get_next_p2p_stream(int target_index)
+    {
+      const unsigned tgt = static_cast<unsigned>(target_index);
+      unsigned k = (next_p2p_stream[tgt].fetch_add(1) % p2p_streams_per_peer);
+      return peer_to_peer_streams[(tgt * p2p_streams_per_peer) + k];
+    }
+
     static void launch_kernel(const Realm::Cuda::GPU::GPUFuncInfo &func_info,
                               void *params, size_t num_elems, GPUStream *stream)
     {
@@ -1388,8 +1407,8 @@ namespace Realm {
     }
 
     void GPU::launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elem_size,
-                                         size_t volume, bool mutlfield_optimized,
-                                         GPUStream *stream)
+                                         size_t volume, bool multifield_optimized,
+                                         GPUStream *stream, uint64_t max_blocks)
     {
       size_t log_elem_size = std::min(static_cast<size_t>(ctz(elem_size)),
                                       CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
@@ -1398,13 +1417,15 @@ namespace Realm {
       assert(dim <= REALM_MAX_DIM);
       assert(dim >= 1);
 
-      if(!mutlfield_optimized) {
-        GPUFuncInfo &func_info = batch_affine_kernels[dim - 1][log_elem_size];
-        launch_kernel(func_info, copy_info, volume, stream);
-      } else {
-        GPUFuncInfo &func_info = multi_batch_affine_kernels[dim - 1][log_elem_size];
-        launch_kernel(func_info, copy_info, volume, stream);
+      GPUFuncInfo func_info = multifield_optimized
+                                 ? multi_batch_affine_kernels[dim - 1][log_elem_size]
+                                 : batch_affine_kernels[dim - 1][log_elem_size];
+      // The kernel loops over the copy, so reducing the grid still covers every element.
+      if(max_blocks != 0) {
+        func_info.occ_num_blocks = static_cast<int>(
+            std::min<uint64_t>(func_info.occ_num_blocks, max_blocks));
       }
+      launch_kernel(func_info, copy_info, volume, stream);
     }
 
     const GPU::CudaIpcMapping *GPU::find_ipc_mapping(Memory mem) const
@@ -2296,19 +2317,23 @@ namespace Realm {
 
       event_pool.init_pool();
 
-      host_to_device_stream = new GPUStream(this, worker);
-      device_to_host_stream = new GPUStream(this, worker);
+      hd_streams_per_dir = std::max(1u, module->config->cfg_hd_streams);
+      host_to_device_streams.resize(hd_streams_per_dir, nullptr);
+      device_to_host_streams.resize(hd_streams_per_dir, nullptr);
+      for(unsigned k = 0; k < hd_streams_per_dir; k++) {
+        host_to_device_streams[k] =
+            new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
+        device_to_host_streams[k] =
+            new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
+      }
 
-      CUdevice dev;
-      int numSMs;
-
-#if CUDA_VERSION >= 13000
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxGetDevice)(&dev, _context));
-#else
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuCtxGetDevice)(&dev));
-#endif
-      CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGetAttribute)(
-          &numSMs, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, dev));
+      if(module->config->cfg_host_copy_blocks_per_sm != 0) {
+        int num_sms = 0;
+        CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGetAttribute)(
+            &num_sms, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, info->device));
+        host_copy_max_blocks =
+            static_cast<uint64_t>(module->config->cfg_host_copy_blocks_per_sm) * num_sms;
+      }
 
       CHECK_CU(CUDA_DRIVER_FNPTR(cuModuleLoadDataEx)(&device_module, realm_fatbin, 0,
                                                      NULL, NULL));
@@ -2330,8 +2355,6 @@ namespace Realm {
             &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func,
             blocksize_to_sharedmem, 0, 0));
 
-        // func_info.occ_num_blocks *=
-        //  numSMs; // Fill up the GPU with the number of blocks if possible
         transpose_kernels[log_bit_sz] = func_info;
 
         for(unsigned int d = 1; d <= CUDA_MAX_DIM; d++) {
@@ -2394,15 +2417,24 @@ namespace Realm {
       device_to_device_streams.resize(module->config->cfg_d2d_streams, 0);
       for(unsigned i = 0; i < module->config->cfg_d2d_streams; i++) {
         device_to_device_streams[i] =
-            new GPUStream(this, worker, module->config->cfg_d2d_stream_priority);
+            new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
       }
 
-      // Create a peer_to_peer stream for all our known devices.  This will isolate the
-      // DMA requests for each GPU
-      peer_to_peer_streams.resize(module->gpu_info.size(), nullptr);
+      // Create peer_to_peer streams for all our known devices.  This isolates the DMA
+      // requests for each GPU from one another; cfg_p2p_streams of them per peer also
+      // lets concurrent copies to the SAME peer overlap rather than serialising behind
+      // whatever is already queued.  Clamped to >=1 so the round-robin modulo in
+      // get_next_p2p_stream cannot divide by zero.
+      p2p_streams_per_peer = std::max(1u, module->config->cfg_p2p_streams);
+      peer_to_peer_streams.resize(module->gpu_info.size() * p2p_streams_per_peer,
+                                  nullptr);
+      next_p2p_stream.resize(module->gpu_info.size(), atomic<unsigned>(0));
       for(const GPUInfo *gpu_info : module->gpu_info) {
         if(gpu_info->index != info->index) {
-          peer_to_peer_streams[gpu_info->index] = new GPUStream(this, worker);
+          for(unsigned k = 0; k < p2p_streams_per_peer; k++) {
+            peer_to_peer_streams[(gpu_info->index * p2p_streams_per_peer) + k] =
+                new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
+          }
         }
       }
 
@@ -2429,13 +2461,14 @@ namespace Realm {
       event_pool.empty_pool();
 
       // destroy streams
-      delete host_to_device_stream;
-      delete device_to_host_stream;
+      delete_container_contents(host_to_device_streams);
+      delete_container_contents(device_to_host_streams);
 
       delete_container_contents(device_to_device_streams);
 
       delete_container_contents(peer_to_peer_streams);
-      delete_container_contents(cudaipc_streams);
+      for(auto &peer : cudaipc_streams)
+        delete_container_contents(peer.second.streams);
       delete_container_contents(task_streams);
 
       if(fb_dmem) {
@@ -2778,6 +2811,9 @@ namespace Realm {
       config_map.insert({"dynfb_max_size", &cfg_dynfb_max_size});
       config_map.insert({"task_streams", &cfg_task_streams});
       config_map.insert({"d2d_streams", &cfg_d2d_streams});
+      config_map.insert({"p2p_streams", &cfg_p2p_streams});
+      config_map.insert({"hd_streams", &cfg_hd_streams});
+      config_map.insert({"host_copy_blocks_per_sm", &cfg_host_copy_blocks_per_sm});
 
       resource_map.insert({"gpu", &res_num_gpus});
       resource_map.insert({"fbmem", &res_min_fbmem_size});
@@ -2825,7 +2861,9 @@ namespace Realm {
           .add_option_string("-ll:gpu_ids", cfg_gpu_idxs)
           .add_option_int("-ll:streams", cfg_task_streams)
           .add_option_int("-ll:d2d_streams", cfg_d2d_streams)
-          .add_option_int("-ll:d2d_priority", cfg_d2d_stream_priority)
+          .add_option_int("-ll:p2p_streams", cfg_p2p_streams)
+          .add_option_int("-ll:hd_streams", cfg_hd_streams)
+          .add_option_int("-ll:dma_stream_priority", cfg_dma_stream_priority)
           .add_option_int("-ll:gpuworkthread", cfg_use_worker_threads)
           .add_option_int("-ll:gpuworker", cfg_use_shared_worker)
           .add_option_int("-ll:pin", cfg_pin_sysmem)
@@ -2840,6 +2878,7 @@ namespace Realm {
           .add_option_int("-cuda:lmemresize", cfg_lmem_resize_to_max)
           .add_option_int("-cuda:mtdma", cfg_multithread_dma)
           .add_option_int_units("-cuda:hostreg", cfg_hostreg_limit, 'm')
+          .add_option_int("-cuda:host_copy_blocks_per_sm", cfg_host_copy_blocks_per_sm)
           .add_option_int("-cuda:pageable_access", cfg_pageable_access)
           .add_option_int("-cuda:cupti", cfg_enable_cupti)
           .add_option_int("-cuda:ipc", cfg_use_cuda_ipc)
@@ -4544,13 +4583,21 @@ namespace Realm {
             mapping.local_base = alloc->get_dptr();
             mapping.address_offset = entry.base_ptr - alloc->get_dptr();
 
-            gpu->cudaipc_mappings.push_back(mapping);
-
-            // do we have a stream for this target?
-            if(gpu->cudaipc_streams.count(sender) == 0) {
+            // A rank can export several GPUs, and each GPU can export several
+            // memories (e.g. framebuffer and intermediate buffers). Isolate GPUs
+            // while sharing a counter and pool across one GPU's memory mappings.
+            GPU::IpcStreamKey key;
+            key.first = sender;
+            memcpy(key.second.data(), entry.src_gpu_uuid.bytes, key.second.size());
+            GPU::IpcStreamPool &pool = gpu->cudaipc_streams[key];
+            if(pool.streams.empty()) {
               AutoGPUContext ag(gpu);
-              gpu->cudaipc_streams[sender] = new GPUStream(gpu, gpu->worker);
+              for(unsigned k = 0; k < gpu->p2p_streams_per_peer; k++)
+                pool.streams.push_back(new GPUStream(
+                    gpu, gpu->worker, gpu->module->config->cfg_dma_stream_priority));
             }
+            mapping.stream_pool = &pool;
+            gpu->cudaipc_mappings.push_back(mapping);
           } else {
             log_cudaipc.info("Unable to import given memory from sender %u",
                              static_cast<unsigned>(sender));
