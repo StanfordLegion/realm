@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Stanford University, NVIDIA Corporation
+ * Copyright 2025-2026 Stanford University, NVIDIA Corporation
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +24,6 @@
 #define __STDC_CONSTANT_MACROS
 
 #include <llvm-c/Core.h>
-#include <llvm-c/Initialization.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
 #include <llvm-c/ExecutionEngine.h>

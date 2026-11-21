@@ -1,4 +1,4 @@
-# Copyright 2025 Stanford University, NVIDIA Corporation
+# Copyright 2025-2026 Stanford University, NVIDIA Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,21 +13,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This module produces the "LLVM" link target which carries with it all the
-# necessary interface properties.  The following options guide the search
-# GASNet backend configuration get's used:
+# LLVM::LLVM carries the headers and libraries used by Realm's LLVM JIT.
 #
 # LLVM_CONFIG_EXECUTABLE - Path to llvm-config
 #
 # Once llvm-config is found, it will be used to query available components
 #
-if(NOT LLVM_FOUND AND NOT TARGET_LLVM)
+if(TARGET LLVM::LLVM)
+  set(LLVM_FOUND TRUE)
+  return()
+endif()
+
+# MLIR may have loaded LLVM's CMake package already. Its LLVM library target
+# survives function scope, while its package variables may need to be loaded again.
+if(TARGET LLVM AND NOT LLVM_FIND_COMPONENTS)
+  if(NOT LLVM_INCLUDE_DIRS)
+    find_package(LLVM CONFIG QUIET)
+  endif()
+  if(LLVM_INCLUDE_DIRS)
+    add_library(LLVM::LLVM INTERFACE IMPORTED)
+    target_link_libraries(LLVM::LLVM INTERFACE LLVM)
+    target_include_directories(LLVM::LLVM SYSTEM INTERFACE ${LLVM_INCLUDE_DIRS})
+    set(LLVM_FOUND TRUE)
+    return()
+  endif()
+endif()
+
+if(NOT TARGET LLVM::LLVM)
+  if(NOT LLVM_CONFIG_EXECUTABLE AND LLVM_TOOLS_BINARY_DIR)
+    find_program(
+      LLVM_CONFIG_EXECUTABLE
+      NAMES llvm-config llvm-config-${LLVM_VERSION_MAJOR}
+      PATHS "${LLVM_TOOLS_BINARY_DIR}"
+      NO_DEFAULT_PATH
+    )
+  endif()
   if(NOT LLVM_CONFIG_EXECUTABLE)
     # if an explicitly-versioned llvm-config (that we've tested with) is
     #  available, use that
     find_program(
       LLVM_CONFIG_EXECUTABLE
-      NAMES llvm-config-20
+      NAMES llvm-config-22
+            llvm-config-20
             llvm-config-19
             llvm-config-18
             llvm-config-17
