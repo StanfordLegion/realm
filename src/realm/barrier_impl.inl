@@ -28,8 +28,6 @@ namespace Realm {
 
 namespace Realm {
 
-  TYPE_IS_SERIALIZABLE(Realm::RemoteNotification);
-
   ////////////////////////////////////////////////////////////////////////
   //
   // class BarrierImpl
@@ -57,38 +55,6 @@ namespace Realm {
     Barrier b = id.convert<Barrier>();
     b.timestamp = timestamp;
     return b;
-  }
-
-  ////////////////////////////////////////////////////////////////////////
-  //
-  // struct BarrierTriggerPayload
-  //
-
-  template <typename S>
-  bool serdez(S &ser, const BarrierTriggerPayload &notification)
-  {
-    bool success = false;
-    success = (ser & notification.remotes) && (ser & notification.reduction);
-    return success;
-  }
-
-  ////////////////////////////////////////////////////////////////////////
-  //
-  // struct BarrierTriggerMessageArgs
-  //
-
-  template <typename S>
-  bool serdez(S &ser, const BarrierTriggerMessageArgs &args)
-  {
-    bool success = false;
-
-    success = (ser & args.internal.trigger_gen) && (ser & args.internal.previous_gen) &&
-              (ser & args.internal.first_generation) && (ser & args.internal.redop_id) &&
-              (ser & args.internal.migration_target) &&
-              (ser & args.internal.base_arrival_count) &&
-              (ser & args.internal.broadcast_index);
-
-    return success;
   }
 
 }; // namespace Realm
