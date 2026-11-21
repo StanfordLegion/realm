@@ -50,6 +50,7 @@
 #include "realm/nvtx.h"
 #endif
 
+#include <cstdio>
 #include <string.h>
 #include <thread>
 #include <sstream>
@@ -1875,6 +1876,7 @@ namespace Realm {
       CommandLineParser cp;
       cp.add_option_int("-realm:eventloopcheck", Config::event_loop_detection_limit);
       cp.add_option_bool("-ll:force_kthreads", Config::force_kernel_threads);
+      cp.add_option_int("-ll:subgraph_poll", ProcSubgraphExecutor::poll_budget_us);
       cp.add_option_bool("-ll:frsrv_fallback", Config::use_fast_reservation_fallback);
       cp.add_option_int("-ll:machine_query_cache", Config::use_machine_query_cache);
       cp.add_option_int("-ll:defalloc", Config::deferred_instance_allocation);
@@ -1963,6 +1965,7 @@ namespace Realm {
 #endif
 
     event_triggerer.add_to_manager(&bgwork);
+    subgraph_resource_reaper.add_to_manager(&bgwork);
     copy_analyzer.add_to_manager(&bgwork);
 
     // initialize barrier timestamp
@@ -2827,6 +2830,14 @@ namespace Realm {
       if(op != 0) {
         log_runtime.debug() << "shutdown merging finish event=" << op->get_finish_event();
         wait_on = Event::merge_events(wait_on, op->get_finish_event());
+      } else if(Thread::self()->in_subgraph_task_execution()) {
+        // a compiled subgraph task has no Operation: the instantiation's
+        //  finish event covers it
+        SubgraphExecutionState *state =
+            static_cast<SubgraphExecutionState *>(Thread::self()->subgraph_task_state());
+        log_runtime.debug() << "shutdown merging instantiation finish event="
+                            << state->get_finish_event();
+        wait_on = Event::merge_events(wait_on, state->get_finish_event());
       }
     }
 
@@ -2882,6 +2893,38 @@ namespace Realm {
       log_runtime.info() << "local processor shutdown tasks complete";
     }
 
+    // a subgraph instantiation whose finish event has not triggered by now,
+    //  or a subgraph destroy that has not taken effect (its returned event
+    //  must be chained into the shutdown precondition like every other event
+    //  Realm hands out), is pending application work, exactly like an
+    //  untriggered operation below: an error, caught eagerly (no waiting, no
+    //  timer)
+    {
+      int64_t n = subgraph_resource_reaper.num_unfinished();
+      if(n != 0) {
+        log_runtime.fatal() << n << " pending subgraph instantiation(s) during shutdown!";
+        fflush(stdout);
+        fflush(stderr);
+        abort();
+      }
+      int64_t d = subgraph_resource_reaper.num_pending_destroys();
+      if(d != 0) {
+        log_runtime.fatal() << d
+                            << " subgraph destroy(s) not yet in effect during shutdown "
+                               "(chain the event destroy returns into the shutdown "
+                               "precondition)!";
+        fflush(stdout);
+        fflush(stderr);
+        abort();
+      }
+    }
+    // finished instantiations release their state on a background worker
+    //  (recycle it into the subgraph's pool); let that drain before the
+    //  subgraphs are torn down - bounded work that depends on no application
+    //  event. It completes no destroy: every destroy that returned an event
+    //  was complete before the check above passed, and one that returned
+    //  NO_EVENT was complete on the spot.
+    subgraph_resource_reaper.wait_for_idle();
     {
       size_t n = num_untriggered_events.load();
       if(n != 0) {
@@ -2955,6 +2998,7 @@ namespace Realm {
 
 #ifdef DEBUG_REALM
     event_triggerer.shutdown_work_item();
+    subgraph_resource_reaper.shutdown_work_item();
     copy_analyzer.shutdown_work_item();
 #endif
     bgwork.stop_dedicated_workers();

@@ -44,6 +44,12 @@ namespace Realm {
   {}
 
   template <typename S>
+  bool serdez(S &serdez, const SubgraphInstantiationProfiling &p)
+  {
+    return ((serdez & p.tasks) && (serdez & p.copies));
+  }
+
+  template <typename S>
   bool serdez(S &serdez, const SubgraphDefinition &s)
   {
     return ((serdez & s.tasks) && (serdez & s.copies) && (serdez & s.arrivals) &&
@@ -71,6 +77,18 @@ namespace Realm {
     , red_fold(false)
     , priority(0)
   {}
+
+  template <int N, typename T>
+  inline SubgraphDefinition::CopyDesc &SubgraphDefinition::CopyDesc::add_indirection(
+      const typename CopyIndirection<N, T>::Base *indirection)
+  {
+    IndirectionRef ref;
+    ref.ptr = indirection;
+    ref.type_tag = DynamicTemplates::ListProduct2<DIMCOUNTS, DIMTYPES>::encode_tag<
+        DynamicTemplates::Int<N>, T>();
+    indirects.push_back(ref);
+    return *this;
+  }
 
   ////////////////////////////////////////////////////////////////////////
   //
