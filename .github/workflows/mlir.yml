@@ -1,0 +1,40 @@
+# Copyright 2026 Stanford University, NVIDIA Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+name: realm-mlir
+
+on:
+  push:
+    branches: [main]
+    paths: ['mlir/**', 'src/**', 'cmake/**', 'CMakeLists.txt', '.github/workflows/mlir.yml']
+  pull_request:
+    paths: ['mlir/**', 'src/**', 'cmake/**', 'CMakeLists.txt', '.github/workflows/mlir.yml']
+
+jobs:
+  mlir:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - name: Install LLVM and MLIR
+        run: |
+          brew install llvm@22
+          echo "LLVM_PREFIX=$(brew --prefix llvm@22)" >> "$GITHUB_ENV"
+      - name: Build and install Realm with LLVM JIT
+        run: |
+          cmake -S . -B build/realm-jit -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/build/realm-jit-install" -DCMAKE_INSTALL_LIBDIR=lib \
+            -DLLVM_CONFIG_EXECUTABLE="$LLVM_PREFIX/bin/llvm-config" \
+            -DREALM_ENABLE_LLVM=ON -DREALM_MAX_DIM=1 \
+            -DREALM_BUILD_TESTS=OFF -DREALM_BUILD_EXAMPLES=OFF \
+            -DREALM_BUILD_BENCHMARKS=OFF -DREALM_BUILD_TUTORIALS=OFF -DREALM_BUILD_DOCS=OFF \
+            -DREALM_ENABLE_CUDA=OFF -DREALM_ENABLE_HIP=OFF -DREALM_ENABLE_HDF5=OFF \
+            -DREALM_ENABLE_OPENMP=OFF -DREALM_ENABLE_PAPI=OFF -DREALM_ENABLE_PYTHON=OFF
+          cmake --build build/realm-jit --parallel 4
+          cmake --install build/realm-jit
+      - name: Build and test Realm MLIR
+        run: |
+          cmake -S mlir -B build/mlir-jit -DMLIR_DIR="$LLVM_PREFIX/lib/cmake/mlir" \
+            -DRealm_DIR="$PWD/build/realm-jit-install/lib/cmake/realm" \
+            -DREALM_MLIR_BUILD_LLVM_TASK_EXAMPLE=ON -DREALM_MLIR_TEST_RUNTIME=ON
+          cmake --build build/mlir-jit --parallel 4
+          ctest --test-dir build/mlir-jit --output-on-failure

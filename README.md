@@ -1,5 +1,5 @@
 <!--
-Copyright 2025 Stanford University, NVIDIA Corporation
+Copyright 2025-2026 Stanford University, NVIDIA Corporation
 SPDX-License-Identifier: Apache-2.0
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -160,6 +160,7 @@ Run any Realm executable with `-hl:help` (high-level) or `-ll:help` (low-level) 
 * **API reference (Doxygen):** generate with `make docs` or `cmake --build . --target docs`.
 * **Tutorials:** see the [`tutorials/`](tutorials) directory listed above.
 * **Examples & Benchmarks:** under [`examples/`](examples) and [`benchmarks/`](benchmarks).
+* **Realm MLIR:** see the [dialect guide](mlir/README.md) for the build and runnable CPU examples.
 
 Please file an issue or pull request if something is missing or outdated.
 
