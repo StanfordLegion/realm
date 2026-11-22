@@ -2695,8 +2695,10 @@ TEST_F(MachineQueryCacheMultiNodeTest, ConflictingQueries)
                          procs[0], "node 2^32 - 1, no kind");
   EXPECT_EQ(ProcessorQueryImpl::walk_count(), pwalks) << "a conflicting query walked";
 
-  // the largest node an id can name is a node, if not one this machine has
+  // the largest node an id can name is a node, if not one this machine has,
+  //  so its query walks
   expect_matches_nothing(on_node(ID::MAX_NODE_ID), procs[0], "node MAX_NODE_ID");
+  EXPECT_GT(ProcessorQueryImpl::walk_count(), pwalks) << "node MAX_NODE_ID did not walk";
 
   // a conflict stays with the copy that was refined, and its copies
   Machine::ProcessorQuery cpus(machine);
@@ -2708,6 +2710,12 @@ TEST_F(MachineQueryCacheMultiNodeTest, ConflictingQueries)
   expect_matches_nothing(none, procs[0], "a refined copy");
   expect_matches_nothing(Machine::ProcessorQuery(none), procs[0],
                          "a copy of a conflicting query");
+  // a copy refined in turn: without the conflict, the kind recorded before it
+  //  and the affinity would match p0, p1 and p2
+  Machine::ProcessorQuery none_refined(none);
+  none_refined.has_affinity_to(mems[0]);
+  expect_matches_nothing(none_refined, procs[0],
+                         "a copy of a conflicting query, refined");
   // and an unrestricted query refined through a copy
   Machine::ProcessorQuery all(machine);
   Machine::ProcessorQuery node1(all);
@@ -2748,6 +2756,7 @@ TEST_F(MachineQueryCacheMultiNodeTest, ConflictingQueries)
                          "node 2^16 + 1, a processor affinity");
   EXPECT_EQ(MemoryQueryImpl::walk_count(), mwalks) << "a conflicting query walked";
   expect_matches_nothing(on_mem_node(ID::MAX_NODE_ID), mems[0], "node MAX_NODE_ID");
+  EXPECT_GT(MemoryQueryImpl::walk_count(), mwalks) << "node MAX_NODE_ID did not walk";
 
   Machine::MemoryQuery sysmems(machine);
   sysmems.only_kind(Memory::SYSTEM_MEM);
@@ -2756,6 +2765,13 @@ TEST_F(MachineQueryCacheMultiNodeTest, ConflictingQueries)
   no_mems.only_kind(Memory::GPU_FB_MEM);
   EXPECT_EQ(MachineQueryCacheTest::results(sysmems).size(), 2u);
   expect_matches_nothing(no_mems, mems[0], "a refined memory copy");
+  expect_matches_nothing(Machine::MemoryQuery(no_mems), mems[0],
+                         "a copy of a conflicting memory query");
+  // without the conflict, the kind and the capacity would match m0 and m1
+  Machine::MemoryQuery no_mems_refined(no_mems);
+  no_mems_refined.has_capacity(1);
+  expect_matches_nothing(no_mems_refined, mems[0],
+                         "a copy of a conflicting memory query, refined");
   Machine::MemoryQuery all_mems(machine);
   Machine::MemoryQuery mem_node1(all_mems);
   mem_node1.address_space(1);
