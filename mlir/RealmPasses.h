@@ -9,6 +9,9 @@
 namespace mlir::realm {
   std::unique_ptr<Pass> createLowerRealmToEmitCPass();
   std::unique_ptr<Pass> createSimplifyRealmDataflowPass();
+  std::unique_ptr<Pass> createLowerRealmToLLVMPass();
+  std::unique_ptr<Pass> createLowerAsyncToRealmPass();
+  std::unique_ptr<Pass> createLowerGPUToRealmPass();
   void registerRealmPasses();
 } // namespace mlir::realm
 

@@ -3,9 +3,11 @@
 
 #include "RealmDialect.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include "RealmDialect.cpp.inc"
@@ -16,6 +18,22 @@
 
 #define GET_TYPEDEF_CLASSES
 #include "RealmTypes.cpp.inc"
+
+namespace mlir::realm {
+  static ParseResult parseInstanceLayoutType(OpAsmParser &parser, Type &layout)
+  {
+    if(succeeded(parser.parseOptionalColon()))
+      return parser.parseType(layout);
+    layout = LayoutType::get(parser.getContext());
+    return success();
+  }
+
+  static void printInstanceLayoutType(OpAsmPrinter &printer, Operation *, Type layout)
+  {
+    if(!isa<LayoutType>(layout))
+      printer << " : " << layout;
+  }
+} // namespace mlir::realm
 
 #define GET_OP_CLASSES
 #include "RealmOps.cpp.inc"
@@ -56,7 +74,53 @@ mlir::LogicalResult mlir::realm::CopyOp::verify()
   return success();
 }
 
+mlir::LogicalResult mlir::realm::DenseLayoutOp::verify()
+{
+  if(!getFieldBytesAttr().getValue().isStrictlyPositive())
+    return emitOpError("requires a positive field size in bytes");
+  return success();
+}
+
+mlir::LogicalResult mlir::realm::TaskRegisterOp::verify()
+{
+  auto signature = cast<TaskBindingType>(getTask().getType()).getSignature();
+  if(signature.getNumResults() != 0 ||
+     !llvm::all_of(signature.getInputs(), isTaskArgumentType))
+    return emitOpError(
+        "requires instance, i32, i64, f32, or f64 arguments and no results");
+  if(getIdAttr().getValue().ult(4))
+    return emitOpError("requires a task ID of at least 4");
+  return success();
+}
+
+mlir::LogicalResult
+mlir::realm::TaskRegisterOp::verifySymbolUses(SymbolTableCollection &symbols)
+{
+  auto fn = symbols.lookupNearestSymbolFrom<func::FuncOp>(*this, getCalleeAttr());
+  auto signature = cast<TaskBindingType>(getTask().getType()).getSignature();
+  if(!fn || fn.isExternal() || fn.getFunctionType() != signature)
+    return emitOpError("requires a module-defined func.func with the task signature");
+  return success();
+}
+
+mlir::LogicalResult mlir::realm::SpawnTypedOp::verify()
+{
+  auto signature = cast<TaskBindingType>(getTask().getType()).getSignature();
+  if(!llvm::equal(signature.getInputs(), getArgs().getTypes()) ||
+     signature.getNumResults() != 0 ||
+     !llvm::all_of(signature.getInputs(), isTaskArgumentType))
+    return emitOpError(
+        "requires instance or scalar operands matching a task signature with no results");
+  return success();
+}
+
 namespace mlir::realm {
+  bool isTaskArgumentType(Type type)
+  {
+    return isa<InstanceType>(type) || type.isSignlessInteger(32) ||
+           type.isSignlessInteger(64) || type.isF32() || type.isF64();
+  }
+
   namespace {
     template <typename Op>
     struct FoldEmptyMerge : OpRewritePattern<Op> {

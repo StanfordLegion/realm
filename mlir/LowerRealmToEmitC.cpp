@@ -1,6 +1,7 @@
 // Copyright 2026 Stanford University, NVIDIA Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+#include "LoweringUtils.h"
 #include "RealmDialect.h"
 #include "RealmPasses.h"
 
@@ -167,6 +168,14 @@ namespace mlir::realm {
       {
         ModuleOp module = getOperation();
         MLIRContext *context = &getContext();
+        if(failed(checkUnsupportedTypes<DenseLayoutType, DenseIndexSpaceType,
+                                        TaskBindingType>(
+               module, "EmitC",
+               "--convert-realm-to-llvm for dense descriptors and "
+               "typed tasks"))) {
+          signalPassFailure();
+          return;
+        }
         if(module
                .walk([](CopyOp copy) {
                  if(supportsIndexSpace(cast<IndexSpaceType>(copy.getSpace().getType())))

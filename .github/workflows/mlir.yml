@@ -35,6 +35,7 @@ jobs:
         run: |
           cmake -S mlir -B build/mlir-jit -DMLIR_DIR="$LLVM_PREFIX/lib/cmake/mlir" \
             -DRealm_DIR="$PWD/build/realm-jit-install/lib/cmake/realm" \
-            -DREALM_MLIR_BUILD_LLVM_TASK_EXAMPLE=ON -DREALM_MLIR_TEST_RUNTIME=ON
+            -DREALM_MLIR_BUILD_LLVM_TASK_EXAMPLE=ON -DREALM_MLIR_BUILD_LLVM_EXAMPLES=ON \
+            -DREALM_MLIR_TEST_RUNTIME=ON
           cmake --build build/mlir-jit --parallel 4
           ctest --test-dir build/mlir-jit --output-on-failure

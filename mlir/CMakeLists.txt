@@ -30,7 +30,11 @@ add_public_tablegen_target(RealmMLIRIncGen)
 
 add_library(MLIRRealmDialect RealmDialect.cpp)
 add_dependencies(MLIRRealmDialect RealmMLIRIncGen)
-target_link_libraries(MLIRRealmDialect PUBLIC MLIRIR MLIRSideEffectInterfaces)
+target_link_libraries(
+  MLIRRealmDialect
+  PUBLIC MLIRIR MLIRSideEffectInterfaces
+  PRIVATE MLIRFuncDialect
+)
 target_compile_features(MLIRRealmDialect PUBLIC cxx_std_17)
 target_include_directories(
   MLIRRealmDialect PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}"
@@ -38,25 +42,50 @@ target_include_directories(
 target_include_directories(MLIRRealmDialect SYSTEM PUBLIC ${LLVM_INCLUDE_DIRS} ${MLIR_INCLUDE_DIRS})
 llvm_update_compile_flags(MLIRRealmDialect)
 
-add_library(MLIRRealmTransforms LowerRealmToEmitC.cpp SimplifyRealmDataflow.cpp)
+add_library(
+  MLIRRealmTransforms LowerAsyncToRealm.cpp LowerGPUToRealm.cpp LowerRealmToEmitC.cpp
+                      LowerRealmToLLVM.cpp SimplifyRealmDataflow.cpp
+)
 target_link_libraries(
   MLIRRealmTransforms
   PUBLIC MLIRRealmDialect MLIRPass
-  PRIVATE MLIREmitCDialect MLIRFuncTransforms MLIRSCFTransforms
+  PRIVATE MLIREmitCDialect
+          MLIRFuncTransforms
+          MLIRSCFTransforms
+          MLIRFuncToLLVM
+          MLIRArithToLLVM
+          MLIRControlFlowToLLVM
+          MLIRSCFToControlFlow
+          MLIRAsyncDialect
+          MLIRGPUDialect
+          MLIRTransformUtils
 )
 llvm_update_compile_flags(MLIRRealmTransforms)
 
 add_executable(realm-opt realm-opt.cpp)
 target_link_libraries(
-  realm-opt PRIVATE MLIRRealmTransforms MLIROptLib MLIRTransforms MLIRArithDialect
+  realm-opt
+  PRIVATE MLIRRealmTransforms
+          MLIROptLib
+          MLIRTransforms
+          MLIRArithDialect
+          MLIRAsyncDialect
+          MLIRGPUDialect
+          MLIRMemRefDialect
 )
 llvm_update_compile_flags(realm-opt)
 
 include(CTest)
 option(REALM_MLIR_TEST_RUNTIME "Build and run tests against an installed Realm runtime" OFF)
 option(REALM_MLIR_BUILD_LLVM_TASK_EXAMPLE "Build the CPU task examples with Realm LLVM JIT" OFF)
+option(REALM_MLIR_BUILD_LLVM_EXAMPLES "Build the direct LLVM CPU example" OFF)
+option(REALM_MLIR_BUILD_CUDA_EXAMPLE "Build the direct LLVM CUDA example" OFF)
 
-if(REALM_MLIR_BUILD_LLVM_TASK_EXAMPLE OR (BUILD_TESTING AND REALM_MLIR_TEST_RUNTIME))
+if(REALM_MLIR_BUILD_LLVM_TASK_EXAMPLE
+   OR REALM_MLIR_BUILD_LLVM_EXAMPLES
+   OR REALM_MLIR_BUILD_CUDA_EXAMPLE
+   OR (BUILD_TESTING AND REALM_MLIR_TEST_RUNTIME)
+)
   find_package(Realm REQUIRED CONFIG)
   find_program(
     mlir_opt
@@ -68,6 +97,22 @@ if(REALM_MLIR_BUILD_LLVM_TASK_EXAMPLE OR (BUILD_TESTING AND REALM_MLIR_TEST_RUNT
     NAMES mlir-translate
     HINTS "${LLVM_TOOLS_BINARY_DIR}" REQUIRED
   )
+endif()
+
+if(REALM_MLIR_BUILD_LLVM_EXAMPLES OR REALM_MLIR_BUILD_CUDA_EXAMPLE)
+  find_program(
+    llvm_llc
+    NAMES llc
+    HINTS "${LLVM_TOOLS_BINARY_DIR}" REQUIRED
+  )
+endif()
+
+if(REALM_MLIR_BUILD_LLVM_TASK_EXAMPLE
+   OR REALM_MLIR_BUILD_LLVM_EXAMPLES
+   OR REALM_MLIR_BUILD_CUDA_EXAMPLE
+)
+  add_library(RealmMLIRLLVMRuntime STATIC RealmLLVMRuntime.cpp)
+  target_link_libraries(RealmMLIRLLVMRuntime PUBLIC Realm::Realm)
 endif()
 
 if(BUILD_TESTING)
@@ -82,6 +127,21 @@ if(BUILD_TESTING)
            COMMAND realm-opt --split-input-file --verify-diagnostics --convert-realm-to-emitc
                    "${CMAKE_CURRENT_SOURCE_DIR}/test/invalid-index-space.mlir"
   )
+  add_test(NAME realm-mlir-invalid-async-conversion
+           COMMAND realm-opt --split-input-file --verify-diagnostics --convert-async-to-realm
+                   "${CMAKE_CURRENT_SOURCE_DIR}/test/invalid-async-conversion.mlir"
+  )
+  add_test(NAME realm-mlir-invalid-gpu-conversion
+           COMMAND realm-opt --split-input-file --verify-diagnostics --convert-gpu-to-realm
+                   "${CMAKE_CURRENT_SOURCE_DIR}/test/invalid-gpu-conversion.mlir"
+  )
+  foreach(backend IN ITEMS emitc llvm)
+    add_test(
+      NAME realm-mlir-invalid-${backend}-lowering
+      COMMAND realm-opt --split-input-file --verify-diagnostics --convert-realm-to-${backend}
+              "${CMAKE_CURRENT_SOURCE_DIR}/test/invalid-${backend}-lowering.mlir"
+    )
+  endforeach()
 
   set(machine_queries "${CMAKE_CURRENT_SOURCE_DIR}/test/machine-queries.mlir")
   add_test(NAME realm-mlir-machine-query-roundtrip COMMAND realm-opt --verify-roundtrip
@@ -96,6 +156,21 @@ if(BUILD_TESTING)
     HINTS "${LLVM_TOOLS_BINARY_DIR}"
   )
   if(filecheck)
+    add_test(
+      NAME realm-mlir-allocator-order
+      COMMAND
+        "${CMAKE_COMMAND}" "-DREALM_OPT=$<TARGET_FILE:realm-opt>" "-DFILECHECK=${filecheck}"
+        "-DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/test/allocator-order.mlir"
+        "-DLLVM_INPUT=${CMAKE_CURRENT_SOURCE_DIR}/test/llvm-allocator-order.mlir" -P
+        "${CMAKE_CURRENT_SOURCE_DIR}/test/check-allocator-order.cmake"
+    )
+    add_test(
+      NAME realm-mlir-gpu-allocator-order
+      COMMAND
+        "${CMAKE_COMMAND}" "-DREALM_OPT=$<TARGET_FILE:realm-opt>" "-DFILECHECK=${filecheck}"
+        "-DINPUT=${CMAKE_CURRENT_SOURCE_DIR}/test/gpu-allocator-order.mlir" -DFRONTEND=gpu -P
+        "${CMAKE_CURRENT_SOURCE_DIR}/test/check-frontend-lowering.cmake"
+    )
     add_test(
       NAME realm-mlir-dataflow-boundaries
       COMMAND

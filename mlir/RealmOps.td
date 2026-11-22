@@ -7,6 +7,7 @@
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpBase.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def Realm_Dialect : Dialect {
@@ -19,6 +20,12 @@ def Realm_Dialect : Dialect {
     Realm's native merge semantics. With no preconditions the request uses
     `NO_EVENT`. To wait for all inputs regardless of poison, first combine
     the inputs with `realm.event.join_settled`.
+
+    Allocation and destruction are ordered host submissions to Realm's
+    asynchronous allocator. A deletion precondition must never come to
+    depend on the readiness of an allocation submitted after that deletion.
+    Lowerings must preserve this ordering even when the returned events do
+    not express a direct SSA dependence between requests.
   }];
   let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
@@ -32,8 +39,14 @@ def Realm_Event : Realm_Type<"Event", "event">;
 def Realm_Instance : Realm_Type<"Instance", "instance">;
 def Realm_Processor : Realm_Type<"Processor", "processor">;
 def Realm_Task : Realm_Type<"Task", "task">;
+def Realm_TaskBinding : Realm_Type<"TaskBinding", "task_binding"> {
+  let parameters = (ins "::mlir::FunctionType":$signature);
+  let assemblyFormat = "`<` $signature `>`";
+}
 def Realm_Memory : Realm_Type<"Memory", "memory">;
 def Realm_Layout : Realm_Type<"Layout", "layout">;
+def Realm_DenseLayout : Realm_Type<"DenseLayout", "dense_layout">;
+def Realm_DenseIndexSpace : Realm_Type<"DenseIndexSpace", "dense_index_space">;
 def Realm_Reservation : Realm_Type<"Reservation", "reservation">;
 def Realm_BarrierPhase : Realm_Type<"BarrierPhase", "barrier_phase">;
 
@@ -154,7 +167,7 @@ def Realm_AwaitOp : Realm_Op<"event.await"> {
   let assemblyFormat = "$event attr-dict";
 }
 
-def Realm_CreateInstanceOp : Realm_Op<"instance.create"> {
+def Realm_CreateInstanceOp : Realm_Op<"instance.create", [MemoryEffects<[MemRead, MemWrite]>]> {
   let summary = "Submit instance allocation and return its handle and readiness event";
   let description = [{
     The handle can be available before allocation and may be null if Realm
@@ -163,11 +176,13 @@ def Realm_CreateInstanceOp : Realm_Op<"instance.create"> {
     when the handle exists. The current runtime lowering uses Realm's default
     allocation failure reporting, which can abort on out-of-memory.
   }];
-  let arguments = (ins Realm_Memory:$memory, Realm_Layout:$layout,
+  let arguments = (ins Realm_Memory:$memory,
+                       AnyTypeOf<[Realm_Layout, Realm_DenseLayout]>:$layout,
                        Variadic<Realm_Event>:$dependencies);
   let results = (outs Realm_Instance:$instance, Realm_Event:$ready);
   let assemblyFormat = [{
-    `in` $memory `layout` $layout (`after` ` ` `[` $dependencies^ `]`)? attr-dict
+    `in` $memory `layout` $layout custom<InstanceLayoutType>(type($layout))
+    (`after` ` ` `[` $dependencies^ `]`)? attr-dict
   }];
 }
 
@@ -176,6 +191,43 @@ def Realm_InstanceExistsOp : Realm_Op<"instance.exists", [Pure]> {
   let arguments = (ins Realm_Instance:$instance);
   let results = (outs I1:$exists);
   let assemblyFormat = "$instance attr-dict";
+}
+
+def Realm_DenseSpaceOp : Realm_Op<"index_space.dense", [Pure]> {
+  let summary = "Describe a zero-based, one-dimensional dense domain";
+  let arguments = (ins I64:$extent);
+  let results = (outs Realm_DenseIndexSpace:$space);
+  let assemblyFormat = "$extent attr-dict";
+}
+
+def Realm_DenseLayoutOp : Realm_Op<"layout.dense", [Pure]> {
+  let summary = "Describe contiguous storage for a single field with ID zero";
+  let arguments = (ins Realm_DenseIndexSpace:$space, I64Attr:$fieldBytes);
+  let results = (outs Realm_DenseLayout:$layout);
+  let assemblyFormat = "$space `field_bytes` $fieldBytes attr-dict";
+  let hasVerifier = 1;
+}
+
+def Realm_TaskRegisterOp : Realm_Op<"task.register", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Register a module-defined function on local processors of a kind";
+  let arguments = (ins FlatSymbolRefAttr:$callee, I32Attr:$id,
+                       Realm_ProcessorKindAttr:$kind);
+  let results = (outs Realm_TaskBinding:$task, Realm_Event:$registered);
+  let assemblyFormat = "$callee `id` $id `kind` qualified($kind) `as` qualified(type($task)) attr-dict";
+  let hasVerifier = 1;
+}
+
+def Realm_SpawnTypedOp : Realm_Op<"spawn_typed", [AttrSizedOperandSegments]> {
+  let summary = "Submit a typed task with scalar and instance arguments";
+  let arguments = (ins Realm_TaskBinding:$task, Variadic<AnyType>:$args,
+                       Realm_Processor:$processor, Variadic<Realm_Event>:$dependencies);
+  let results = (outs Realm_Event:$done);
+  let assemblyFormat = [{
+    $task `(` $args `)` `on` $processor (`after` ` ` `[` $dependencies^ `]`)?
+    attr-dict `:` qualified(type($task)) (`,` type($args)^)?
+  }];
+  let hasVerifier = 1;
 }
 
 def Realm_SpawnOp : Realm_Op<"spawn", [AttrSizedOperandSegments]> {
@@ -199,7 +251,8 @@ def Realm_CopyOp : Realm_Op<"copy"> {
   let summary = "Submit a direct copy between a pair of instance fields";
   let arguments = (ins Realm_Instance:$source, I32Attr:$sourceField,
                        Realm_Instance:$target, I32Attr:$targetField,
-                       Realm_IndexSpace:$space, I64Attr:$bytes,
+                       AnyTypeOf<[Realm_IndexSpace, Realm_DenseIndexSpace]>:$space,
+                       I64Attr:$bytes,
                        Variadic<Realm_Event>:$dependencies);
   let results = (outs Realm_Event:$done);
   let assemblyFormat = [{
@@ -210,7 +263,7 @@ def Realm_CopyOp : Realm_Op<"copy"> {
   let hasVerifier = 1;
 }
 
-def Realm_DestroyInstanceOp : Realm_Op<"instance.destroy"> {
+def Realm_DestroyInstanceOp : Realm_Op<"instance.destroy", [MemoryEffects<[MemRead, MemWrite]>]> {
   let summary = "Submit deferred instance destruction";
   let arguments = (ins Realm_Instance:$instance, Variadic<Realm_Event>:$dependencies);
   let assemblyFormat = [{

@@ -194,6 +194,9 @@ namespace mlir::realm {
   void registerRealmPasses()
   {
     registerPass(createLowerRealmToEmitCPass);
+    registerPass(createLowerRealmToLLVMPass);
+    registerPass(createLowerAsyncToRealmPass);
+    registerPass(createLowerGPUToRealmPass);
     registerPass(createSimplifyRealmDataflowPass);
     PassPipelineRegistration<>(
         "convert-realm-machine-to-emitc", "Alias for convert-realm-to-emitc",

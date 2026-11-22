@@ -16,6 +16,8 @@
 #include <string>
 #include <tuple>
 
+extern "C" int realm_mlir_collective_start(Realm::Event::id_t registered);
+
 std::tuple<Realm::Processor, bool> find_local_cpu();
 std::tuple<Realm::Memory, bool> find_cpu_memory(Realm::Processor cpu);
 std::tuple<Realm::RegionInstance, Realm::Event>
@@ -31,6 +33,11 @@ bool run_feature_examples(Realm::Runtime &runtime, Realm::Processor cpu,
                           Realm::Processor::TaskFuncID increment);
 
 namespace {
+  constexpr Realm::Processor::TaskFuncID seed = Realm::Processor::TASK_ID_FIRST_AVAILABLE;
+  constexpr Realm::Processor::TaskFuncID double_task = seed + 1;
+  constexpr Realm::Processor::TaskFuncID sum = seed + 2;
+  constexpr Realm::Processor::TaskFuncID increment = seed + 3;
+
   void *instance_address(Realm::RegionInstance::id_t id)
   {
     return Realm::RegionInstance(id).pointer_untyped(0, sizeof(int32_t));
@@ -49,7 +56,7 @@ namespace {
         &address_of, sizeof(address_of));
   }
 
-  int run_task(Realm::Runtime &runtime, const std::string &llvm_ir)
+  int run_task(Realm::Runtime &runtime, Realm::Event registered)
   {
     static_assert(sizeof(size_t) == sizeof(uint64_t) &&
                       sizeof(Realm::Processor) == sizeof(uint64_t) &&
@@ -67,19 +74,6 @@ namespace {
       std::cerr << "No local Realm system memory found\n";
       return 1;
     }
-
-    constexpr Realm::Processor::TaskFuncID seed =
-        Realm::Processor::TASK_ID_FIRST_AVAILABLE;
-    constexpr Realm::Processor::TaskFuncID double_task = seed + 1;
-    constexpr Realm::Processor::TaskFuncID sum = seed + 2;
-    constexpr Realm::Processor::TaskFuncID increment = seed + 3;
-    Realm::Event seed_registered = register_task(seed, llvm_ir, "seed_value");
-    Realm::Event double_registered = register_task(double_task, llvm_ir, "double_value");
-    Realm::Event sum_registered = register_task(sum, llvm_ir, "sum_values");
-    Realm::Event increment_registered =
-        register_task(increment, llvm_ir, "increment_value");
-    Realm::Event registered = Realm::Event::merge_events(
-        seed_registered, double_registered, sum_registered, increment_registered);
 
     Realm::InstanceLayoutOpaque layout(sizeof(int32_t), alignof(int32_t));
     Realm::UserEvent start = Realm::UserEvent::create_user_event();
@@ -120,7 +114,16 @@ int main(int argc, char **argv)
   Realm::Runtime runtime;
   if(!runtime.init(&argc, &argv))
     return 1;
-  int result = run_task(runtime, llvm_ir);
-  runtime.shutdown(Realm::Event::NO_EVENT, result);
+  Realm::Event seed_registered = register_task(seed, llvm_ir, "seed_value");
+  Realm::Event double_registered = register_task(double_task, llvm_ir, "double_value");
+  Realm::Event sum_registered = register_task(sum, llvm_ir, "sum_values");
+  Realm::Event increment_registered =
+      register_task(increment, llvm_ir, "increment_value");
+  Realm::Event registered = Realm::Event::merge_events(
+      seed_registered, double_registered, sum_registered, increment_registered);
+  if(realm_mlir_collective_start(registered.id)) {
+    int result = run_task(runtime, registered);
+    runtime.shutdown(Realm::Event::NO_EVENT, result);
+  }
   return runtime.wait_for_shutdown();
 }
