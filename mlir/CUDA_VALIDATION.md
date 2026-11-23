@@ -50,16 +50,31 @@ reports and share any fixes as a patch.
    two launches submitted from one task. Treat this demo as a correctness
    check and use repeated warm launches for any latency measurements.
 
-3. With a network-enabled Realm build, run `realm-llvm-cpu -ll:cpu 1
+3. Use a network-enabled Realm build. For an installed static GASNet-EX Realm
+   built with the `ibv` conduit, pass `-DGASNET_CONDUIT=ibv` and
+   `-DGASNET_USE_MULTITHREADED=ON` when configuring MLIR. Also set
+   `-DGASNet_ROOT="$PWD/build/realm-cuda/_deps/gasnet-install"`, or point it to
+   the matching GASNet-EX installation. The threading option selects the
+   parallel conduit library used by Realm.
+
+   Run `realm-llvm-cpu -ll:cpu 1
    -realm:prof 2 -level collective=2,taskreg=2` with one Realm process on each of two nodes.
    Confirm that Realm reports two distinct address spaces and writes
    `realmprof_0.dat` and `realmprof_1.dat`. Check that each process registers its
    local tasks once and participates in the startup collective, then both exit
-   successfully. The selected host
-   process runs the CPU pipeline twice using the same task bindings. To test
-   the CUDA demo with the same startup protocol, reserve a GPU on the node
-   that owns the first Realm CPU processor. Both processes register their
-   local GPU launchers, and the selected host runs the CUDA checks on one GPU.
+   successfully. The selected host process runs the CPU pipeline twice using
+   the same task bindings.
+
+   For the CUDA demo, reserve a GPU on the node that owns the first Realm CPU
+   processor. Each process with a GPU registers its local launchers, and the
+   selected host runs the CUDA checks on one GPU. The executable embeds the
+   absolute PTX path through `REALM_MLIR_CUDA_PTX`. Make the PTX available at
+   that path on the selected host, for example by using a shared build
+   directory or staging the binary and PTX at identical paths on both nodes.
+
+   For a mixed job with `-ll:gpu 1` on the selected host and `-ll:gpu 0` on
+   another process, pass `-cuda:ipc 0` to every process to work around a Realm
+   CUDA startup issue.
 
 4. Report correctness for each configuration, attach any diagnostics or trace
    summaries, and identify the earliest failing stage for each problem

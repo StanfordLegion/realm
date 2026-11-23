@@ -23,6 +23,7 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SetVector.h"
 
+#include <cassert>
 #include <type_traits>
 
 namespace mlir::realm {
@@ -110,10 +111,13 @@ namespace mlir::realm {
         return LLVM::LoadOp::create(builder, loc, type, address);
       }
 
-      Value wordAddress(Value base, unsigned index)
+      Value wordAddress(Value base, size_t index)
       {
+        // GEPArg holds a constant index in kGEPConstantBitWidth signed bits.
+        assert(index < (size_t(1) << (LLVM::kGEPConstantBitWidth - 1)));
         return LLVM::GEPOp::create(builder, loc, base.getType(), builder.getI64Type(),
-                                   base, ArrayRef<LLVM::GEPArg>{index});
+                                   base,
+                                   ArrayRef<LLVM::GEPArg>{static_cast<int32_t>(index)});
       }
 
       Value packWords(ValueRange values)
