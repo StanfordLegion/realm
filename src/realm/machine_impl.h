@@ -398,7 +398,7 @@ namespace Realm {
     // makes and returns if a copy if more than one reference is held
     ProcessorQueryImpl *writeable_reference(void);
 
-    void restrict_to_node(int new_node_id);
+    void restrict_to_node(AddressSpace new_node_id);
     void restrict_to_kind(Processor::Kind new_kind);
     void add_predicate(ProcQueryPredicate *pred);
 
@@ -417,17 +417,12 @@ namespace Realm {
 
     void set_cached_mem(Memory m)
     {
-      cached_mem = m;
       if(predicates.size() == 1)
-        is_cached_mem = true;
+        cached_mem = m;
       else
-        is_cached_mem = false;
+        cached_mem.reset();
     };
-    void reset_cached_mem()
-    {
-      cached_mem = Memory::NO_MEMORY;
-      is_cached_mem = false;
-    };
+    void reset_cached_mem() { cached_mem.reset(); };
     // records the first has_affinity_to(Memory) predicate: a query the shared
     //  cache does not serve enumerates the affinity map of one of its
     //  memories (the smallest, chosen from the predicates when the query runs)
@@ -458,17 +453,17 @@ namespace Realm {
   protected:
     atomic<int> references;
     const MachineImpl *machine;
-    bool is_restricted_node;
-    int restricted_node_id;
-    bool is_restricted_kind;
-    Processor::Kind restricted_kind;
+    std::optional<AddressSpace> restricted_node_id;
+    std::optional<Processor::Kind> restricted_kind;
+    // set when the user requests a conflicting query, which must return the
+    //  empty set
+    bool conflict;
     std::vector<ProcQueryPredicate *> predicates;
 
     // Best affinity cost function (not a predicate)
     std::optional<BestAffinityCostFn> best_affinity_cost;
 
-    Memory cached_mem;
-    bool is_cached_mem;
+    std::optional<Memory> cached_mem;
     std::optional<AffinityAnchor<Memory>> anchor_mem; // see add_anchor_mem
     bool anchored() const { return anchor_mem.has_value(); }
 
@@ -499,15 +494,16 @@ namespace Realm {
     mutable std::optional<CachedList> first_own;
     mutable std::vector<std::unique_ptr<CachedList>> own_lists;
 
-    // whether the shared cache can serve this query at all: at most one kind
-    //  and one node, no best-affinity cost, and no predicate other than the one
-    //  memory affinity the by-memory lists cover; anything else enumerates
-    //  the anchor memory's affinity map, or walks the machine without one
+    // whether the shared cache can serve this query at all: no conflict, no
+    //  best-affinity cost, and no predicate other than the one memory
+    //  affinity the by-memory lists cover; anything else enumerates the
+    //  anchor memory's affinity map, or walks the machine without one (a
+    //  conflicting query does neither: it matches nothing)
     bool shared_cache_covers() const
     {
-      return !(is_restricted_node && (restricted_node_id < 0)) &&
-             !best_affinity_cost.has_value() && (predicates.empty() || is_cached_mem) &&
-             (!is_restricted_kind || (unsigned(restricted_kind) < NUM_PROCESSOR_KINDS));
+      return !conflict && !best_affinity_cost.has_value() &&
+             (predicates.empty() || cached_mem.has_value()) &&
+             (!restricted_kind || (unsigned(*restricted_kind) < NUM_PROCESSOR_KINDS));
     }
     // the shared list that serves this query (attaching to it as a side
     //  effect), or null if the shared cache does not cover this query. The
@@ -533,7 +529,7 @@ namespace Realm {
     // the list for this query's kind (or of every kind) in a kind snapshot
     const CachedList *list_in(const KindCache *kc) const
     {
-      return is_restricted_kind ? &kc->by_kind[restricted_kind] : &kc->all;
+      return restricted_kind ? &kc->by_kind[*restricted_kind] : &kc->all;
     }
     // builders of the shared snapshots for 'generation', run one at a time
     //  by QueryCacheSlot::get_or_build
@@ -654,7 +650,7 @@ namespace Realm {
     // makes and returns if a copy if more than one reference is held
     MemoryQueryImpl *writeable_reference(void);
 
-    void restrict_to_node(int new_node_id);
+    void restrict_to_node(AddressSpace new_node_id);
     void restrict_to_kind(Memory::Kind new_kind);
     void restrict_by_capacity(size_t new_min_bytes);
     void add_predicate(MemoryQueryPredicate *pred);
@@ -681,14 +677,12 @@ namespace Realm {
     //  the shared by-memory lists serve while it is the only predicate
     void set_cached_mem(Memory m)
     {
-      cached_mem = m;
-      is_cached_mem = (predicates.size() == 1);
+      if(predicates.size() == 1)
+        cached_mem = m;
+      else
+        cached_mem.reset();
     }
-    void reset_cached_mem()
-    {
-      cached_mem = Memory::NO_MEMORY;
-      is_cached_mem = false;
-    }
+    void reset_cached_mem() { cached_mem.reset(); }
 
     Memory first_match(void) const;
     Memory next_match(Memory after) const;
@@ -727,10 +721,11 @@ namespace Realm {
   protected:
     atomic<int> references;
     const MachineImpl *machine;
-    bool is_restricted_node;
-    int restricted_node_id;
-    bool is_restricted_kind;
-    Memory::Kind restricted_kind;
+    std::optional<AddressSpace> restricted_node_id;
+    std::optional<Memory::Kind> restricted_kind;
+    // set when the user requests a conflicting query, which must return the
+    //  empty set
+    bool conflict;
     size_t restricted_min_capacity;
     // see ProcessorQueryImpl
     mutable atomic<const CachedList *> attached;
@@ -739,8 +734,7 @@ namespace Realm {
     mutable std::vector<std::unique_ptr<CachedList>> own_lists;
     std::vector<MemoryQueryPredicate *> predicates;
     // see set_anchor_proc and set_cached_mem
-    Memory cached_mem;
-    bool is_cached_mem;
+    std::optional<Memory> cached_mem;
     std::optional<AffinityAnchor<Processor>> anchor_proc;
     std::optional<AffinityAnchor<Memory>> anchor_mem;
     bool anchored() const { return anchor_proc.has_value() || anchor_mem.has_value(); }
@@ -752,15 +746,14 @@ namespace Realm {
     // see ProcessorQueryImpl
     bool shared_cache_covers() const
     {
-      return !(is_restricted_node && (restricted_node_id < 0)) &&
-             (predicates.empty() || is_cached_mem) && (restricted_min_capacity == 0) &&
-             !best_proc_affinity_cost.has_value() &&
+      return !conflict && (predicates.empty() || cached_mem.has_value()) &&
+             (restricted_min_capacity == 0) && !best_proc_affinity_cost.has_value() &&
              !best_mem_affinity_cost.has_value() &&
-             (!is_restricted_kind || (unsigned(restricted_kind) < NUM_MEMORY_KINDS));
+             (!restricted_kind || (unsigned(*restricted_kind) < NUM_MEMORY_KINDS));
     }
     const CachedList *list_in(const KindCache *kc) const
     {
-      return is_restricted_kind ? &kc->by_kind[restricted_kind] : &kc->all;
+      return restricted_kind ? &kc->by_kind[*restricted_kind] : &kc->all;
     }
     const CachedList *list_in(const AffinityCache *ac) const;
     const CachedList *cached_list() const
