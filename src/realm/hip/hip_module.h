@@ -117,6 +117,27 @@ namespace Realm {
       int cfg_num_gpus = 0;
       std::string cfg_gpu_idxs;
       unsigned cfg_task_streams = 12, cfg_d2d_streams = 4;
+      // Number of streams per peer GPU, including imported HIP IPC framebuffers.  With a
+      // single stream per (src,dst) pair -- the historical behaviour, still available as
+      // -ll:p2p_streams 1 -- copies to the same peer queue behind one another, and a
+      // small copy can wait for an unrelated bulk transfer to drain.  ROCm maps the
+      // streams of each priority onto at most GPU_MAX_HW_QUEUES hardware queues per
+      // device (default 4), so more streams than that add no concurrency.  On MI250X,
+      // a small IPC copy queued behind four 16 MiB copies to the same peer took 418us
+      // with one stream and 231us with four, with no further gain from 8 or 16 unless
+      // GPU_MAX_HW_QUEUES was raised.  Peer copies between two GPUs of one process
+      // showed no gain from any stream count in the same test.
+      unsigned cfg_p2p_streams = 4;
+      // Number of streams per direction for host<->device copies.  With a single stream
+      // each -- the historical behaviour, still available as -ll:hd_streams 1 -- every
+      // host->FB copy for a GPU queues on one stream and every FB->host copy on another,
+      // so a small copy waits for whatever bulk transfer is already in flight.  The
+      // default matches the CUDA module, where 2 was the measured optimum and larger
+      // values were no better.  On MI250X, where these copies are copy kernels rather
+      // than copy-engine transfers, a 256 KiB copy queued behind four 16 MiB copies in
+      // the same direction was no faster with 2 streams than with 1, and 4 or 8
+      // streams helped only for some GPU_MAX_HW_QUEUES settings.
+      unsigned cfg_hd_streams = 2;
       bool cfg_use_worker_threads = false, cfg_use_shared_worker = true,
            cfg_pin_sysmem = true;
       bool cfg_fences_use_callbacks = false;
@@ -127,7 +148,29 @@ namespace Realm {
       int cfg_max_ctxsync_threads = 4;
       bool cfg_multithread_dma = false;
       size_t cfg_hostreg_limit = 1 << 30;
-      int cfg_d2d_stream_priority = -1;
+      // Relative priority of every stream used for DMA: intra-GPU, peer, host<->device
+      // and HIP IPC copies.  Lower values are higher priority, and task streams are
+      // always created at relative priority 0.  The default of -1 is meant to keep a
+      // copy kernel from waiting behind every block of the task kernels that were
+      // launched before it, as measured for the CUDA module.  On HIP every affine copy
+      // is a kernel, including host<->device and single-rectangle copies, so this
+      // applies to every path.  ROCm also gives each priority its own pool of
+      // GPU_MAX_HW_QUEUES hardware queues, so -1 also moves DMA off the hardware
+      // queues shared by the task streams.  The cost is that sustained DMA delays the
+      // task kernels instead.  On MI250X, an 88KiB copy issued while task kernels
+      // were running waited for the whole task wave (75ms) at priority 0 and took
+      // about 130us at -1, and copies that small did not slow the task kernels.  With
+      // sixteen 16MiB copies queued ahead of each of 40 measured copies, a wave of
+      // task kernels that takes 77ms on its own finished 1.02x later at -1 than at 0
+      // for host->device and device->host copies, 1.5x for peer copies (on the
+      // destination GPU, which runs them) and 1.17x within the GPU.  For host<->device
+      // copies this was 6.2x and 4.6x with copy kernels at the occupancy limit and 1.4x
+      // and 1.3x at one block per CU (see HOST_COPY_BLOCKS in hip_internal.cc); for peer
+      // and intra-GPU copies it was 1.4x and 1.1x before they used their own streams.
+      // With 64KiB copies the delay was under 1%.  Raising GPU_MAX_HW_QUEUES to 16 made
+      // the task kernels about 4% slower at -1 and gave copies occasional stalls of tens
+      // of milliseconds.
+      int cfg_dma_stream_priority = -1;
       bool cfg_use_hip_ipc = true;
 
       // resources

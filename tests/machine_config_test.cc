@@ -75,6 +75,9 @@ namespace TestConfig {
   size_t dynfb_max_size = 128 * 1024 * 1024;
   unsigned task_streams = 2;
   unsigned d2d_streams = 2;
+  unsigned p2p_streams = 2;
+  unsigned hd_streams = 3;
+  unsigned host_copy_blocks_per_sm = 1;
 
   // openmp module
   int num_openmp_cpus = 1;
@@ -219,6 +222,8 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     size_t dynfb_max_size = 0;
     unsigned task_streams = 0;
     unsigned d2d_streams = 0;
+    unsigned p2p_streams = 0;
+    unsigned hd_streams = 0;
     ASSERT_REALM(gpu_config->get_property("gpu", num_gpus));
     assert(num_gpus == TestConfig::num_gpus);
     ASSERT_REALM(gpu_config->get_property("fbmem", fb_mem_size));
@@ -233,6 +238,10 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     if(cuda_config) {
       ASSERT_REALM(gpu_config->get_property("uvmem", uvm_mem_size));
       assert(uvm_mem_size == TestConfig::uvm_mem_size);
+      unsigned host_copy_blocks_per_sm = 0;
+      ASSERT_REALM(cuda_config->get_property("host_copy_blocks_per_sm",
+                                             host_copy_blocks_per_sm));
+      assert(host_copy_blocks_per_sm == TestConfig::host_copy_blocks_per_sm);
     }
     ASSERT_REALM(gpu_config->get_property("use_dynamic_fb", use_dynamic_fb));
     assert(use_dynamic_fb == TestConfig::use_dynamic_fb);
@@ -242,14 +251,20 @@ void top_level_task(const void *args, size_t arglen, const void *userdata, size_
     assert(task_streams == TestConfig::task_streams);
     ASSERT_REALM(gpu_config->get_property("d2d_streams", d2d_streams));
     assert(d2d_streams == TestConfig::d2d_streams);
+    ASSERT_REALM(gpu_config->get_property("p2p_streams", p2p_streams));
+    assert(p2p_streams == TestConfig::p2p_streams);
+    ASSERT_REALM(gpu_config->get_property("hd_streams", hd_streams));
+    assert(hd_streams == TestConfig::hd_streams);
     // test wrong property
     ret_value = gpu_config->get_property("get_error_cuda", wrong_config);
     assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_NAME);
     log_app.print(
         "cuda gpus %d, fbmem %zu, zcmem %zu, fb_ib %zu, zc_ib %zu, uvm %zu, "
-        "use_dynamic_fb %d, dynfb_max_size %zu, task_streams %u, d2d_streams %u",
+        "use_dynamic_fb %d, dynfb_max_size %zu, task_streams %u, d2d_streams %u, "
+        "p2p_streams %u, hd_streams %u",
         num_gpus, fb_mem_size, zc_mem_size, fb_ib_size, zc_ib_size, uvm_mem_size,
-        use_dynamic_fb, dynfb_max_size, task_streams, d2d_streams);
+        use_dynamic_fb, dynfb_max_size, task_streams, d2d_streams, p2p_streams,
+        hd_streams);
   } else {
     log_app.print("cuda/hip is not loaded");
   }
@@ -593,6 +608,8 @@ int main(int argc, char **argv)
       // uvm is only available in cuda
       if(cuda_config) {
         ASSERT_REALM(gpu_config->set_property<size_t>("uvmem", TestConfig::uvm_mem_size));
+        ASSERT_REALM(cuda_config->set_property<unsigned>(
+            "host_copy_blocks_per_sm", TestConfig::host_copy_blocks_per_sm));
       }
       ASSERT_REALM(
           gpu_config->set_property<bool>("use_dynamic_fb", TestConfig::use_dynamic_fb));
@@ -602,6 +619,10 @@ int main(int argc, char **argv)
           gpu_config->set_property<unsigned>("task_streams", TestConfig::task_streams));
       ASSERT_REALM(
           gpu_config->set_property<unsigned>("d2d_streams", TestConfig::d2d_streams));
+      ASSERT_REALM(
+          gpu_config->set_property<unsigned>("p2p_streams", TestConfig::p2p_streams));
+      ASSERT_REALM(
+          gpu_config->set_property<unsigned>("hd_streams", TestConfig::hd_streams));
       // test wrong config
       ret_value = gpu_config->set_property("set_error_cuda", TestConfig::fb_mem_size);
       assert(ret_value == REALM_MODULE_CONFIG_ERROR_INVALID_NAME);

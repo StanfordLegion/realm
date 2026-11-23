@@ -20,6 +20,7 @@
 
 #include "realm/cuda/cuda_module.h"
 
+#include <array>
 #include <memory>
 #include <unordered_map>
 #if !defined(CUDA_ENABLE_DEPRECATED)
@@ -412,12 +413,17 @@ namespace Realm {
       get_null_task_stream(void) const; // needed by librealm_kokkos.so
       GPUStream *get_next_task_stream(bool create = false);
       GPUStream *get_next_d2d_stream();
+      // Round-robins over the cfg_p2p_streams streams dedicated to `target_index`.
+      GPUStream *get_next_p2p_stream(int target_index);
+      // Round-robin over this GPU's host<->device stream pools (-ll:hd_streams).
+      GPUStream *get_next_h2d_stream();
+      GPUStream *get_next_d2h_stream();
 
       void launch_batch_affine_fill_kernel(void *fill_info, size_t dim, size_t elemSize,
                                            size_t volume, GPUStream *stream);
       void launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elemSize,
-                                      size_t volume, bool multified_optimized,
-                                      GPUStream *stream);
+                                      size_t volume, bool multifield_optimized,
+                                      GPUStream *stream, uint64_t max_blocks);
       void launch_transpose_kernel(MemcpyTransposeInfo<size_t> &copy_info,
                                    size_t elemSize, GPUStream *stream);
 
@@ -478,6 +484,7 @@ namespace Realm {
       GPUFuncInfo fill_affine_large_kernels[REALM_MAX_DIM]
                                            [CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
       GPUFuncInfo transpose_kernels[CUDA_MEMCPY_KERNEL_MAX2_LOG2_BYTES];
+      uint64_t host_copy_max_blocks = 0; // blocks per SM times this GPU's SM count
 
       CUdeviceptr fbmem_base = 0;
 
@@ -493,14 +500,32 @@ namespace Realm {
       std::set<Memory> peer_fbs;
 
       // streams for different copy types and a pile for actual tasks
-      GPUStream *host_to_device_stream = nullptr;
-      GPUStream *device_to_host_stream = nullptr;
+      // One pool per direction.  These were single streams until measurement showed a
+      // 256 KiB host->FB copy taking 56x longer when it queued behind bulk traffic on the
+      // same GPU, while identical traffic on OTHER GPUs' streams cost 2.7x -- the same
+      // head-of-line blocking the peer streams had.  hd_streams_per_dir is clamped to >=1
+      // so the round-robin modulo cannot divide by zero.
+      std::vector<GPUStream *> host_to_device_streams;
+      std::vector<GPUStream *> device_to_host_streams;
+      unsigned hd_streams_per_dir = 1; // == max(1, cfg_hd_streams), fixed at ctor
+      atomic<unsigned> next_h2d_stream = atomic<unsigned>(0);
+      atomic<unsigned> next_d2h_stream = atomic<unsigned>(0);
       GPUStream *device_to_device_stream = nullptr;
       std::vector<GPUStream *> device_to_device_streams;
-      std::vector<GPUStream *> peer_to_peer_streams; // indexed by target
+      // flat: [target_index * p2p_streams_per_peer + k].  Flat rather than nested so
+      // the single delete_container_contents() in the destructor still works; entries
+      // for this GPU itself stay null (deleting null is fine).
+      std::vector<GPUStream *> peer_to_peer_streams;
+      unsigned p2p_streams_per_peer = 1; // == max(1, cfg_p2p_streams), fixed at ctor
       std::vector<GPUStream *> task_streams;
       atomic<unsigned> next_task_stream = atomic<unsigned>(0);
       atomic<unsigned> next_d2d_stream = atomic<unsigned>(0);
+      // One rotation counter PER TARGET.  A single shared counter (as the d2d path
+      // uses, where there is only ever one target) would correlate with the target:
+      // with 2 streams and 2 active peers the counter alternates, so one peer would
+      // always land on stream 0 and the other always on stream 1 -- each peer would
+      // use exactly one stream and the extra streams would do nothing.
+      std::vector<atomic<unsigned>> next_p2p_stream;
       size_t cupti_activity_refcount = 0;
 
       GPUEventPool event_pool;
@@ -509,15 +534,30 @@ namespace Realm {
       //  in practice)
       int least_stream_priority, greatest_stream_priority;
 
+      // All imported memories from one remote GPU share a pool. The pool is
+      // constructed during IPC setup and remains stable until GPU shutdown.
+      struct IpcStreamPool {
+        std::vector<GPUStream *> streams;
+        atomic<unsigned> next_stream = atomic<unsigned>(0);
+
+        GPUStream *get_next_stream()
+        {
+          assert(!streams.empty());
+          return streams[next_stream.fetch_add(1) % streams.size()];
+        }
+      };
+      using IpcStreamKey = std::pair<NodeID, std::array<char, sizeof(CUuuid)>>;
+
       struct CudaIpcMapping {
         NodeID owner;
         GPU *src_gpu;
+        IpcStreamPool *stream_pool = nullptr;
         Memory mem;
         uintptr_t local_base;
         uintptr_t address_offset; // add to convert from original to local base
       };
       std::vector<CudaIpcMapping> cudaipc_mappings;
-      std::map<NodeID, GPUStream *> cudaipc_streams;
+      std::map<IpcStreamKey, IpcStreamPool> cudaipc_streams;
       Mutex alloc_mutex;
       const CudaIpcMapping *find_ipc_mapping(Memory mem) const;
 

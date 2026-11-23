@@ -119,29 +119,52 @@ namespace Realm {
       return pinned_sysmems.count(mem->me) > 0;
     }
 
+    static GPU *mem_to_gpu(const MemoryImpl *mem);
+
     bool GPU::is_accessible_gpu_mem(const MemoryImpl *mem) const
     {
       assert(mem != nullptr);
-      switch(mem->get_kind()) {
-      case Memory::GPU_FB_MEM:
-      {
-        const HipDeviceMemoryInfo *mem_info =
-            mem->find_module_specific<HipDeviceMemoryInfo>();
-        return (mem_info != nullptr) &&
-               ((mem_info->gpu == this) ||
-                (info->peers.find(mem_info->gpu->info->index) != info->peers.end()));
-      }
-      default:
-        break;
-      }
-      return false;
+      // Unlike the CUDA module, GPUFBMemory has no HipDeviceMemoryInfo (only
+      // GPUDynamicFBMemory does), so find the owning GPU the way the copy code does.
+      const GPU *owner = mem_to_gpu(mem);
+      // peers holds HIP device IDs
+      return (owner != nullptr) &&
+             ((owner == this) || (info->peers.count(owner->info->device) > 0));
     }
 
+    // Grid cap, in blocks, for copy kernels that read or write host memory (see
+    // GPU::launch_batch_affine_kernel).  A host<->device copy is limited by the host
+    // link, and a block keeps about 4KiB of it in flight (one 16-byte element per
+    // thread), so the grid only needs to cover the link's bandwidth-delay product.  On
+    // MI250X one block moved about 5GB/s, and 16 reached the link's full bandwidth for
+    // contiguous, strided and 4-rectangle copies in both directions; more moved no more.
+    // Every block beyond that only spreads the copy's host accesses, which take
+    // microseconds, over more CUs, and an application kernel's memory instructions on
+    // those CUs wait behind them.  With sixteen 16MiB copies queued, a wave of task
+    // kernels that takes 78ms on its own took 79ms beside host<->device copies at 16
+    // blocks against 102-111ms at one block per CU (110 blocks), and a wave of
+    // 232-register task kernels 144-146ms against 270-338ms.  The count is a property of
+    // the host link: a faster one may need more blocks, and on a GPU whose host memory is
+    // its own memory (MI300A) these copies are not link-bound at all.  Copies within one
+    // GPU or between GPUs stay at the occupancy limit.  Two blocks per CU cut the delay
+    // to the task kernels within one GPU (a 77ms wave took 83ms instead of 91ms), but
+    // made a copy queued behind four concurrent 16MiB copies take 1.4x as long within a
+    // GPU and 1.9x between GPUs: capped copy kernels share the GPU instead of each taking
+    // it in turn, so the first copy ahead finishes last.
+    static const unsigned HOST_COPY_BLOCKS = 16;
+
+    // Picks the stream for a copy.  peer_on_dst runs copies between peer GPUs on the
+    // destination GPU; leave it false for kernels launched on the source GPU.  *host_copy
+    // (if given) is set to whether the copy reads or writes host memory.
     static GPUStream *select_stream(GPU *dst, GPU *src, GPU *channel_gpu,
                                     const GPU::HipIpcMapping *dst_mapping,
-                                    MemoryImpl *src_mem, MemoryImpl *dst_mem)
+                                    MemoryImpl *src_mem, MemoryImpl *dst_mem,
+                                    bool peer_on_dst = false, bool *host_copy = nullptr)
     {
       assert(channel_gpu != nullptr);
+      if(host_copy != nullptr) {
+        *host_copy = false;
+      }
       // Assume the channel_gpu is always available and will fill in the role for when src
       // or dst is null.  This could be the case if the src/dst mem is pageable and we
       // have pageable access
@@ -154,7 +177,7 @@ namespace Realm {
 
       // IPC copy
       if(dst_mapping != nullptr) {
-        return src->hipipc_streams[dst_mapping->owner];
+        return dst_mapping->stream_pool->get_next_stream();
       }
 
       const bool src_gpu_mem = src->is_accessible_gpu_mem(src_mem);
@@ -164,17 +187,26 @@ namespace Realm {
         if(src == dst) {
           return src->get_next_d2d_stream();
         }
-        // P2P copy
-        return src->peer_to_peer_streams[dst->info->index];
+        // P2P copy.  A copy kernel on the destination GPU reads the source over the link.
+        // On MI250X that was as fast as running on the source GPU for contiguous 16MiB
+        // copies and faster for everything else: 30% for strided 16MiB copies, 21% for
+        // 1MiB copies and 14% for small ones.
+        if(peer_on_dst && (dst->info->peers.count(src->info->device) > 0)) {
+          return dst->get_next_p2p_stream(src->info->index);
+        }
+        return src->get_next_p2p_stream(dst->info->index);
+      }
+      if(host_copy != nullptr) {
+        *host_copy = true;
       }
       // D2H copy
       if(src_gpu_mem) {
-        return src->device_to_host_stream;
+        return src->get_next_d2h_stream();
       }
       // H2D or H2H copy.  We use the destination gpu here instead, since it does not
       // matter what GPU actually accesses the host memory, as we want to minimize any
       // peer traffic that might occur
-      return dst->host_to_device_stream;
+      return dst->get_next_h2d_stream();
     }
 #ifndef __HIP_PLATFORM_NVIDIA__
     static void get_nonaffine_strides(size_t &pitch, size_t &height,
@@ -535,13 +567,16 @@ namespace Realm {
       // Maximum amount to transfer in a single quantum in order to ensure other requests
       // have a chance to make forward progress.  This should be large enough that the
       // overhead of splitting the copy shouldn't be noticable in terms of latency (4GiB
-      // should be good here for most purposes)
+      // should be good here for most purposes).  Kept 64 bytes under 4GiB, which keeps
+      // every rectangle of a copy kernel launch under 2^32 elements (the kernel's tile
+      // counts are 32-bit) without changing the copy's alignment.
       // TODO: make controllable
-      const size_t flow_control_bytes = 4ULL * 1024ULL * 1024ULL * 1024ULL;
+      const size_t flow_control_bytes = 4ULL * 1024ULL * 1024ULL * 1024ULL - 64;
 
       ReadSequenceCache rseqcache(this, 2 << 20);
       WriteSequenceCache wseqcache(this, 2 << 20);
       GPUStream *stream = 0;
+      bool host_copy = false;
       size_t total_bytes = 0;
 
       AffineCopyInfo<3> copy_infos;
@@ -641,8 +676,9 @@ namespace Realm {
           }
         }
 
-        stream = select_stream(out_gpu, in_gpu, channel->get_gpu(), out_mapping,
-                               in_port->mem, out_port->mem);
+        stream =
+            select_stream(out_gpu, in_gpu, channel->get_gpu(), out_mapping, in_port->mem,
+                          out_port->mem, /*peer_on_dst=*/true, &host_copy);
         assert(stream != NULL);
 
         AutoGPUContext agc(stream->get_gpu());
@@ -823,7 +859,8 @@ namespace Realm {
                             << copy_infos.num_rects << " bytes=" << copy_info_total
                             << " out_is_ipc=" << out_is_ipc;
           stream->get_gpu()->launch_batch_affine_kernel(
-              &copy_infos, 3, min_align, copy_info_total / min_align, stream, arg_size);
+              &copy_infos, 3, min_align, copy_info_total / min_align, stream, arg_size,
+              host_copy ? HOST_COPY_BLOCKS : 0, host_copy);
           bytes_to_fence += copy_info_total;
         }
         if(bytes_to_fence > 0) {

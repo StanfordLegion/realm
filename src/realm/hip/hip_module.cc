@@ -870,6 +870,25 @@ namespace Realm {
       return device_to_device_streams[d2d_stream_index];
     }
 
+    GPUStream *GPU::get_next_h2d_stream()
+    {
+      unsigned k = (next_h2d_stream.fetch_add(1) % hd_streams_per_dir);
+      return host_to_device_streams[k];
+    }
+
+    GPUStream *GPU::get_next_d2h_stream()
+    {
+      unsigned k = (next_d2h_stream.fetch_add(1) % hd_streams_per_dir);
+      return device_to_host_streams[k];
+    }
+
+    GPUStream *GPU::get_next_p2p_stream(int target_index)
+    {
+      const unsigned tgt = static_cast<unsigned>(target_index);
+      unsigned k = (next_p2p_stream[tgt].fetch_add(1) % p2p_streams_per_peer);
+      return peer_to_peer_streams[(tgt * p2p_streams_per_peer) + k];
+    }
+
     const GPU::HipIpcMapping *GPU::find_ipc_mapping(Memory mem) const
     {
       for(std::vector<HipIpcMapping>::const_iterator it = hipipc_mappings.begin();
@@ -1825,7 +1844,8 @@ namespace Realm {
 
     void GPU::launch_batch_affine_kernel(void *copy_info, size_t dim, size_t elem_size,
                                          size_t volume, GPUStream *stream,
-                                         size_t arg_size)
+                                         size_t arg_size, unsigned max_blocks,
+                                         bool host_copy)
     {
       size_t log_elem_size = std::min(static_cast<size_t>(ctz(elem_size)),
                                       HIP_MEMCPY_KERNEL_MAX2_LOG2_BYTES - 1);
@@ -1834,8 +1854,27 @@ namespace Realm {
       assert(dim <= REALM_MAX_DIM);
       assert(dim >= 1);
       log_gpudma.info() << "launching batch affine kernel ";
-      GPUFuncInfo &func_info = batch_affine_kernels[dim - 1][log_elem_size];
-      launch_kernel(func_info, copy_info, volume, arg_size, stream);
+      const GPUFuncInfo &func_info =
+          host_copy ? batch_affine_host_kernels[dim - 1][log_elem_size]
+                    : batch_affine_kernels[dim - 1][log_elem_size];
+      if(volume == 0) {
+        return; // no rectangles; the kernel copies the first one without checking
+      }
+      // The kernel works in 256-thread blocks (on gfx9 each of the four waves copies
+      // whole tiles of the copy; see hip_memcpy.hip), so the blocks are always full
+      // size, and it loops over the copy, so a smaller grid is still correct.
+      const unsigned num_threads = COPY_KERNEL_THREADS;
+      unsigned grid_cap = static_cast<unsigned>(func_info.occ_num_blocks);
+      if(max_blocks > 0) {
+        grid_cap = std::min(grid_cap, max_blocks);
+      }
+      const unsigned num_blocks = static_cast<unsigned>(std::min(
+          (volume + num_threads - 1) / num_threads, static_cast<size_t>(grid_cap)));
+      void *config[] = {HIP_LAUNCH_PARAM_BUFFER_POINTER, copy_info,
+                        HIP_LAUNCH_PARAM_BUFFER_SIZE, &arg_size, HIP_LAUNCH_PARAM_END};
+      CHECK_HIP(hipModuleLaunchKernel(func_info.func, num_blocks, 1, 1, num_threads, 1, 1,
+                                      /* shared_mem_bytes */ 0, stream->get_stream(),
+                                      nullptr, config));
     }
 
     void GPU::launch_indirect_copy_kernel(void *copy_info, size_t dim, size_t addr_size,
@@ -1921,15 +1960,19 @@ namespace Realm {
 
       event_pool.init_pool();
 
-      host_to_device_stream = new GPUStream(this, worker);
-      device_to_host_stream = new GPUStream(this, worker);
+      hd_streams_per_dir = std::max(1u, module->config->cfg_hd_streams);
+      host_to_device_streams.resize(hd_streams_per_dir, nullptr);
+      device_to_host_streams.resize(hd_streams_per_dir, nullptr);
+      for(unsigned k = 0; k < hd_streams_per_dir; k++) {
+        host_to_device_streams[k] =
+            new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
+        device_to_host_streams[k] =
+            new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
+      }
 
       hipDevice_t dev;
-      int numSMs;
 
       CHECK_HIP(hipGetDevice(&dev));
-      CHECK_HIP(
-          hipDeviceGetAttribute(&numSMs, hipDeviceAttributeMultiprocessorCount, dev));
       CHECK_HIP(hipModuleLoadData(&device_module, (void *)realm_hip_fatbin));
 
       // hipModuleOccupancyMaxPotentialBlockSize ignores __launch_bounds__ on HIP (unlike
@@ -1950,7 +1993,7 @@ namespace Realm {
           log_bit_sz++) {
         const unsigned int bit_sz = 8U << log_bit_sz;
         GPUFuncInfo func_info;
-        char name[30];
+        char name[64];
         std::snprintf(name, sizeof(name), "memcpy_transpose%u", bit_sz);
         CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
 
@@ -1992,6 +2035,12 @@ namespace Realm {
               &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func, 0));
           batch_affine_kernels[d - 1][log_bit_sz] = func_info;
 
+          std::snprintf(name, sizeof(name), "memcpy_affine_host_batch%uD_%u", d, bit_sz);
+          CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
+          CHECK_HIP(occupancy_max_block_size(
+              &func_info.occ_num_blocks, &func_info.occ_num_threads, func_info.func, 0));
+          batch_affine_host_kernels[d - 1][log_bit_sz] = func_info;
+
           std::snprintf(name, sizeof(name), "fill_affine_large%uD_%u", d, bit_sz);
           CHECK_HIP(hipModuleGetFunction(&func_info.func, device_module, name));
           CHECK_HIP(occupancy_max_block_size(
@@ -2022,14 +2071,23 @@ namespace Realm {
       device_to_device_streams.resize(module->config->cfg_d2d_streams, 0);
       for(unsigned i = 0; i < module->config->cfg_d2d_streams; i++)
         device_to_device_streams[i] =
-            new GPUStream(this, worker, module->config->cfg_d2d_stream_priority);
+            new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
 
-      // only create p2p streams for devices we can talk to
-      peer_to_peer_streams.resize(module->gpu_info.size(), nullptr);
+      // only create p2p streams for devices we can talk to.  cfg_p2p_streams of them
+      // per peer lets concurrent copies to the SAME peer overlap rather than serialising
+      // behind whatever is already queued.  Clamped to >=1 so the round-robin modulo in
+      // get_next_p2p_stream cannot divide by zero.  info->peers includes this GPU
+      // itself, but copies within one GPU use the d2d streams, so skip it.
+      p2p_streams_per_peer = std::max(1u, module->config->cfg_p2p_streams);
+      peer_to_peer_streams.resize(module->gpu_info.size() * p2p_streams_per_peer,
+                                  nullptr);
+      next_p2p_stream.resize(module->gpu_info.size(), atomic<unsigned>(0));
       for(std::vector<GPUInfo *>::const_iterator it = module->gpu_info.begin();
           it != module->gpu_info.end(); ++it)
-        if(info->peers.count((*it)->device) != 0)
-          peer_to_peer_streams[(*it)->index] = new GPUStream(this, worker);
+        if(((*it)->index != info->index) && (info->peers.count((*it)->device) != 0))
+          for(unsigned k = 0; k < p2p_streams_per_peer; k++)
+            peer_to_peer_streams[((*it)->index * p2p_streams_per_peer) + k] =
+                new GPUStream(this, worker, module->config->cfg_dma_stream_priority);
 
       task_streams.resize(module->config->cfg_task_streams);
       for(unsigned i = 0; i < module->config->cfg_task_streams; i++)
@@ -2045,8 +2103,8 @@ namespace Realm {
       event_pool.empty_pool();
 
       // destroy streams
-      delete host_to_device_stream;
-      delete device_to_host_stream;
+      delete_container_contents(host_to_device_streams);
+      delete_container_contents(device_to_host_streams);
 
       delete_container_contents(device_to_device_streams);
 
@@ -2055,9 +2113,8 @@ namespace Realm {
         if(*it)
           delete *it;
 
-      for(std::map<NodeID, GPUStream *>::iterator it = hipipc_streams.begin();
-          it != hipipc_streams.end(); ++it)
-        delete it->second;
+      for(auto &peer : hipipc_streams)
+        delete_container_contents(peer.second.streams);
 
       delete_container_contents(task_streams);
 
@@ -2337,6 +2394,8 @@ namespace Realm {
       config_map.insert({"dynfb_max_size", &cfg_dynfb_max_size});
       config_map.insert({"task_streams", &cfg_task_streams});
       config_map.insert({"d2d_streams", &cfg_d2d_streams});
+      config_map.insert({"p2p_streams", &cfg_p2p_streams});
+      config_map.insert({"hd_streams", &cfg_hd_streams});
 
       resource_map.insert({"gpu", &res_num_gpus});
       resource_map.insert({"fbmem", &res_min_fbmem_size});
@@ -2379,7 +2438,9 @@ namespace Realm {
           .add_option_string("-ll:gpu_ids", cfg_gpu_idxs)
           .add_option_int("-ll:streams", cfg_task_streams)
           .add_option_int("-ll:d2d_streams", cfg_d2d_streams)
-          .add_option_int("-ll:d2d_priority", cfg_d2d_stream_priority)
+          .add_option_int("-ll:p2p_streams", cfg_p2p_streams)
+          .add_option_int("-ll:hd_streams", cfg_hd_streams)
+          .add_option_int("-ll:dma_stream_priority", cfg_dma_stream_priority)
           .add_option_int("-ll:gpuworkthread", cfg_use_worker_threads)
           .add_option_int("-ll:gpuworker", cfg_use_shared_worker)
           .add_option_int("-ll:pin", cfg_pin_sysmem)
@@ -3276,11 +3337,15 @@ namespace Realm {
                                        reinterpret_cast<uintptr_t>(dptr);
               {
                 AutoLock<> al(hip_module_singleton->hipipc_mutex);
+                GPU::IpcStreamPool &pool = (*it)->hipipc_streams[mapping.mem];
+                if(pool.streams.empty()) {
+                  for(unsigned k = 0; k < (*it)->p2p_streams_per_peer; k++)
+                    pool.streams.push_back(new GPUStream(
+                        *it, (*it)->worker,
+                        (*it)->module->config->cfg_dma_stream_priority));
+                }
+                mapping.stream_pool = &pool;
                 (*it)->hipipc_mappings.push_back(mapping);
-
-                // do we have a stream for this target?
-                if((*it)->hipipc_streams.count(sender) == 0)
-                  (*it)->hipipc_streams[sender] = new GPUStream(*it, (*it)->worker);
               }
             }
           }
