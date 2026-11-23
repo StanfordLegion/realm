@@ -106,7 +106,31 @@ macro(Realm_load_targets type)
     # Find all the static library dependencies needed
     # Use the installed Find* modules as a last resort for dependencies
     foreach(_dep @REALM_STATIC_DEPENDS@)
-      find_dependency(${_dep})
+      if(_dep STREQUAL "GASNet" AND NOT "@REALM_GASNET_PKGCONFIG_MODULE@" STREQUAL "")
+        find_dependency(GASNet MODULE COMPONENTS "@REALM_GASNET_PKGCONFIG_MODULE@")
+        # A caller may already have found GASNet or supplied its own find module.
+        if(TARGET GASNet::GASNet)
+          get_target_property(_realm_gasnet_module GASNet::GASNet GASNet_PKGCONFIG_MODULE)
+        else()
+          set(_realm_gasnet_module "")
+        endif()
+        if(NOT _realm_gasnet_module STREQUAL "@REALM_GASNET_PKGCONFIG_MODULE@")
+          if(NOT _realm_gasnet_module)
+            set(_realm_gasnet_module "unknown")
+          endif()
+          set(Realm_FOUND FALSE)
+          string(
+            CONCAT Realm_NOT_FOUND_MESSAGE
+                   "This static Realm build requires @REALM_GASNET_PKGCONFIG_MODULE@. "
+                   "GASNet::GASNet reports '${_realm_gasnet_module}'. "
+                   "Use a matching GASNet installation and find module."
+          )
+          return()
+        endif()
+        unset(_realm_gasnet_module)
+      else()
+        find_dependency(${_dep})
+      endif()
     endforeach()
   endif()
 
