@@ -96,6 +96,8 @@ set(machine_query_bench_ARGS -iters 20 -reps 1 -threads 1,2 -ll:cpu 2 -ll:util 1
 add_benchmark(machine_query_bench "${REALM_BENCH_DIR}/machine_query_bench/machine_query_bench.cc")
 set(reducetest_ARGS -batches 1) # Run short version
 add_benchmark(reducetest "${REALM_BENCH_DIR}/reducetest/reducetest.cc")
+set(barrier_bench_ARGS -sgens 32 -pgens 128 -reps 1 -adopt 8) # Run short version
+add_benchmark(barrier_bench "${REALM_BENCH_DIR}/barrier_bench/barrier_bench.cc")
 
 add_benchmark(
   task_throughput "${REALM_BENCH_DIR}/task_throughput/task_throughput.cc"
