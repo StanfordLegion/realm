@@ -4,6 +4,7 @@ var classRealm_1_1Machine_1_1MemoryQuery =
     [ "MemoryQuery", "classRealm_1_1Machine_1_1MemoryQuery.html#af41c35e86e13d5b7cd610b75ce5baa02", null ],
     [ "MemoryQuery", "classRealm_1_1Machine_1_1MemoryQuery.html#a1341cc5bf0cf47d07e048a42d759978d", null ],
     [ "~MemoryQuery", "classRealm_1_1Machine_1_1MemoryQuery.html#a448278235755299cfa1ebb3878a74f3b", null ],
+    [ "address_space", "classRealm_1_1Machine_1_1MemoryQuery.html#a54b40c052804801c6fd35168c4967733", null ],
     [ "begin", "classRealm_1_1Machine_1_1MemoryQuery.html#a7a92010572892a6e4862d0ebeb87a289", null ],
     [ "best_affinity_to", "classRealm_1_1Machine_1_1MemoryQuery.html#a034c4a4405abe974eed0af27ce104ce9", null ],
     [ "best_affinity_to", "classRealm_1_1Machine_1_1MemoryQuery.html#ad7c85137470fe3ed575730a2459cb89f", null ],

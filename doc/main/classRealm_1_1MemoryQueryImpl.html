@@ -42,7 +42,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+a92afe2d</button>
+     <button class="dropbtn">Version 26.9.1+278c0a14</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -139,7 +139,7 @@ $(function(){initNavTree('classRealm_1_1MemoryQueryImpl.html','','classRealm_1_1
 <div class="dynheader">
 Collaboration diagram for Realm::MemoryQueryImpl:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" loading="lazy" frameborder="0" src="classRealm_1_1MemoryQueryImpl__coll__graph.svg" width="3271" height="2227"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><iframe scrolling="no" loading="lazy" frameborder="0" src="classRealm_1_1MemoryQueryImpl__coll__graph.svg" width="3288" height="2071"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
@@ -160,7 +160,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:aa3ace5d72856b924e4ff88555d83b15e" id="r_aa3ace5d72856b924e4ff88555d83b15e"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aa3ace5d72856b924e4ff88555d83b15e">add_reference</a> (void)</td></tr>
 <tr class="memitem:a71ef287b44577fdbd99c7f849d906ad4" id="r_a71ef287b44577fdbd99c7f849d906ad4"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a71ef287b44577fdbd99c7f849d906ad4">remove_reference</a> (void)</td></tr>
 <tr class="memitem:afc1ddc6b78af6c29896a1ea5556940c3" id="r_afc1ddc6b78af6c29896a1ea5556940c3"><td class="memItemLeft" align="right" valign="top"><a class="el" href="#a3b0ba4e83ac7063c33b1ae564e5e3641">MemoryQueryImpl</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#afc1ddc6b78af6c29896a1ea5556940c3">writeable_reference</a> (void)</td></tr>
-<tr class="memitem:a8d7683516c2a1a1b81c9880094771c55" id="r_a8d7683516c2a1a1b81c9880094771c55"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a8d7683516c2a1a1b81c9880094771c55">restrict_to_node</a> (int new_node_id)</td></tr>
+<tr class="memitem:ae0f913d599f6e4f479a9743518a474f7" id="r_ae0f913d599f6e4f479a9743518a474f7"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ae0f913d599f6e4f479a9743518a474f7">restrict_to_node</a> (<a class="el" href="namespaceRealm.html#a3a658ce0cc4fe7183869a28fde6bbd63">AddressSpace</a> new_node_id)</td></tr>
 <tr class="memitem:a7af09230e41bbf55014bde07931875ae" id="r_a7af09230e41bbf55014bde07931875ae"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a7af09230e41bbf55014bde07931875ae">restrict_to_kind</a> (<a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a> new_kind)</td></tr>
 <tr class="memitem:a088463ee7be14da841f7ad3442399841" id="r_a088463ee7be14da841f7ad3442399841"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a088463ee7be14da841f7ad3442399841">restrict_by_capacity</a> (size_t new_min_bytes)</td></tr>
 <tr class="memitem:a4b2b580cd5337f725e1bde0e27dae313" id="r_a4b2b580cd5337f725e1bde0e27dae313"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a4b2b580cd5337f725e1bde0e27dae313">add_predicate</a> (<a class="el" href="namespaceRealm.html#af5685ecad651601b884c7805ff713eb6">MemoryQueryPredicate</a> *pred)</td></tr>
@@ -228,18 +228,16 @@ Protected Member Functions</h2></td></tr>
 Protected Attributes</h2></td></tr>
 <tr class="memitem:a6ff38cd0647ddf9b23d85db2f15eb758" id="r_a6ff38cd0647ddf9b23d85db2f15eb758"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; int &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a6ff38cd0647ddf9b23d85db2f15eb758">references</a></td></tr>
 <tr class="memitem:ab05b355a66edf9b21323d8c842a2d538" id="r_ab05b355a66edf9b21323d8c842a2d538"><td class="memItemLeft" align="right" valign="top">const <a class="el" href="classRealm_1_1MachineImpl.html">MachineImpl</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ab05b355a66edf9b21323d8c842a2d538">machine</a></td></tr>
-<tr class="memitem:a03588ec84dd2f3af302ba5eabbe2d531" id="r_a03588ec84dd2f3af302ba5eabbe2d531"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a03588ec84dd2f3af302ba5eabbe2d531">is_restricted_node</a></td></tr>
-<tr class="memitem:a4bcbbbd94a98c3427cc96a003819378f" id="r_a4bcbbbd94a98c3427cc96a003819378f"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a4bcbbbd94a98c3427cc96a003819378f">restricted_node_id</a></td></tr>
-<tr class="memitem:a6443182e801a74cbf6235ed0767d3818" id="r_a6443182e801a74cbf6235ed0767d3818"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a6443182e801a74cbf6235ed0767d3818">is_restricted_kind</a></td></tr>
-<tr class="memitem:ad93b48f6549283fbc4f811756fd7670c" id="r_ad93b48f6549283fbc4f811756fd7670c"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ad93b48f6549283fbc4f811756fd7670c">restricted_kind</a></td></tr>
+<tr class="memitem:ab1b79383e606a61c535c561ffe346854" id="r_ab1b79383e606a61c535c561ffe346854"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="namespaceRealm.html#a3a658ce0cc4fe7183869a28fde6bbd63">AddressSpace</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ab1b79383e606a61c535c561ffe346854">restricted_node_id</a></td></tr>
+<tr class="memitem:a391ec6ea058c7894438beeccc6242b9d" id="r_a391ec6ea058c7894438beeccc6242b9d"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a391ec6ea058c7894438beeccc6242b9d">restricted_kind</a></td></tr>
+<tr class="memitem:af1989d2f2b1ab0a7f5dd5c61b2dadb9c" id="r_af1989d2f2b1ab0a7f5dd5c61b2dadb9c"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#af1989d2f2b1ab0a7f5dd5c61b2dadb9c">conflict</a></td></tr>
 <tr class="memitem:a745897052d3361e5878f1891878901ee" id="r_a745897052d3361e5878f1891878901ee"><td class="memItemLeft" align="right" valign="top">size_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a745897052d3361e5878f1891878901ee">restricted_min_capacity</a></td></tr>
 <tr class="memitem:a3235bf67f57f431472db11668bd8aabe" id="r_a3235bf67f57f431472db11668bd8aabe"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; const <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> * &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a3235bf67f57f431472db11668bd8aabe">attached</a></td></tr>
 <tr class="memitem:af05e0385f94f5612100c483dd8f68129" id="r_af05e0385f94f5612100c483dd8f68129"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1UnfairMutex.html">UnfairMutex</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#af05e0385f94f5612100c483dd8f68129">build_mutex</a></td></tr>
 <tr class="memitem:aab745bcccec223f4c95f7b9addd8f51c" id="r_aab745bcccec223f4c95f7b9addd8f51c"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aab745bcccec223f4c95f7b9addd8f51c">first_own</a></td></tr>
 <tr class="memitem:a208c0da0249d3f69ad7996fad58ed92f" id="r_a208c0da0249d3f69ad7996fad58ed92f"><td class="memItemLeft" align="right" valign="top">std::vector&lt; std::unique_ptr&lt; <a class="el" href="#ae1b355001d6c509916719365c9618765">CachedList</a> &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a208c0da0249d3f69ad7996fad58ed92f">own_lists</a></td></tr>
 <tr class="memitem:a749e31209b13e40177316a956efb2bea" id="r_a749e31209b13e40177316a956efb2bea"><td class="memItemLeft" align="right" valign="top">std::vector&lt; <a class="el" href="namespaceRealm.html#af5685ecad651601b884c7805ff713eb6">MemoryQueryPredicate</a> * &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a749e31209b13e40177316a956efb2bea">predicates</a></td></tr>
-<tr class="memitem:a8140bcb1ce814365914922652f83fa7b" id="r_a8140bcb1ce814365914922652f83fa7b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Memory.html">Memory</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a8140bcb1ce814365914922652f83fa7b">cached_mem</a></td></tr>
-<tr class="memitem:a0245686fe6e28fbf0fca050fe252ba55" id="r_a0245686fe6e28fbf0fca050fe252ba55"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a0245686fe6e28fbf0fca050fe252ba55">is_cached_mem</a></td></tr>
+<tr class="memitem:a465002dbc6f3569f122343fb2df2163b" id="r_a465002dbc6f3569f122343fb2df2163b"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a465002dbc6f3569f122343fb2df2163b">cached_mem</a></td></tr>
 <tr class="memitem:aef7ccb2c7480df4b75fd8e093a9af4aa" id="r_aef7ccb2c7480df4b75fd8e093a9af4aa"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="structRealm_1_1AffinityAnchor.html">AffinityAnchor</a>&lt; <a class="el" href="classRealm_1_1Processor.html">Processor</a> &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#aef7ccb2c7480df4b75fd8e093a9af4aa">anchor_proc</a></td></tr>
 <tr class="memitem:ad22888bc274f190ffb854702d8312627" id="r_ad22888bc274f190ffb854702d8312627"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="structRealm_1_1AffinityAnchor.html">AffinityAnchor</a>&lt; <a class="el" href="classRealm_1_1Memory.html">Memory</a> &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#ad22888bc274f190ffb854702d8312627">anchor_mem</a></td></tr>
 <tr class="memitem:acf1b996f6b78e2c9bfe75d5d9b7fdd1c" id="r_acf1b996f6b78e2c9bfe75d5d9b7fdd1c"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="structRealm_1_1MemoryQueryImpl_1_1BestProcAffinityCostFn.html">BestProcAffinityCostFn</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#acf1b996f6b78e2c9bfe75d5d9b7fdd1c">best_proc_affinity_cost</a></td></tr>
@@ -1363,8 +1361,8 @@ template&lt;typename Fn&gt; </div>
 
 </div>
 </div>
-<a id="a8d7683516c2a1a1b81c9880094771c55" name="a8d7683516c2a1a1b81c9880094771c55"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8d7683516c2a1a1b81c9880094771c55">&#9670;&#160;</a></span>restrict_to_node()</h2>
+<a id="ae0f913d599f6e4f479a9743518a474f7" name="ae0f913d599f6e4f479a9743518a474f7"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae0f913d599f6e4f479a9743518a474f7">&#9670;&#160;</a></span>restrict_to_node()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1372,7 +1370,7 @@ template&lt;typename Fn&gt; </div>
         <tr>
           <td class="memname">void Realm::MemoryQueryImpl::restrict_to_node </td>
           <td>(</td>
-          <td class="paramtype">int</td>          <td class="paramname"><span class="paramname"><em>new_node_id</em></span></td><td>)</td>
+          <td class="paramtype"><a class="el" href="namespaceRealm.html#a3a658ce0cc4fe7183869a28fde6bbd63">AddressSpace</a></td>          <td class="paramname"><span class="paramname"><em>new_node_id</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -1798,8 +1796,8 @@ template&lt;typename Map, typename Fn&gt; </div>
 
 </div>
 </div>
-<a id="a8140bcb1ce814365914922652f83fa7b" name="a8140bcb1ce814365914922652f83fa7b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8140bcb1ce814365914922652f83fa7b">&#9670;&#160;</a></span>cached_mem</h2>
+<a id="a465002dbc6f3569f122343fb2df2163b" name="a465002dbc6f3569f122343fb2df2163b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a465002dbc6f3569f122343fb2df2163b">&#9670;&#160;</a></span>cached_mem</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -1808,7 +1806,29 @@ template&lt;typename Map, typename Fn&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="classRealm_1_1Memory.html">Memory</a> Realm::MemoryQueryImpl::cached_mem</td>
+          <td class="memname">std::optional&lt;<a class="el" href="classRealm_1_1Memory.html">Memory</a>&gt; Realm::MemoryQueryImpl::cached_mem</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+</div>
+</div>
+<a id="af1989d2f2b1ab0a7f5dd5c61b2dadb9c" name="af1989d2f2b1ab0a7f5dd5c61b2dadb9c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af1989d2f2b1ab0a7f5dd5c61b2dadb9c">&#9670;&#160;</a></span>conflict</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool Realm::MemoryQueryImpl::conflict</td>
         </tr>
       </table>
   </td>
@@ -1836,72 +1856,6 @@ template&lt;typename Map, typename Fn&gt; </div>
   </td>
   <td class="mlabels-right">
 <span class="mlabels"><span class="mlabel mutable">mutable</span><span class="mlabel protected">protected</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a0245686fe6e28fbf0fca050fe252ba55" name="a0245686fe6e28fbf0fca050fe252ba55"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0245686fe6e28fbf0fca050fe252ba55">&#9670;&#160;</a></span>is_cached_mem</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">bool Realm::MemoryQueryImpl::is_cached_mem</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a6443182e801a74cbf6235ed0767d3818" name="a6443182e801a74cbf6235ed0767d3818"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6443182e801a74cbf6235ed0767d3818">&#9670;&#160;</a></span>is_restricted_kind</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">bool Realm::MemoryQueryImpl::is_restricted_kind</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a03588ec84dd2f3af302ba5eabbe2d531" name="a03588ec84dd2f3af302ba5eabbe2d531"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a03588ec84dd2f3af302ba5eabbe2d531">&#9670;&#160;</a></span>is_restricted_node</h2>
-
-<div class="memitem">
-<div class="memproto">
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">bool Realm::MemoryQueryImpl::is_restricted_node</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel protected">protected</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -2018,8 +1972,8 @@ template&lt;typename Map, typename Fn&gt; </div>
 
 </div>
 </div>
-<a id="ad93b48f6549283fbc4f811756fd7670c" name="ad93b48f6549283fbc4f811756fd7670c"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ad93b48f6549283fbc4f811756fd7670c">&#9670;&#160;</a></span>restricted_kind</h2>
+<a id="a391ec6ea058c7894438beeccc6242b9d" name="a391ec6ea058c7894438beeccc6242b9d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a391ec6ea058c7894438beeccc6242b9d">&#9670;&#160;</a></span>restricted_kind</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2028,7 +1982,7 @@ template&lt;typename Map, typename Fn&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a> Realm::MemoryQueryImpl::restricted_kind</td>
+          <td class="memname">std::optional&lt;<a class="el" href="classRealm_1_1Memory.html#a4d4d0769990b3dc75fcbab5ae292e839">Memory::Kind</a>&gt; Realm::MemoryQueryImpl::restricted_kind</td>
         </tr>
       </table>
   </td>
@@ -2062,8 +2016,8 @@ template&lt;typename Map, typename Fn&gt; </div>
 
 </div>
 </div>
-<a id="a4bcbbbd94a98c3427cc96a003819378f" name="a4bcbbbd94a98c3427cc96a003819378f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4bcbbbd94a98c3427cc96a003819378f">&#9670;&#160;</a></span>restricted_node_id</h2>
+<a id="ab1b79383e606a61c535c561ffe346854" name="ab1b79383e606a61c535c561ffe346854"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab1b79383e606a61c535c561ffe346854">&#9670;&#160;</a></span>restricted_node_id</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -2072,7 +2026,7 @@ template&lt;typename Map, typename Fn&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">int Realm::MemoryQueryImpl::restricted_node_id</td>
+          <td class="memname">std::optional&lt;<a class="el" href="namespaceRealm.html#a3a658ce0cc4fe7183869a28fde6bbd63">AddressSpace</a>&gt; Realm::MemoryQueryImpl::restricted_node_id</td>
         </tr>
       </table>
   </td>

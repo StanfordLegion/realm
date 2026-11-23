@@ -1,9 +1,5 @@
 var NAVTREEINDEX59 =
 {
-"functions_vars_r.html":[2,3,2,16],
-"functions_vars_s.html":[2,3,2,17],
-"functions_vars_t.html":[2,3,2,18],
-"functions_vars_u.html":[2,3,2,19],
 "functions_vars_v.html":[2,3,2,20],
 "functions_vars_w.html":[2,3,2,21],
 "functions_vars_x.html":[2,3,2,22],
@@ -249,5 +245,9 @@ var NAVTREEINDEX59 =
 "globals_defs_f.html":[3,1,6,5],
 "globals_defs_g.html":[3,1,6,6],
 "globals_defs_h.html":[3,1,6,7],
-"globals_defs_i.html":[3,1,6,8]
+"globals_defs_i.html":[3,1,6,8],
+"globals_defs_k.html":[3,1,6,9],
+"globals_defs_l.html":[3,1,6,10],
+"globals_defs_m.html":[3,1,6,11],
+"globals_defs_n.html":[3,1,6,12]
 };

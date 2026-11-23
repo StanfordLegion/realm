@@ -4,6 +4,7 @@ var classRealm_1_1Machine_1_1ProcessorQuery =
     [ "ProcessorQuery", "classRealm_1_1Machine_1_1ProcessorQuery.html#acf1e6a71ff2379e89530bd2c97371cad", null ],
     [ "ProcessorQuery", "classRealm_1_1Machine_1_1ProcessorQuery.html#aa00ab2cfceb94885841d8eb521eea8a2", null ],
     [ "~ProcessorQuery", "classRealm_1_1Machine_1_1ProcessorQuery.html#ab595d08c3246827060c511d56ee5b11a", null ],
+    [ "address_space", "classRealm_1_1Machine_1_1ProcessorQuery.html#a197545efa070a5a8ade254675fecacb1", null ],
     [ "begin", "classRealm_1_1Machine_1_1ProcessorQuery.html#a055c42b51cc37f47e36d801d8c0e11b1", null ],
     [ "best_affinity_to", "classRealm_1_1Machine_1_1ProcessorQuery.html#add64d066aa74ddee6e7d241fffad5cae", null ],
     [ "count", "classRealm_1_1Machine_1_1ProcessorQuery.html#a833802e27af04c9138954594b0d4f257", null ],

@@ -1,9 +1,5 @@
 var NAVTREEINDEX44 =
 {
-"classRealm_1_1RegionInstance.html#a11632e2c80607dd1eec9b020f3ab8bf9":[1,0,3,206,9],
-"classRealm_1_1RegionInstance.html#a11632e2c80607dd1eec9b020f3ab8bf9":[2,0,3,195,9],
-"classRealm_1_1RegionInstance.html#a21959b7f6175d7c06e1c392ef0e3db9b":[1,0,3,206,31],
-"classRealm_1_1RegionInstance.html#a21959b7f6175d7c06e1c392ef0e3db9b":[2,0,3,195,31],
 "classRealm_1_1RegionInstance.html#a3006586952f2015de8980139cd9dc4eb":[1,0,3,206,11],
 "classRealm_1_1RegionInstance.html#a3006586952f2015de8980139cd9dc4eb":[2,0,3,195,11],
 "classRealm_1_1RegionInstance.html#a3b04e5ced4f9ca206494202fad22c53c":[1,0,3,206,16],
@@ -249,5 +245,9 @@ var NAVTREEINDEX44 =
 "classRealm_1_1RemoteChannel.html#ad318dc9968e8eb170d1137c1ca68131d":[1,0,3,404,14],
 "classRealm_1_1RemoteChannel.html#ad318dc9968e8eb170d1137c1ca68131d":[2,0,3,393,14],
 "classRealm_1_1RemoteChannel.html#aefd1cfcab078637a6ba7b488a2389952":[1,0,3,404,8],
-"classRealm_1_1RemoteChannel.html#aefd1cfcab078637a6ba7b488a2389952":[2,0,3,393,8]
+"classRealm_1_1RemoteChannel.html#aefd1cfcab078637a6ba7b488a2389952":[2,0,3,393,8],
+"classRealm_1_1RemoteChannel.html#af64f4beb1a527ea07ac04c98a62e8e49":[1,0,3,404,0],
+"classRealm_1_1RemoteChannel.html#af64f4beb1a527ea07ac04c98a62e8e49":[2,0,3,393,0],
+"classRealm_1_1RemoteChannelInfo.html":[1,0,3,402],
+"classRealm_1_1RemoteChannelInfo.html":[2,0,3,391]
 };

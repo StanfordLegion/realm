@@ -1,9 +1,5 @@
 var NAVTREEINDEX72 =
 {
-"structRealm_1_1MachineMemInfo.html#a767cfbd62bf503ee457c1fddc073d5ae":[1,0,3,223,6],
-"structRealm_1_1MachineMemInfo.html#a767cfbd62bf503ee457c1fddc073d5ae":[2,0,3,212,6],
-"structRealm_1_1MachineMemInfo.html#a79055ecc687ab5cc6715d6f74dd32977":[1,0,3,223,7],
-"structRealm_1_1MachineMemInfo.html#a79055ecc687ab5cc6715d6f74dd32977":[2,0,3,212,7],
 "structRealm_1_1MachineMemInfo.html#a7d29d1b9c8be5e2ac774d9acb0f19acf":[1,0,3,223,1],
 "structRealm_1_1MachineMemInfo.html#a7d29d1b9c8be5e2ac774d9acb0f19acf":[2,0,3,212,1],
 "structRealm_1_1MachineMemInfo.html#a96425a6c58d0332d9a0acd0dddc6f9a6":[1,0,3,223,2],
@@ -249,5 +245,9 @@ var NAVTREEINDEX72 =
 "structRealm_1_1Node.html#abbafd636f13da88a8edae026783734dd":[1,0,3,334,3],
 "structRealm_1_1Node.html#abbafd636f13da88a8edae026783734dd":[2,0,3,323,3],
 "structRealm_1_1Node.html#ac23a09a9d0ab2fd88948981f0cebce9a":[1,0,3,334,2],
-"structRealm_1_1Node.html#ac23a09a9d0ab2fd88948981f0cebce9a":[2,0,3,323,2]
+"structRealm_1_1Node.html#ac23a09a9d0ab2fd88948981f0cebce9a":[2,0,3,323,2],
+"structRealm_1_1Node.html#ad99b7cab17887826b2eacefec5fff47d":[1,0,3,334,9],
+"structRealm_1_1Node.html#ad99b7cab17887826b2eacefec5fff47d":[2,0,3,323,9],
+"structRealm_1_1Node.html#af50086b85b41fbe50c754c0c1d75f198":[1,0,3,334,15],
+"structRealm_1_1Node.html#af50086b85b41fbe50c754c0c1d75f198":[2,0,3,323,15]
 };

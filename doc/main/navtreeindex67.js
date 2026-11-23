@@ -1,9 +1,5 @@
 var NAVTREEINDEX67 =
 {
-"structRealm_1_1Cuda_1_1AffineSubRect.html#a21939e8842114cf4f4096536addd66c5":[1,0,3,5,41,5],
-"structRealm_1_1Cuda_1_1AffineSubRect.html#a21939e8842114cf4f4096536addd66c5":[2,0,3,1,41,5],
-"structRealm_1_1Cuda_1_1AffineSubRect.html#a2537618478090c6dd23c170f60df752e":[1,0,3,5,41,3],
-"structRealm_1_1Cuda_1_1AffineSubRect.html#a2537618478090c6dd23c170f60df752e":[2,0,3,1,41,3],
 "structRealm_1_1Cuda_1_1AffineSubRect.html#a4f33f8d7f1b1f7eb81c64f6684172e46":[1,0,3,5,41,4],
 "structRealm_1_1Cuda_1_1AffineSubRect.html#a4f33f8d7f1b1f7eb81c64f6684172e46":[2,0,3,1,41,4],
 "structRealm_1_1Cuda_1_1AffineSubRect.html#a5563d0a29c76be4a101defd5288cdbbf":[1,0,3,5,41,0],
@@ -249,5 +245,9 @@ var NAVTREEINDEX67 =
 "structRealm_1_1Cuda_1_1RegisteredVariable.html#a28b565951cb7c4a5638f51d8398c80cf":[1,0,3,5,59,1],
 "structRealm_1_1Cuda_1_1RegisteredVariable.html#a28b565951cb7c4a5638f51d8398c80cf":[2,0,3,1,59,1],
 "structRealm_1_1Cuda_1_1RegisteredVariable.html#a2ce2a8f353801302545774fa5f8c12b8":[1,0,3,5,59,3],
-"structRealm_1_1Cuda_1_1RegisteredVariable.html#a2ce2a8f353801302545774fa5f8c12b8":[2,0,3,1,59,3]
+"structRealm_1_1Cuda_1_1RegisteredVariable.html#a2ce2a8f353801302545774fa5f8c12b8":[2,0,3,1,59,3],
+"structRealm_1_1Cuda_1_1RegisteredVariable.html#a2eda5a55587dffd58e8c5273ea5d358e":[1,0,3,5,59,10],
+"structRealm_1_1Cuda_1_1RegisteredVariable.html#a2eda5a55587dffd58e8c5273ea5d358e":[2,0,3,1,59,10],
+"structRealm_1_1Cuda_1_1RegisteredVariable.html#a567c9ebed83f57b8aca8416c0816695f":[1,0,3,5,59,7],
+"structRealm_1_1Cuda_1_1RegisteredVariable.html#a567c9ebed83f57b8aca8416c0816695f":[2,0,3,1,59,7]
 };

@@ -45,7 +45,7 @@ var classRealm_1_1ProcessorQueryImpl =
     [ "reset_cached_list", "classRealm_1_1ProcessorQueryImpl.html#a013cfe863ae19c95188756a60af918fd", null ],
     [ "reset_cached_mem", "classRealm_1_1ProcessorQueryImpl.html#a6ecacd34ea2eca85c18382e5a09910b9", null ],
     [ "restrict_to_kind", "classRealm_1_1ProcessorQueryImpl.html#a78df42c92dacfac27d23b7bc474c7c7d", null ],
-    [ "restrict_to_node", "classRealm_1_1ProcessorQueryImpl.html#a33037cb775c9ca28c331cf186b0b5c72", null ],
+    [ "restrict_to_node", "classRealm_1_1ProcessorQueryImpl.html#a7b6f9cab04849c2af5fda9cdf0650dd7", null ],
     [ "set_cached_mem", "classRealm_1_1ProcessorQueryImpl.html#a1f2b6855f12ab1697aacef0415b57688", null ],
     [ "shared_cache_covers", "classRealm_1_1ProcessorQueryImpl.html#abdc7894eaced502c5110daec02779861", null ],
     [ "writeable_reference", "classRealm_1_1ProcessorQueryImpl.html#a6388e0c620618707f6999e2db7e691c1", null ],
@@ -54,15 +54,13 @@ var classRealm_1_1ProcessorQueryImpl =
     [ "attached", "classRealm_1_1ProcessorQueryImpl.html#acd35ec7681e4e61944e310659d60fe3f", null ],
     [ "best_affinity_cost", "classRealm_1_1ProcessorQueryImpl.html#a2e103325bb4b4cf7bd22f73f5093412c", null ],
     [ "build_mutex", "classRealm_1_1ProcessorQueryImpl.html#a35186d116d8d54fec595124932b17635", null ],
-    [ "cached_mem", "classRealm_1_1ProcessorQueryImpl.html#a87f6a02c9e3e98779d73ade8e5d825f5", null ],
+    [ "cached_mem", "classRealm_1_1ProcessorQueryImpl.html#aa2c18ad785d2acb839317061e1c9c1b4", null ],
+    [ "conflict", "classRealm_1_1ProcessorQueryImpl.html#a82d112b68d513087360783c84b34861b", null ],
     [ "first_own", "classRealm_1_1ProcessorQueryImpl.html#ab13031910e844e2e239c01fd29609517", null ],
-    [ "is_cached_mem", "classRealm_1_1ProcessorQueryImpl.html#ad7e5bc4bf5d03a8df1dbb6b93d102f87", null ],
-    [ "is_restricted_kind", "classRealm_1_1ProcessorQueryImpl.html#a1364e6229667e855236a6d43446c796b", null ],
-    [ "is_restricted_node", "classRealm_1_1ProcessorQueryImpl.html#ab5ebe3b9c15f3e2bcb4e46248506a31c", null ],
     [ "machine", "classRealm_1_1ProcessorQueryImpl.html#a9efd72eeaf0886798fb0c041e4b95d65", null ],
     [ "own_lists", "classRealm_1_1ProcessorQueryImpl.html#af495a6c41cf33772b484c96bb2b7dfa0", null ],
     [ "predicates", "classRealm_1_1ProcessorQueryImpl.html#a391b3165597c7849e2caa64b9f391ad4", null ],
     [ "references", "classRealm_1_1ProcessorQueryImpl.html#a8b5885ce9a0e12691389d7c973897291", null ],
-    [ "restricted_kind", "classRealm_1_1ProcessorQueryImpl.html#a7e21e908c7752e821b61fa35b8201f37", null ],
-    [ "restricted_node_id", "classRealm_1_1ProcessorQueryImpl.html#a0baf2777605685964cc87d0f8dad130b", null ]
+    [ "restricted_kind", "classRealm_1_1ProcessorQueryImpl.html#aaf4b2f95006498e9290783ea7ceaa55d", null ],
+    [ "restricted_node_id", "classRealm_1_1ProcessorQueryImpl.html#afdbe58347d9e97a2be51342fbdd66835", null ]
 ];

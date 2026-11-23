@@ -1,9 +1,5 @@
 var NAVTREEINDEX45 =
 {
-"classRealm_1_1RemoteChannel.html#af64f4beb1a527ea07ac04c98a62e8e49":[1,0,3,404,0],
-"classRealm_1_1RemoteChannel.html#af64f4beb1a527ea07ac04c98a62e8e49":[2,0,3,393,0],
-"classRealm_1_1RemoteChannelInfo.html":[1,0,3,402],
-"classRealm_1_1RemoteChannelInfo.html":[2,0,3,391],
 "classRealm_1_1RemoteChannelInfo.html#a1a56cac7c7b6d0d6fb6f58846ce3e62f":[1,0,3,402,1],
 "classRealm_1_1RemoteChannelInfo.html#a1a56cac7c7b6d0d6fb6f58846ce3e62f":[2,0,3,391,1],
 "classRealm_1_1RemoteChannelInfo.html#a425012ffd1afbcf2d59ab23cf41e1a1c":[1,0,3,402,0],
@@ -249,5 +245,9 @@ var NAVTREEINDEX45 =
 "classRealm_1_1ReservationImpl.html#ac41ba56c0c28c138f37d4f1356fb1df6":[1,0,3,328,16],
 "classRealm_1_1ReservationImpl.html#ac41ba56c0c28c138f37d4f1356fb1df6":[2,0,3,317,16],
 "classRealm_1_1ReservationImpl.html#ac9337ed097e9ff0704a8b8b8d3dc531c":[1,0,3,328,4],
-"classRealm_1_1ReservationImpl.html#ac9337ed097e9ff0704a8b8b8d3dc531c":[2,0,3,317,4]
+"classRealm_1_1ReservationImpl.html#ac9337ed097e9ff0704a8b8b8d3dc531c":[2,0,3,317,4],
+"classRealm_1_1ReservationImpl.html#aea656e73c94176b0aeb4d8bba1035ae1":[1,0,3,328,15],
+"classRealm_1_1ReservationImpl.html#aea656e73c94176b0aeb4d8bba1035ae1":[2,0,3,317,15],
+"classRealm_1_1ReservationImpl.html#aefc1c6dcec44684f821faa0b6bf627b2":[1,0,3,328,20],
+"classRealm_1_1ReservationImpl.html#aefc1c6dcec44684f821faa0b6bf627b2":[2,0,3,317,20]
 };
