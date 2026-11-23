@@ -138,23 +138,16 @@ namespace Realm {
         NodeID target, unsigned short msgid, size_t header_size, size_t max_payload_size,
         const RemoteAddress &dest_payload_addr, void *storage_base, size_t storage_size);
 
-    ActiveMessageImpl *create_active_message_impl(
-        const NodeSet &targets, unsigned short msgid, size_t header_size,
-        size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
-        size_t src_payload_line_stride, void *storage_base, size_t storage_size);
-
+    // NOTE: there is deliberately no NodeSet ("multicast") form of any of
+    //  these - a multi-target send used to fan out one message per target at
+    //  the source.  Multicast is now built above unicast in
+    //  realm/activemsg.h (plan sections 7.1-7.6).
     size_t recommended_max_payload(NodeID target, bool with_congestion,
-                                   size_t header_size);
-    size_t recommended_max_payload(const NodeSet &targets, bool with_congestion,
                                    size_t header_size);
     size_t recommended_max_payload(NodeID target, const RemoteAddress &dest_payload_addr,
                                    bool with_congestion, size_t header_size);
     size_t recommended_max_payload(NodeID target, const void *data, size_t bytes_per_line,
                                    size_t lines, size_t line_stride, bool with_congestion,
-                                   size_t header_size);
-    size_t recommended_max_payload(const NodeSet &targets, const void *data,
-                                   size_t bytes_per_line, size_t lines,
-                                   size_t line_stride, bool with_congestion,
                                    size_t header_size);
     size_t recommended_max_payload(NodeID target, const LocalAddress &src_payload_addr,
                                    size_t bytes_per_line, size_t lines,
@@ -351,23 +344,12 @@ namespace Realm {
                                const RemoteAddress &dest_payload_addr, void *storage_base,
                                size_t storage_size) = 0;
 
-    virtual ActiveMessageImpl *create_active_message_impl(
-        const NodeSet &targets, unsigned short msgid, size_t header_size,
-        size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
-        size_t src_payload_line_stride, void *storage_base, size_t storage_size) = 0;
-
     virtual size_t recommended_max_payload(NodeID target, bool with_congestion,
-                                           size_t header_size) = 0;
-    virtual size_t recommended_max_payload(const NodeSet &targets, bool with_congestion,
                                            size_t header_size) = 0;
     virtual size_t recommended_max_payload(NodeID target,
                                            const RemoteAddress &dest_payload_addr,
                                            bool with_congestion, size_t header_size) = 0;
     virtual size_t recommended_max_payload(NodeID target, const void *data,
-                                           size_t bytes_per_line, size_t lines,
-                                           size_t line_stride, bool with_congestion,
-                                           size_t header_size) = 0;
-    virtual size_t recommended_max_payload(const NodeSet &targets, const void *data,
                                            size_t bytes_per_line, size_t lines,
                                            size_t line_stride, bool with_congestion,
                                            size_t header_size) = 0;

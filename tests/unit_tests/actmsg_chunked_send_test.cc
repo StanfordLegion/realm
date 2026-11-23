@@ -163,19 +163,6 @@ namespace {
                           max_payload_size, src_payload_addr);
     }
 
-    // not virtual overrides: the NodeSet forms of these are slated for removal (PR
-    //  465), and without 'override' this file keeps compiling once they are gone
-    virtual ActiveMessageImpl *create_active_message_impl(
-        const NodeSet &targets, unsigned short msgid, size_t header_size,
-        size_t max_payload_size, const void *src_payload_addr, size_t src_payload_lines,
-        size_t src_payload_line_stride, void *storage_base, size_t storage_size)
-    {
-      assert(storage_size >= sizeof(MockMessageImpl));
-      std::vector<NodeID> v(targets.begin(), targets.end());
-      return new(storage_base) MockMessageImpl(this, v, true, msgid, header_size,
-                                               max_payload_size, src_payload_addr);
-    }
-
     // the rest is never used by these tests
     virtual ActiveMessageImpl *create_active_message_impl(NodeID, unsigned short, size_t,
                                                           size_t, const LocalAddress &,
@@ -192,21 +179,12 @@ namespace {
       abort();
     }
     virtual size_t recommended_max_payload(NodeID, bool, size_t) { return limit; }
-    virtual size_t recommended_max_payload(const NodeSet &, bool, size_t)
-    {
-      return limit;
-    }
     virtual size_t recommended_max_payload(NodeID, const RemoteAddress &, bool, size_t)
     {
       return limit;
     }
     virtual size_t recommended_max_payload(NodeID, const void *, size_t, size_t, size_t,
                                            bool, size_t)
-    {
-      return limit;
-    }
-    virtual size_t recommended_max_payload(const NodeSet &, const void *, size_t, size_t,
-                                           size_t, bool, size_t)
     {
       return limit;
     }
@@ -668,39 +646,6 @@ namespace {
     EXPECT_TRUE(net.sent.empty());
     EXPECT_EQ(local.load(), 0);
     EXPECT_EQ(remote.load(), 0);
-  }
-
-  // NodeSet sends: a single target is sent like a unicast (so that a network whose
-  //  multi-target path cannot carry a remote completion still gets one), two or more
-  //  go through the network's multi-target path.  Remove together with
-  //  ActiveMessage(NodeSet, ...).
-  TEST_F(ActMsgChunkedSendTest, NodeSetTargets)
-  {
-    std::vector<char> data = pattern(200, 11);
-    NodeSet one, two;
-    one.add(1);
-    two.add(1);
-    two.add(2);
-    {
-      ActiveMessage<QueuedMsg> m(one, data.size());
-      m.add_payload(data.data(), data.size());
-      m.commit();
-    }
-    const size_t n1 = net.sent.size();
-    for(size_t i = 0; i < n1; i++) {
-      EXPECT_FALSE(net.sent[i].multicast);
-      EXPECT_EQ(net.sent[i].targets, std::vector<NodeID>(1, 1));
-    }
-    {
-      ActiveMessage<QueuedMsg> m(two, data.size());
-      m.add_payload(data.data(), data.size());
-      m.commit();
-    }
-    ASSERT_GT(net.sent.size(), n1);
-    for(size_t i = n1; i < net.sent.size(); i++) {
-      EXPECT_TRUE(net.sent[i].multicast);
-      EXPECT_EQ(net.sent[i].targets.size(), 2u);
-    }
   }
 
   // A payload above the limit whose fragment header the network cannot carry

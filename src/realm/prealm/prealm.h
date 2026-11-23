@@ -213,13 +213,6 @@ namespace PRealm {
     static Barrier create_barrier(unsigned expected_arrivals, ReductionOpID redop_id = 0,
                                   const void *initial_value = 0,
                                   size_t initial_value_size = 0);
-    using ParticipantInfo = Realm::Barrier::ParticipantInfo;
-    static Barrier create_barrier(const Barrier::ParticipantInfo *expected_arrivals,
-                                  size_t num_participants, ReductionOpID redop_id = 0,
-                                  const void *initial_value = 0,
-                                  size_t initial_value_size = 0);
-    Barrier set_arrival_pattern(const Barrier::ParticipantInfo *expected_arrivals,
-                                size_t num_participants);
     void destroy_barrier(void);
 
     static const ::realm_event_gen_t MAX_PHASES;
