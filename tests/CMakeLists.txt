@@ -326,11 +326,15 @@ if(REALM_USE_CUDA AND TEST_PROCESSORS GREATER 1)
            COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:cuda_ipc_startup> ${MPIEXEC_POSTFLAGS}
                    -test:gpu-rank 1
   )
-  set_tests_properties(
-    cuda_ipc_startup cuda_ipc_startup_gpu_on_peer PROPERTIES RESOURCE_LOCK "${TEST_RESOURCE_LOCK}"
-                                                             TIMEOUT 60
+  add_test(NAME cuda_ipc_startup_ipc_disabled
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:cuda_ipc_startup> ${MPIEXEC_POSTFLAGS}
+                   -test:gpu-rank -1 -test:ipc-disabled-rank 1
   )
-  list(APPEND _integ_extra_tests cuda_ipc_startup_gpu_on_peer)
+  set_tests_properties(
+    cuda_ipc_startup cuda_ipc_startup_gpu_on_peer cuda_ipc_startup_ipc_disabled
+    PROPERTIES RESOURCE_LOCK "${TEST_RESOURCE_LOCK}" TIMEOUT 60
+  )
+  list(APPEND _integ_extra_tests cuda_ipc_startup_gpu_on_peer cuda_ipc_startup_ipc_disabled)
 endif()
 if(REALM_USE_HIP
    AND CMAKE_SYSTEM_NAME STREQUAL "Linux"

@@ -3184,7 +3184,7 @@ namespace Realm {
           HipIpcResponseEntry entry;
           AutoGPUContext agc(gpu);
           hipError_t ret = hipIpcGetMemHandle(&entry.handle, gpu->fbmem_base);
-          log_hipipc.info() << "getmem handle " << std::hex << gpu->fbmem_base << std::dec
+          log_hipipc.info() << "getmem handle " << static_cast<void *>(gpu->fbmem_base)
                             << " -> " << ret;
           if(ret == hipSuccess) {
             entry.mem = gpu->fbmem->me;
