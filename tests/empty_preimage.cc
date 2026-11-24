@@ -64,6 +64,13 @@ namespace {
         .fill({CopySrcDstField().set_field(inst, 0, sizeof(Field))},
               ProfilingRequestSet(), &value, sizeof(value))
         .wait();
+    // A shared-memory fill can complete without loading the layout on the
+    // rank that owns the memory and will read the field.
+    const Processor memory_processor = Machine::ProcessorQuery(Machine::get_machine())
+                                           .only_kind(Processor::LOC_PROC)
+                                           .same_address_space_as(memory)
+                                           .first();
+    inst.fetch_metadata(memory_processor).wait();
     return {space, inst, 0};
   }
 
