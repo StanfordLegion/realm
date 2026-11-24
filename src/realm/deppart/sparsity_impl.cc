@@ -1508,7 +1508,7 @@ namespace Realm {
         }
       }
 
-      const Rect<N, T> *rdata = &rects[0];
+      const Rect<N, T> *rdata = rects.data();
       size_t total_count = rects.size();
       size_t remaining = total_count;
 

@@ -331,6 +331,12 @@ add_integration_test(transpose "${REALM_TEST_DIR}/transpose.cc")
 set(proc_group_ARGS -ll:cpu 4)
 add_integration_test(proc_group "${REALM_TEST_DIR}/proc_group.cc")
 add_integration_test(deppart "${REALM_TEST_DIR}/deppart.cc")
+# Use one partitioning worker so the local approximate image runs before a
+# deferred sparse target is populated. A dense target builds the tester inline.
+set(empty_preimage_ARGS -ll:bgwork 1 -ll:bgnuma 0 -ll:cpu_bgwork 0 -ll:util_bgwork 0
+                        -dp:workers 0 -dp:inline_ok 1)
+add_integration_test(empty_preimage "${REALM_TEST_DIR}/empty_preimage.cc")
+set_tests_properties(empty_preimage PROPERTIES TIMEOUT 120)
 set(scatter_ARGS -p1 2 -p2 2)
 add_integration_test(scatter "${REALM_TEST_DIR}/scatter.cc")
 set(proc_group_ARGS -ll:cpu 4)
