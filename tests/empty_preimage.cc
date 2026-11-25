@@ -159,8 +159,8 @@ namespace {
     test_dimension<2>(local_memory, local_memory, verifier);
 #endif
 
-    // With remote fields, the dense and sparse targets place their outputs on
-    // different ranks. Validate on the initiator to fetch the dense-target result.
+    // Remote field instances exercise approximate image replies sent back to
+    // the initiator. The initiator also holds the resulting sparsity maps.
     if(remote.exists()) {
       Memory remote_memory =
           Machine::MemoryQuery(memories).same_address_space_as(remote).first();

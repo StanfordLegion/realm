@@ -52,7 +52,6 @@ namespace Realm {
       int header_size;
       int payload_size;
       uintptr_t comp_ptr;
-      char stuff[1];
     };
 
     int AM_Init(int *p_node_this, int *p_node_size);

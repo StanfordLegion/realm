@@ -36,7 +36,9 @@ namespace Realm {
     }
 
     received_chunks[chunk_id].resize(size);
-    std::memcpy(received_chunks[chunk_id].data(), data, size);
+    if(size > 0) {
+      std::memcpy(received_chunks[chunk_id].data(), data, size);
+    }
     received_flags[chunk_id] = true;
     received_count++;
     total_size += size;
