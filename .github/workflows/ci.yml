@@ -220,6 +220,7 @@ jobs:
               openmp: 'ON',
               ucx: 'OFF',
               gasnet: 'OFF',
+              mpi: 'ON',
               python: 'OFF',
               kokkos: 'OFF',
               sanitizer: 'UBSAN'
@@ -407,6 +408,7 @@ jobs:
         if: matrix.config.cuda == '' || steps.check_gpu.outputs.no_gpu != '1'
         env:
           UCX_TLS: "^ib"
+          UBSAN_OPTIONS: ${{ matrix.config.sanitizer == 'UBSAN' && 'halt_on_error=1' || '' }}
         run:
           ctest --output-junit ${{ github.workspace }}/test-results.xml
                 --test-dir build
