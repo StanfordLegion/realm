@@ -38,11 +38,14 @@ namespace Realm {
 
   void RegionInstanceImpl::DeferredCreate::defer(RegionInstanceImpl *_inst,
                                                  MemoryImpl *_mem,
-                                                 bool _need_alloc_result, Event wait_on)
+                                                 bool _need_alloc_result,
+                                                 unsigned _release_seqid_cap,
+                                                 Event wait_on)
   {
     inst = _inst;
     mem = _mem;
     need_alloc_result = _need_alloc_result;
+    release_seqid_cap = _release_seqid_cap;
     EventImpl::add_waiter(wait_on, this);
   }
 

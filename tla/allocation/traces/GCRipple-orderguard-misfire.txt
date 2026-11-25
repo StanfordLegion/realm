@@ -1,0 +1,217 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 69 and seed -5056495996037738133 with 4 workers on 10 cores with 3641MB heap and 64MB offheap memory [pid: 7804] (Mac OS X 15.7.7 aarch64, Homebrew 26.0.2 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file /Users/mebauer/realm/tla/allocation/MCDeferredAlloc.tla
+Parsing file /Users/mebauer/realm/tla/allocation/DeferredAlloc.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/tlc-jtmp/Integers.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/tlc-jtmp/Sequences.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/tlc-jtmp/FiniteSets.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/tlc-jtmp/TLC.tla
+Parsing file /private/tmp/claude-502/-Users-mebauer-realm-src-realm/e16dc9f9-47a4-47cb-a4d3-fd41b34c5bce/scratchpad/tlc-jtmp/Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module Integers
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module DeferredAlloc
+Semantic processing of module MCDeferredAlloc
+Starting... (2026-08-25 23:57:59)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-08-25 23:57:59.
+Error: Invariant INV_GCRippleSuccessFunded is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ destroyRequested = <<FALSE, FALSE>>
+/\ balC = <<"NONE", "NONE">>
+/\ balD = <<"NONE", "NONE">>
+/\ instOffset = <<-1, -1>>
+/\ preC = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {}, ballistic |-> FALSE]>>
+/\ preD = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {}, ballistic |-> FALSE]>>
+/\ seqCtr = 0
+/\ cur = << >>
+/\ allocatedEver = {}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE>>
+/\ pendingReleases = <<>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"UNFIRED", "UNFIRED">>
+/\ instState = <<"UNREQUESTED", "UNREQUESTED">>
+/\ createRequested = <<FALSE, FALSE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0>>
+/\ reqCap = <<0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE>>
+
+State 2: <ClientRequestCreate line 186, col 3 to line 197, col 62 of module MCDeferredAlloc>
+/\ destroyRequested = <<FALSE, FALSE>>
+/\ balC = <<"NONE", "PENDING">>
+/\ balD = <<"NONE", "NONE">>
+/\ instOffset = <<-1, -1>>
+/\ preC = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {}, ballistic |-> TRUE]>>
+/\ preD = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {}, ballistic |-> FALSE]>>
+/\ seqCtr = 0
+/\ cur = << >>
+/\ allocatedEver = {}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, TRUE>>
+/\ pendingReleases = <<>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"UNFIRED", "UNFIRED">>
+/\ instState = <<"UNREQUESTED", "CREATE_PENDING">>
+/\ createRequested = <<FALSE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0>>
+/\ reqCap = <<0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE>>
+
+State 3: <FireBallisticC line 225, col 3 to line 230, col 50 of module MCDeferredAlloc>
+/\ destroyRequested = <<FALSE, FALSE>>
+/\ balC = <<"NONE", "FIRED">>
+/\ balD = <<"NONE", "NONE">>
+/\ instOffset = <<-1, -1>>
+/\ preC = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {}, ballistic |-> TRUE]>>
+/\ preD = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {}, ballistic |-> FALSE]>>
+/\ seqCtr = 0
+/\ cur = << >>
+/\ allocatedEver = {}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, TRUE>>
+/\ pendingReleases = <<>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"UNFIRED", "UNFIRED">>
+/\ instState = <<"UNREQUESTED", "CREATE_PENDING">>
+/\ createRequested = <<FALSE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0>>
+/\ reqCap = <<0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE>>
+
+State 4: <EnvTriggerCreate line 241, col 3 to line 246, col 41 of module MCDeferredAlloc>
+/\ destroyRequested = <<FALSE, FALSE>>
+/\ balC = <<"NONE", "FIRED">>
+/\ balD = <<"NONE", "NONE">>
+/\ instOffset = <<-1, 0>>
+/\ preC = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {}, ballistic |-> TRUE]>>
+/\ preD = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {}, ballistic |-> FALSE]>>
+/\ seqCtr = 0
+/\ cur = (2 :> [first |-> 0, size |-> 3])
+/\ allocatedEver = {2}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE>>
+/\ pendingReleases = <<>>
+/\ curFreed = {}
+/\ failedVia = <<"NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"UNFIRED", "CLEAN">>
+/\ instState = <<"UNREQUESTED", "ALLOCATED">>
+/\ createRequested = <<FALSE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 0>>
+/\ reqCap = <<0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE>>
+
+State 5: <ClientRequestDestroy line 200, col 3 to line 219, col 60 of module MCDeferredAlloc>
+/\ destroyRequested = <<FALSE, TRUE>>
+/\ balC = <<"NONE", "FIRED">>
+/\ balD = <<"NONE", "NONE">>
+/\ instOffset = <<-1, 0>>
+/\ preC = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {}, ballistic |-> TRUE]>>
+/\ preD = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {2}, ballistic |-> FALSE]>>
+/\ seqCtr = 0
+/\ cur = << >>
+/\ allocatedEver = {2}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE>>
+/\ pendingReleases = <<>>
+/\ curFreed = {2}
+/\ failedVia = <<"NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"UNFIRED", "CLEAN">>
+/\ instState = <<"UNREQUESTED", "DESTROYED">>
+/\ createRequested = <<FALSE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 1>>
+/\ reqCap = <<0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE>>
+
+State 6: <ClientRequestCreate line 186, col 3 to line 197, col 62 of module MCDeferredAlloc>
+/\ destroyRequested = <<FALSE, TRUE>>
+/\ balC = <<"NONE", "FIRED">>
+/\ balD = <<"NONE", "NONE">>
+/\ instOffset = <<0, 0>>
+/\ preC = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {}, ballistic |-> TRUE]>>
+/\ preD = <<[deps |-> {}, ballistic |-> FALSE], [deps |-> {2}, ballistic |-> FALSE]>>
+/\ seqCtr = 0
+/\ cur = <<[first |-> 0, size |-> 3]>>
+/\ allocatedEver = {1, 2}
+/\ futMismatch = FALSE
+/\ createWaiter = <<FALSE, FALSE>>
+/\ pendingReleases = <<>>
+/\ curFreed = {2}
+/\ failedVia = <<"NONE", "NONE">>
+/\ missingFree = FALSE
+/\ rel = << >>
+/\ readyAtRebuild = FALSE
+/\ pendingAllocs = <<>>
+/\ wasDeferred = {}
+/\ structuralAssertFailed = FALSE
+/\ fut = << >>
+/\ eCreated = <<"CLEAN", "CLEAN">>
+/\ instState = <<"ALLOCATED", "DESTROYED">>
+/\ createRequested = <<TRUE, TRUE>>
+/\ unblockFailed = FALSE
+/\ notifyCount = <<0, 1>>
+/\ reqCap = <<0, 0>>
+/\ dupAlloc = FALSE
+/\ poisonReplayBad = FALSE
+/\ destroyWaiter = <<FALSE, FALSE>>
+
+89 states generated, 61 distinct states found, 10 states left on queue.
+The depth of the complete state graph search is 10.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 3 and the 95th percentile is 2).
+Finished in 00s at (2026-08-25 23:57:59)
