@@ -21,6 +21,7 @@
 #include <type_traits>
 #include "realm/realm_config.h"
 #include "realm/module.h"
+#include "realm/nodeset.h"
 #include "realm/processor.h"
 #include "realm/network.h"
 #include "realm/atomics.h"
@@ -190,6 +191,9 @@ namespace Realm {
 
       static Module *create_module(RuntimeImpl *runtime);
 
+      // Invoked by runtime startup on all ranks, including ranks without CUDA GPUs.
+      static void configure_ipc_peers();
+
       // do any general initialization - this is called after all configuration is
       //  complete
       virtual void initialize(RuntimeImpl *runtime);
@@ -258,11 +262,10 @@ namespace Realm {
       void *uvm_base; // guaranteed to be same for CPU and GPU
       GPUZCMemory *uvmmem;
       GPUReplHeapListener *rh_listener;
-      atomic<bool> initialization_complete;
-
       Mutex cudaipc_mutex;
       Mutex::CondVar cudaipc_condvar;
-      atomic<size_t> cudaipc_responses_received{0};
+      bool cudaipc_ready = false;
+      NodeSet cudaipc_pending_peers;
       int cuda_api_version = 0;
     };
 
