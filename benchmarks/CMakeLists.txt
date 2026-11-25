@@ -86,6 +86,14 @@ macro(add_benchmark target)
 endmacro()
 
 add_benchmark(memcpy "${REALM_BENCH_DIR}/memcpy/memcpy.cc")
+set(subgraph_ubench_ARGS -ll:cpu 4 -iters 200 -warmup 20) # short version
+add_benchmark(subgraph_ubench "${REALM_BENCH_DIR}/subgraph_ubench/subgraph_ubench.cc")
+set(stencil_subgraph_ARGS -ll:cpu 3 -nx 64 -ny 64 -px 2 -py 1 -steps 20 -rounds 1) # short version
+add_benchmark(
+  stencil_subgraph "${REALM_BENCH_DIR}/stencil_subgraph/stencil_subgraph.cc"
+  "$<$<BOOL:BENCHMARK_USE_GPU>:${REALM_BENCH_DIR}/stencil_subgraph/stencil_subgraph_gpu.cu>"
+)
+target_link_libraries(stencil_subgraph ${TEST_GPU_LIBS})
 add_benchmark(event_latency "${REALM_BENCH_DIR}/event_latency/event_latency.cc")
 add_benchmark(event_throughput "${REALM_BENCH_DIR}/event_throughput/event_throughput.cc")
 set(event_ubench_ARGS -s 100)
