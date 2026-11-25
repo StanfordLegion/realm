@@ -277,21 +277,30 @@ namespace Realm {
      * them, because it only ever sees the alterations that have reached it.
      *
      * USE THE RETURNED HANDLE. The alteration travels on the handle this call
-     * returns. Every arrival made for this generation after the alteration should
-     * use that handle, or one derived from it with advance_barrier. An arrival made
-     * on the original handle by another node does not know about the alteration and
-     * is not ordered after it.
+     * returns. Every later arrival for this generation must use that handle, and
+     * every later generation must use a handle advanced from it. An arrival made on
+     * the original handle by another node does not know about the alteration and is
+     * not ordered after it.
      *
      * KEEP AN ARRIVAL IN RESERVE, AND MAKE IT AFTER THE ALTERATION. When you alter,
-     * you must still owe at least one arrival from the old count, and you must make
+     * you must still owe at least one arrival for that generation, and you must make
      * it after the alteration: either on this node, or on a handle that came from
      * the alteration. That arrival is what keeps the generation open until the owner
      * learns of the alteration.
      *
-     * An arrival that another node still owes does not count. It is not ordered
-     * against your alteration, so it can be made first and complete the generation
-     * at the old count. For the same reason, a node that has already made all of
-     * its own arrivals for a generation must not then alter that generation.
+     * An arrival you were given counts as one you owe. Receiving a handle from
+     * another node's alteration transfers that alteration's obligation to you, and
+     * it is a reservation like any other - you may alter against it. The
+     * obligation moves: exactly one node makes that arrival, and handing the
+     * handle on is how you say which. If both the alterer and the recipient make
+     * it, that is over-arrival.
+     *
+     * An arrival that another node still owes is NOT yours to count. It is not
+     * ordered against your alteration, so it can be made first and complete the
+     * generation at the old count. For the same reason, a node that owes nothing
+     * for a generation - having made every arrival it had, and been given none -
+     * must not alter that generation. The terminal negative below is the one
+     * exception, because it closes the generation rather than extending it.
      *
      * Two or more alterations may be made on the same handle without ordering them
      * against each other, but each one needs its own reserved arrival. An arrival
@@ -341,12 +350,34 @@ namespace Realm {
     Barrier get_previous_phase(void) const;
 
     /*
-     * Adjust the arrival count of a barrier.
+     * Arrive at a barrier, satisfying `count` of this generation's arrivals.
+     *
+     * IF `wait_on` IS POISONED, THIS GENERATION IS POISONED. Everyone waiting on
+     * it is woken with a poisoned status, so a failure upstream is reported
+     * rather than lost. The arrival still counts; refusing to count it would
+     * hang the barrier instead of poisoning it.
+     *
+     * Two arrivals cannot carry poison and are the exceptions: one on a
+     * reduction barrier (see below, it aborts), and one with a count of zero,
+     * which takes an older internal path that has no room for the bit. Avoid
+     * arrive(0, poisoned_event) if you rely on poison propagating.
+     *
+     * A barrier can retain a limited number of poisoned generations - 16 by
+     * default. Poisoning one more aborts the process with a message naming the
+     * limit, because forgetting one would wake a later waiter with the wrong
+     * status. Raise it by REBUILDING REALM with -DREALM_BARRIER_POISON_LIMIT=N
+     * (it is a Realm build option; defining it in your own translation unit has
+     * no effect, because the limit is compiled into the library); the
+     * storage is allocated once per poisoned barrier at that size and lives as
+     * long as the barrier does.
+     *
+     * On a REDUCTION barrier a poisoned precondition aborts instead: poison is
+     * not carried on that path, so the alternative would be a result that
+     * silently includes a value from a producer that failed.
+     *
      * \param count the amount to adjust the arrival count by
      * \param wait_on an event that must trigger before the arrival count
      * can be adjusted.
-     * \param ignore_faults if true, the arrival count will be adjusted even
-     * if the event it is waiting on is poisoned.
      * \param reduce_value if non-null, the value will be used to update the
      * reduction value associated with the barrier.
      * \param reduce_value_size the size of the reduction value

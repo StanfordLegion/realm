@@ -137,6 +137,10 @@ set(REALM_CXX_STANDARD
     17
     CACHE STRING "C++ standard used"
 )
+set(REALM_BARRIER_POISON_LIMIT
+    16
+    CACHE STRING "Poisoned generations retained per barrier before aborting"
+)
 set(REALM_LOG_LEVEL
     "WARNING"
     CACHE STRING "Compile-time logging level"

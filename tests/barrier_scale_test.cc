@@ -112,12 +112,23 @@ enum Phase
                 //  only ALTERING ranks bypass, and those are rescued by the
                 //  retirement their own alteration causes - hence this phase.
                 //  A FAILURE HERE IS A HANG, not a wrong answer.
+  P_SLACK,      // R3-07 + T-2: the owner's bypass-slack valve, which is the
+                //  ONLY thing carrying rule 8.4 since the recipient-side flush
+                //  was removed.  A rank alters early, so every arrival it ever
+                //  makes bypasses the tree and the rebuilt plan excludes it -
+                //  leaving its bypassed count as the plan's slack.  Later an
+                //  arrival MOVES from a leaf under a relay onto that rank.  The
+                //  tree can no longer reach its predicted total, yet every tree
+                //  node sits at or below quota, so nothing flushes and the
+                //  relay waits for ever.  Only the owner can see this, by
+                //  comparing ts_acc against the slack.
+                //  A FAILURE HERE IS A HANG.  Needs >= 11 ranks (see slack_phase).
   P_NUM_PHASES
 };
 
 static const char *phase_names[P_NUM_PHASES] = {
     "steady", "over",  "outsider", "runahead", "churn",   "alter",  "split",
-    "poison", "chaos", "step",     "depart",   "realter", "handoff"};
+    "poison", "chaos", "step",     "depart",   "realter", "handoff", "slack"};
 
 namespace TestConfig {
   int gens = 32;       // generations per phase
@@ -206,6 +217,24 @@ static int arrivals_for(int phase, int seed, int nranks, int gens, int g, int r)
   case P_REALTER:
   case P_HANDOFF:
     return 1; // the altering rank adds its extra arrivals explicitly (below)
+  case P_SLACK:
+  {
+    // Steady one-each until the shift, then one arrival MOVES from the leaf at
+    //  N-2 onto the altering rank at N-1.  The total is unchanged, so the only
+    //  thing that changes is WHICH side of the tree/bypass split it lands on -
+    //  which is exactly the condition the valve exists to catch.  The alterer's
+    //  own extra arrival is added below, as in P_ALTER.
+    if(nranks < 11)
+      return 1;
+    const int shift_at = (2 * gens) / 3;
+    if(g < shift_at)
+      return 1;
+    if(r == (nranks - 2))
+      return 0;
+    if(r == (nranks - 1))
+      return 2;
+    return 1;
+  }
   case P_SPLITWAIT:
   {
     // first half of the ranks carry all arrivals; second half only waits
@@ -308,6 +337,23 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
   const int alter_at = G / 2;
   const bool i_alter = (wa.phase == P_ALTER) && (R == 0) && (N > 1);
 
+  // P_SLACK: the LAST rank alters EARLY, so the rebuilt plan excludes it and
+  //  its bypassed arrivals become the plan's slack.  It must not be the owner
+  //  (an altering owner never completes its own gathering evidence) and it
+  //  must alter well before the shift, so the plan has time to converge -
+  //  the same two constraints P_HANDOFF documents.
+  // >= 11, NOT >= 8.  The plan must contain a GRANDCHILD for there to be a
+  //  relay to strand, and the default barrier_plan_radix is 8: at N=8 the plan
+  //  holds 7 nodes (the alterer is excluded) and every one is a direct child of
+  //  the owner, so the phase passes even with the valve deleted.  11 ranks give
+  //  a relay at radix 8 and at radix 2 alike.  This is the same mistake
+  //  P_HANDOFF's comment records making.
+  const bool slack_phase = (wa.phase == P_SLACK) && (N >= 11) && (G >= 12);
+  const int slack_alter_at = 2;
+  const int slack_shift_at = (2 * G) / 3; // must match arrivals_for's P_SLACK
+  (void)slack_shift_at;
+  const bool i_slack_alter = slack_phase && (R == (N - 1));
+
   // P_REALTER: the same rank alters TWICE, a third of the phase apart - wide
   //  enough for the owner to rebuild in between, since the bug is in what the
   //  SECOND retirement does to that rebuilt plan.  The second alteration uses
@@ -376,6 +422,17 @@ static void worker_task(const void *args, size_t arglen, const void *userdata,
     }
     if(i_alter && (g >= alter_at)) {
       count += 1; // persistent: one extra every generation from the alteration on
+    }
+    if(i_slack_alter && (g == slack_alter_at)) {
+      // same contract as P_ALTER: still owe an arrival while altering, then use
+      //  the returned handle.  From here every arrival this rank makes bypasses
+      //  the tree, which is what creates the slack the valve measures.
+      assert(count > 0);
+      ab = ab.alter_arrival_count(1);
+      wait_handles.back() = ab;
+    }
+    if(i_slack_alter && (g >= slack_alter_at)) {
+      count += 1; // persistent
     }
 
     if(i_realter && ((g == realter_1) || (g == realter_2))) {

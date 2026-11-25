@@ -145,8 +145,8 @@ Epochs == 1..NumPlans
 \*  always lower).  IT IS NOT A PROPERTY OF THE SCENARIOS, and the attempt is
 \*  recorded rather than repeated: MCGateDemote's second plan has node 3 as
 \*  the parent of node 1, which is the demoted owner-child the scenario is
-\*  named for, and MCGateMove and MCGatePark do the same.  TLC rejects the
-\*  whole spec on a failed ASSUME, so all three stopped running.
+\*  named for, and MCGateAhead, MCGateMove and MCGatePark do the same.  TLC
+\*  rejects the whole spec on a failed ASSUME, so all four stopped running.
 \*
 \*  Ascending ids are SUFFICIENT for what rule 10 needs but not NECESSARY.
 \*  What is actually needed is that the UNION of the pinned edges every plan
@@ -240,17 +240,16 @@ TsGateOpen(m) == /\ ((m.ts = 0)       \/ (m.ts \in appliedTs))
 \*  turns on, so that comparing the two designs is a one-line change and
 \*  cannot drift between the places that depend on it.
 \*
-\*  AS WRITTEN: only the generation the alteration NAMES.  That is the design
-\*   under test - the recipient bypasses once and is back in the tree.  It is
-\*   also the WEAKEST version of the rule: the implementation cannot know
-\*   a.gen and would use the first generation it actually used the handle at,
-\*   which is >= a.gen, so it gates a superset.  Clearing the weak version
-\*   clears the strong one.
+\*  AS WRITTEN: only the generation the alteration NAMES.  The recipient
+\*   bypasses at that generation and returns to the tree on later ones.
+\*   In C++ (handle_gate_locked), the window bound is the first generation the
+\*   handle is actually used at (<= first_gen): for normal forward use
+\*   first_gen >= a.gen; under get_previous_phase() first_gen < a.gen leaves
+\*   a.gen ungated, which remains safe because first_gen is gated on a.ts and
+\*   generations trigger in watermark order.
 \*
-\*  Mutation HANDLE_GATES_FOREVER rewrites this to 'g >= a.gen', which is the
-\*   behaviour as shipped: advance_barrier preserves the timestamp, so every
-\*   handle derived from it gates too and the recipient never returns to the
-\*   tree.
+\*  Mutation HANDLE_GATES_FOREVER rewrites this to 'g >= a.gen', modelling
+\*   the pre-window design where every derived handle bypassed for ever.
 HandleGateWindow(a, g) == g = a.gen
 
 \* Is this node's arrival routed around the tree for this generation?  Either
@@ -694,8 +693,9 @@ RecvInvalidate(m) ==
                       \*  becoming an outsider covers the ones after.
                       \* R2-09: an invalidation OLDER than the installed plan
                       \* is a death notice for a plan this node has moved past;
-                      \* clearing on it discards a live newer plan and leaves
-                      \* the subtree eager.
+                      \* clearing on it discards a live newer plan and strands
+                      \* the node outside every live child list.  SAFETY
+                      \* (T4-02), caught by ReachableWhileHolding.
                       \* R3-06: and it must not UNPARK either.  Installing the
                       \* parked plan replaces the child list before the
                       \* invalidation that does retire the installed plan
@@ -743,8 +743,10 @@ RecvNewPlan(m) ==
                 \* invalidation would then install the older plan and the next
                 \* invalidation would clear it, leaving this node and the
                 \* subtree below it eager until a DIFFERENT plan is built.
-                \* Convergence only; the drop guard above already refuses a
-                \* plan no newer than what the node holds.
+                \* SAFETY, not convergence (T4-02): mutating this violates
+                \* ReachableWhileHolding on MCPlan4Tiny.  Reaching it needs
+                \* FOUR plans, which no other scenario here has, so it went
+                \* unexercised until that scenario was added.
                 THEN /\ msgs' = msgs \ {m}
                      /\ deferEpoch' = [deferEpoch EXCEPT ![m.to] =
                                          IF m.epoch > deferEpoch[m.to]
@@ -829,13 +831,8 @@ Alter(a) ==
     \*  timestamp, so EVERY arrival it makes on it is routed around the tree.
     \*  That is the whole cost of preserving the timestamp, and the model
     \*  could not say it before.
-    /\ myTs' = [n \in Nodes |->
-                  CASE n = a.node ->
-                         [g \in Gens |-> IF g >= a.gen THEN a.ts ELSE myTs[n][g]]
-                    [] n = a.givento ->
-                         [g \in Gens |-> IF HandleGateWindow(a, g) THEN a.ts
-                                                                   ELSE myTs[n][g]]
-                    [] OTHER -> myTs[n]]
+    /\ myTs' = [myTs EXCEPT ![a.node] =
+                  [g \in Gens |-> IF g >= a.gen THEN a.ts ELSE myTs[a.node][g]]]
     \* Altering the count makes this node's plan quota wrong, and because its own
     \*  arrivals now bypass the tree its localTotal can never reach that quota -
     \*  so as a RELAY it would go silent and strand its children.  Enter EAGER
@@ -961,24 +958,52 @@ ArriveForAncestor(a, g) ==
 ArriveOnGivenHandle(a, g) ==
     /\ a \notin unaltered          \* the handle exists only once a is issued
     /\ a.givento # NoTarget        \* ... and was actually handed to somebody
-    /\ LET n == a.givento IN
-       /\ n # a.node               \* somebody else's handle
-       /\ myTs[n][g] = 0           \* and that node has altered nothing itself
+    /\ a.givento # a.node          \* somebody else's handle
+    /\ myTs[a.givento][g] = 0      \* recipient has no local alteration floor
     /\ g >= a.gen                  \* alterations are persistent
     /\ ~triggered[g]
     \* it discharges an obligation the ALTERING node booked.  event.h allows
     \*  that: the returned handle needs one use, by anybody on its branch.
     /\ unissued[a.node][g] > 0
     /\ unissued' = [unissued EXCEPT ![a.node][g] = @ - 1]
-    /\ tsSent' = [tsSent EXCEPT ![a.givento][g] = @ + 1]
-    /\ msgs' = msgs \cup
-         {[ kind |-> "tsdirect", from |-> a.givento, to |-> Owner, gen |-> g,
-            ts |-> (IF HandleGateWindow(a, g) THEN a.ts ELSE 0), local_ts |-> 0,
-            val |-> tsSent[a.givento][g] + 1 ]}
-    /\ UNCHANGED << localTotal, reportedUp, childAcc, flushing, curPlan,
-                    myEpoch, invalEpoch, deferEpoch, ownerAcc, watermark, triggered,
+    /\ IF HandleGateWindow(a, g)
+         THEN /\ tsSent' = [tsSent EXCEPT ![a.givento][g] = @ + 1]
+              /\ msgs' = msgs \cup
+                   {[ kind |-> "tsdirect", from |-> a.givento, to |-> Owner, gen |-> g,
+                      ts |-> a.ts, local_ts |-> 0,
+                      val |-> tsSent[a.givento][g] + 1 ]}
+              /\ UNCHANGED << localTotal, reportedUp, flushing, reportTo >>
+         ELSE LET gn   == a.givento
+                  glt  == localTotal[gn][g] + 1
+                  gsub == glt + SumFn(Nodes, [c \in Nodes |-> childAcc[gn][c][g]])
+              IN  /\ UNCHANGED tsSent
+                  /\ localTotal' = [localTotal EXCEPT ![gn][g] = glt]
+                  /\ reportTo' = Pin(reportTo, gn, {g})
+                  /\ \/ /\ ~curPlan[gn].inplan
+                        /\ msgs' = msgs \cup Send(gn, g, gsub)
+                                   \cup {[ kind |-> "flush", from |-> gn, to |-> Owner, gen |-> g ]}
+                        /\ reportedUp' = [reportedUp EXCEPT ![gn][g] = gsub]
+                        /\ UNCHANGED flushing
+                     \/ /\ flushing[gn][g] /\ curPlan[gn].inplan
+                        /\ msgs' = msgs \cup Send(gn, g, gsub)
+                        /\ reportedUp' = [reportedUp EXCEPT ![gn][g] = gsub]
+                        /\ UNCHANGED flushing
+                     \/ /\ ~flushing[gn][g] /\ curPlan[gn].inplan
+                        /\ glt > curPlan[gn].quota
+                        /\ flushing' = [flushing EXCEPT ![gn][g] = TRUE]
+                        /\ msgs' = msgs \cup Send(gn, g, gsub) \cup FlushFan(gn, g)
+                        /\ reportedUp' = [reportedUp EXCEPT ![gn][g] = gsub]
+                     \/ /\ ~flushing[gn][g] /\ curPlan[gn].inplan
+                        /\ glt <= curPlan[gn].quota
+                        /\ \/ /\ gsub >= SubQCur(gn)
+                              /\ msgs' = msgs \cup Send(gn, g, gsub)
+                              /\ reportedUp' = [reportedUp EXCEPT ![gn][g] = gsub]
+                           \/ /\ gsub < SubQCur(gn)
+                              /\ UNCHANGED << msgs, reportedUp >>
+                        /\ UNCHANGED flushing
+    /\ UNCHANGED << childAcc, curPlan, myEpoch, invalEpoch, deferEpoch,
+                    ownerAcc, watermark, triggered,
                     expected, appliedTs, unaltered, myTs, tsAcc >>
-    /\ UNCHANGED reportTo
 
 (***************************************************************************)
 (* ACTION 8 - a timestamped arrival reaches the owner.  THE GATE: it cannot *)

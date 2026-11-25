@@ -249,7 +249,6 @@ RecvReply(m) ==
 (* PREVENTION half of rule 5 - an optimisation, not the safety rule.        *)
 (***************************************************************************)
 Depart(n) ==
-    /\ n \in subSet
     /\ member[n] = "YES"
     /\ waiting[n] = {}
     /\ ~departing[n]

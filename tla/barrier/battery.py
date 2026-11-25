@@ -92,11 +92,32 @@ ARRIVAL = [
  ("no pinning: reports follow the current plan", "Double.cfg", "MCDouble", "CATCH",
   [("TargetOf(n, g) == IF reportTo[n][g] # NoTarget THEN reportTo[n][g] ELSE ParentOf(n)",
     "TargetOf(n, g) == ParentOf(n)")]),
+ # T4-05 / T4-02: the R2-09 and R3-06 plan-switch guards are UNREACHABLE in
+ #  every scenario with three plans or fewer, which was all of them.  Plan4Tiny
+ #  is the minimal 3-node, 4-plan scenario that executes all four branches, so
+ #  these two rows are the first thing that can tell us whether the guards
+ #  matter.  The round-4 TLA+ review claims both are safety-critical, contrary
+ #  to the "convergence only" comments; these rows decide it.
+ ("R2-09: stale invalidation clears a newer installed plan", "Plan4Tiny.cfg", "MCPlan4Tiny", "CATCH",
+  [("""                      /\\ curPlan' = IF live THEN [curPlan EXCEPT ![m.to] = Plans[dk][m.to]]
+                                     ELSE IF myEpoch[m.to] > m.epoch THEN curPlan""",
+    """                      /\\ curPlan' = IF live THEN [curPlan EXCEPT ![m.to] = Plans[dk][m.to]]
+                                     ELSE IF FALSE THEN curPlan""")]),
+ ("R3-06: stale invalidation unparks a newer plan", "Plan4Tiny.cfg", "MCPlan4Tiny", "CATCH",
+  [("                      live == (dk > m.epoch) /\\ (myEpoch[m.to] <= m.epoch)",
+    "                      live == (dk > m.epoch)")]),
  ("no live guard: parked plan installed by its own retirement", "Strand2.cfg", "MCStrand2", "CATCH",
   # R3-06 added the myEpoch conjunct; the mutation still removes the liveness
   #  guard, which is what it tests.
   [("                      live == (dk > m.epoch) /\\ (myEpoch[m.to] <= m.epoch)",
     "                      live == (dk > 0) /\\ (myEpoch[m.to] <= m.epoch)")]),
+ ("R3-06: stale invalidation unparks newer deferred plan", "Plan4Tiny.cfg", "MCPlan4Tiny", "CATCH",
+  [("                      live == (dk > m.epoch) /\\ (myEpoch[m.to] <= m.epoch)",
+    "                      live == (dk > m.epoch)")],
+  {"ReachableWhileHolding"}),
+ ("R2-09: stale invalidation clears live newer curPlan", "Plan4Tiny.cfg", "MCPlan4Tiny", "CATCH",
+  [("                                     ELSE IF myEpoch[m.to] > m.epoch THEN curPlan\n", "")],
+  {"ReachableWhileHolding"}),
  ("no install guard: newplan installed after its retirement was seen", "Strand2.cfg", "MCStrand2", "CATCH",
   [("    /\\ IF (myEpoch[m.to] >= m.epoch) \\/ (invalEpoch[m.to] >= m.epoch)",
     "    /\\ IF myEpoch[m.to] >= m.epoch")]),
@@ -269,6 +290,9 @@ ALTER = [
  ("a received handle gates for ever (the recipient never rejoins)", "Readmit.cfg", "MCReadmit", "CATCH",
   [("HandleGateWindow(a, g) == g = a.gen", "HandleGateWindow(a, g) == g >= a.gen")],
   {"NoLingeringBypasser", "deadlock"}),
+ ("received handle drops its causal timestamp on the gated generation", "Given.cfg", "MCGiven", "CATCH",
+  [("ts |-> a.ts, local_ts |-> 0,", "ts |-> 0, local_ts |-> 0,")],
+  {"TriggerCorrect", "NoEarlyTrigger"}),
  # THE ALTERING NODE'S FLUSH FAN IS NOT LOAD-BEARING, and the implementation
  #  relies on that: adjust_arrival's bypass branches only announce to their
  #  children while the plan still gives this node a quota, so that one
@@ -312,6 +336,11 @@ NOTIFY = [
   [('''           mem0  == IF newv THEN (IF m.inset THEN "YES" ELSE "NO")
                             ELSE member[m.to]''',
     '''           mem0  == IF m.inset THEN "YES" ELSE "NO"''')]),
+ ("no version gate on subscribe reply: stale reply may resurrect membership", "Small.cfg", "MCNotifySmall", "CATCH",
+  [('''           /\\ member'    = [member    EXCEPT ![m.to] =
+                              IF newv THEN "YES" ELSE member[m.to]]''',
+    '''           /\\ member'    = [member    EXCEPT ![m.to] = "YES"]''')],
+  {"MembershipPublished"}),
  ("shrink published to the POST-shrink set", "Notify.cfg", "MCNotify", "CATCH",
   [("inset |-> (c \\notin R), sv |-> sv2 ] : c \\in subSet }",
     "inset |-> (c \\notin R), sv |-> sv2 ] : c \\in (subSet \\ R) }")]),
@@ -338,11 +367,25 @@ NOTIFY = [
   [("    /\\ waiting[n] = {}\n", "")]),
 ]
 
+VALVE = [
+ # T4-03 - the R3-07 owner slack valve, which is the ONLY mechanism carrying
+ #  ARRIVAL_PROTOCOL rule 8.4 since the recipient-side flush was removed.  It
+ #  lives in an AUXILIARY module (BarrierArrive_Valve.tla) because the
+ #  production spec deliberately leaves plan construction out of scope, so it
+ #  needs its own suite - without one the fork is never model-checked at all
+ #  and drifts silently as the production spec is edited (adversarial review).
+ ("no receipt valve: a bypassed credit past the plan's slack does not flush",
+  "ValveSlack.cfg", "MCValveSlack", "CATCH",
+  [("                        /\\ (newTsTot + SubQ(myEpoch[Owner], Owner) > expected[m.gen])",
+    "                        /\\ FALSE")]),
+]
+
 SUITES = {
     "arrival": ("BarrierArrive.tla", ARRIVAL),
     "gate": ("BarrierArrive.tla", GATE),
     "alter": ("BarrierArrive.tla", ALTER),
     "notify": ("BarrierNotify.tla", NOTIFY),
+    "valve": ("BarrierArrive_Valve.tla", VALVE),
 }
 
 

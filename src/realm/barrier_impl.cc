@@ -128,6 +128,30 @@ namespace Realm {
   {
     // arrival uses the timestamp stored in this barrier object
     BarrierImpl *impl = get_runtime()->get_barrier_impl(*this);
+    // R4-02: 'delta' is a NEGATIVE int, so a count above INT_MAX would wrap to a
+    //  POSITIVE delta - which the owner reads as an alteration, raising expected
+    //  persistently and excluding this node from future plans, so the generation
+    //  never completes.  (A count of exactly 2^31 also negates INT_MIN, which is
+    //  undefined.)  Send such a count in pieces instead.  The reduction value is
+    //  applied once per CALL, not once per arrival, so it rides the first piece.
+    if((reduce_value_size > 0) && (count > static_cast<unsigned>(INT_MAX))) {
+      // Splitting zeroes 'reduce_value_size' for the later pieces, and that is
+      //  an input to scalable_route - so the halves of ONE call would travel by
+      //  two different protocols into two different accumulators (adversarial
+      //  review).  Refuse instead.
+      log_barrier.fatal() << "barrier arrive(count > INT_MAX) with a reduction value:"
+                          << " count=" << count
+                          << " - split the call, or arrive without a value";
+      abort();
+    }
+    while(count > static_cast<unsigned>(INT_MAX)) {
+      impl->adjust_arrival(ID(id).barrier_generation(), -INT_MAX, timestamp, wait_on,
+                           Network::my_node_id, reduce_value, reduce_value_size,
+                           TimeLimit::responsive());
+      count -= static_cast<unsigned>(INT_MAX);
+      reduce_value = 0;
+      reduce_value_size = 0;
+    }
     impl->adjust_arrival(ID(id).barrier_generation(), -int(count), timestamp, wait_on,
                          Network::my_node_id, reduce_value, reduce_value_size,
                          TimeLimit::responsive());
@@ -855,7 +879,8 @@ namespace Realm {
             retro_flushes_sent | stale_edge_forwards | report_edges_pinned |
             pin_conflicts_avoided | gap_pulls | reports_received | notifies_received |
             reports_gated | ts_arrivals_received | owner_valve_flushes | reclaim_pulls |
-            late_arrivals_dropped) != 0;
+            late_arrivals_dropped | gathering_failed_retirements | slack_valve_flushes |
+            slack_install_flushes) != 0;
   }
 
   // IMPLEMENTATION_PLAN section 5 - the counters' way out.  Everything in
@@ -905,7 +930,11 @@ namespace Realm {
                        << " ts_arrivals_received=" << counters.ts_arrivals_received
                        << " owner_valve_flushes=" << counters.owner_valve_flushes
                        << " reclaim_pulls=" << counters.reclaim_pulls
-                       << " late_arrivals_dropped=" << counters.late_arrivals_dropped;
+                       << " late_arrivals_dropped=" << counters.late_arrivals_dropped
+                       << " gathering_failed_retirements="
+                       << counters.gathering_failed_retirements
+                       << " slack_valve_flushes=" << counters.slack_valve_flushes
+                       << " slack_install_flushes=" << counters.slack_install_flushes;
   }
 
 #ifdef DEBUG_REALM
@@ -1001,6 +1030,8 @@ namespace Realm {
     held_alters.clear();
     // a node that altered the PREVIOUS life of this slot has no arrival floor
     //  for this one, so it is a legitimate plan member again
+    gather_declared_for = 0; // per-lifetime: a stale value retires a plan the
+                             //  NEXT barrier on this slot just built
     ts_bypass_nodes.clear();
     ts_seen_bypassing.clear();
     handle_first_gen.clear();
@@ -1177,9 +1208,18 @@ namespace Realm {
           out.clear();
           return false;
         }
-        // a count that cannot be a plan quota is a corrupt payload, not a
-        //  merely large one
-        if(count > static_cast<uint64_t>(UINT32_MAX)) {
+        // R4-01: this is a node's cumulative int64 total, NOT a plan quota.  A
+        //  count above UINT32_MAX is legal - build_new_plan_locked meets the
+        //  same value and simply declines to make it a quota - so only a count
+        //  that cannot be an int64 is corrupt.  Applying the quota bound here
+        //  aborted the owner on the first eager report carrying such a count.
+        // Bounded so that SUMMING one entry per node cannot overflow int64:
+        //  build_new_plan_locked adds every entry into 'gathered' BEFORE the
+        //  per-entry overflow test, and skips that test entirely for a node in
+        //  ts_bypass_nodes - so an unbounded entry there is an int64 overflow
+        //  inside the function this decoder exists to protect (adversarial
+        //  review).  Node ids are below 2^16, so this leaves ample headroom.
+        if(count > (static_cast<uint64_t>(INT64_MAX) >> 16)) {
           out.clear();
           return false;
         }
@@ -1415,7 +1455,7 @@ namespace Realm {
   {
     REALM_BARRIER_ASSERT_LOCKED();
     if(redop_id != 0) {
-      g.unguarded_delta -= static_cast<int>(count);
+      g.unguarded_delta -= count; // 64-bit throughout
     } else {
       g.ts_acc += count;
     }
@@ -1677,7 +1717,7 @@ namespace Realm {
         //  returned handle.  It cannot trigger early - 'expected' only moves
         //  DOWN, so any generation it completes has already accounted for the
         //  lowered count - and all three callers run check_triggers_locked in
-        //  this same critical section (:3943, :4640, :4722), which is the only
+        //  this same critical section (every caller does), which is the only
         //  thing that moves the watermark.
       }
 
@@ -1765,7 +1805,7 @@ namespace Realm {
       return;
     }
     if((g.ts_acc + static_cast<int64_t>(cur_plan.subtree_quota)) > expected_locked(gen)) {
-      counters.owner_valve_flushes++;
+      counters.slack_valve_flushes++; // T-2: attributable, unlike owner_valve_flushes
       enter_flush_locked(g, gen, sends);
     }
   }
@@ -1803,7 +1843,21 @@ namespace Realm {
     if((generations.size() >= RECLAIM_PULL_THRESHOLD) && (member == MEMBER_NO) &&
        !pull_outstanding) {
       counters.reclaim_pulls++;
-      consult_subscribe_locked(sends);
+      // R4-04: subscribe WITHOUT recording a consultation or a rejoin.  The
+      //  application did not ask for anything - this is bookkeeping - so it is
+      //  neither evidence that the node still cares about the barrier nor a
+      //  rejoin to judge for churn.  Judging it as one ratcheted 'depart_K'
+      //  from 8 to 1024 for any arrival-only rank running two or more
+      //  generations ahead (RECLAIM_PULL_THRESHOLD and DEPART_CHURN_WINDOW are
+      //  both 64, so the reply's watermark is always inside the churn window),
+      //  after which the rank stayed subscribed and received a notification for
+      //  nearly every generation - exactly the cost B01's pull exists to avoid.
+      member = MEMBER_PENDING;
+      pull_outstanding = true;
+      pull_deferred = false;
+      sends.has_subscribe = true;
+      sends.subscribe_lk = generation.load();
+      sends.subscribe_need = subscribe_need_locked();
     }
   }
 
@@ -2517,22 +2571,67 @@ namespace Realm {
       //  enter_flush_locked is idempotent and re-arms plan_rebuild_pending,
       //  so repeated declines while the gathering generation is already
       //  declared collapse into one declaration.
+      // R4-03 - ... BUT "COMPLETE BY CONSTRUCTION" ONLY HOLDS FOR A WAITER.
+      //  The declaration rides the trigger notification, which reaches
+      //  SUBSCRIBERS.  An arrival-only rank hears it from a flush instead, and
+      //  if it runs ahead it has already arrived at the declared generation
+      //  under the old plan, sent a bare count and kept nothing - so the flush
+      //  finds nothing to re-report and its map never comes.  Declaring the
+      //  next generation then fails the same way, for ever: measured at 8
+      //  ranks with half the ranks arrival-only at lead 4, 180 of 180
+      //  generations declined, every one reading "gathered=4 of 8", with a
+      //  flush every generation and 2.4x the owner reports.
+      //
+      // So if the generation we declared has now triggered and the evidence is
+      //  STILL partial, the declaration failed.  Retire the plan instead.  A
+      //  retirement is not addressed to a generation: a node that receives it
+      //  is eager for EVERY open generation from that moment, so it catches a
+      //  run-ahead rank wherever it happens to be, without the owner needing to
+      //  know how far ahead that is.  This is why an ALTERATION never loops
+      //  like this - it retires.  Cost: one invalidate and newplan fan-out, and
+      //  a few fully-eager generations, instead of unbounded eager traffic.
+      const gen_t wm = generation.load();
+      if((gather_declared_for != 0) && (gather_declared_for <= wm)) {
+        gather_declared_for = 0;
+        // 'my_epoch != 0' as well: retire_plan_locked returns immediately when
+        //  no plan was ever installed, so without this the counter and the log
+        //  claimed retirements that never happened AND the re-declaration below
+        //  was skipped, halving the convergence rate (adversarial review).
+        if((my_epoch != 0) && !plan_retired_locked()) {
+          counters.gathering_failed_retirements++;
+          log_barrier.info() << "retiring barrier plan after a gathering generation "
+                             << "failed to gather: " << me << " gen=" << wm;
+          retire_plan_locked(sends);
+          return;
+        }
+      }
       if(declines_until_gather > 0) {
         // backing off: the last gathering(s) reproduced the current plan, so
         //  this deviation pattern has no better plan to learn right now
         declines_until_gather--;
       } else {
-        const gen_t gather_gen = generation.load() + 1;
+        const gen_t gather_gen = wm + 1;
         Generation *ng = get_generation_locked(gather_gen);
         if(!ng->flushing) {
           counters.gathering_declared++;
           log_barrier.info() << "declaring gathering generation: " << me
                              << " gen=" << gather_gen;
         }
+        gather_declared_for = gather_gen;
         enter_flush_locked(*ng, gather_gen, sends);
       }
       return;
     }
+
+    // THE DECLARATION SUCCEEDED.  Evidence is complete, so whatever happens to
+    //  the plan below - installed, skipped as identical, declined as
+    //  over-predicting - the gathering generation did its job and must not
+    //  cause a retirement later.  Clearing this ONLY on the install path left
+    //  it set on the identical-plan skip, so a successful gathering was punished
+    //  with a retirement at the next decline and the exponential backoff could
+    //  never exceed 1 - re-creating the broadcast storm the backoff exists to
+    //  stop (adversarial review).
+    gather_declared_for = 0;
 
     // THE INVARIANT, measured against the count this plan's FIRST generation
     //  will actually be waiting for - not against 'base_arrival_count', which a
@@ -2601,6 +2700,7 @@ namespace Realm {
       last_plan_hash = h;
       gather_backoff = 0;
       declines_until_gather = 0;
+      // gather_declared_for was already cleared when evidence came back complete
     }
 
     counters.plan_rebuilds++;
@@ -2621,7 +2721,7 @@ namespace Realm {
     }
 
     // (3) install the owner's own record.  'inval_epoch = new_epoch - 1' is
-    //     what BarrierArrive's Trigger does (:322-324): the owner is never sent its
+    //     what BarrierArrive's Trigger does: the owner is never sent its
     //     own invalidation, so it retires the old epoch itself, which leaves
     //     plan_retired_locked() false and lets it aggregate under the new plan
     //     immediately.
@@ -2757,7 +2857,7 @@ namespace Realm {
         // ONLY GENERATIONS WITH STATE OR ALREADY IN FLUSH.  The spec's only
         //  plan-switch flush is per-node at RecvInvalidate, conditioned on
         //  SubtreeKnown > 0 (BarrierArrive :452-456); a no-activity generation is
-        //  governed by the plan record alone (:448-451), so converting it to
+        //  governed by the plan record alone (BarrierArrive RecvInvalidate), so converting it to
         //  eager mode here forfeits its aggregation for nothing.  A record CAN
         //  exist with zero state - add_waiter creates one for any future
         //  generation a local task waits on - and it is skipped.
@@ -2776,6 +2876,9 @@ namespace Realm {
             expected_locked(it->first);
         if((it->second->subtree_known() <= 0) && !it->second->flushing && !over_slack) {
           continue;
+        }
+        if(over_slack && (it->second->subtree_known() <= 0) && !it->second->flushing) {
+          counters.slack_install_flushes++; // T-2: this half had no counter at all
         }
         if(!it->second->flushing) {
           it->second->flushing = true;
@@ -3006,7 +3109,7 @@ namespace Realm {
   // the model's 'waiting[n] # {}'
   //
   // BarrierNotify evaluates rule 6 over the waiter set AFTER the watermark has
-  //  moved - 'w2 == { g \in waiting[m.to] : g > nk }' (:146) - and 'waiting[n]'
+  //  moved - 'w2 == { g \in waiting[m.to] : g > nk }' in BarrierNotify - and 'waiting[n]'
   //  loses a generation only when 'known[n]' actually REACHES it.  Every test
   //  below is therefore against the CURRENT watermark, and every consultation
   //  has to leave a trace that survives one.
@@ -3181,6 +3284,10 @@ namespace Realm {
     if(last_depart_wm == 0) {
       return;
     }
+    // T4-06: the test is "came back QUICKLY", i.e. the owner's watermark has
+    //  moved LESS than the window since this node asked to leave.  (An earlier
+    //  comment here had the sense inverted.)  A node that stays away longer
+    //  than the window is not churning and must not be penalised.
     if((now_wm - last_depart_wm) <= DEPART_CHURN_WINDOW) {
       counters.churn_backoffs++;
       if(depart_K < DEPART_K_MAX) {
@@ -4317,7 +4424,7 @@ namespace Realm {
       //  and 'child_sum' - which only the scalable test reads - is left alone.
       const bool legacy_fold = (owner == Network::my_node_id) && (redop_id != 0);
       if(legacy_fold) {
-        g->unguarded_delta -= static_cast<int>(val - prev);
+        g->unguarded_delta -= (val - prev);
       } else {
         // REPLACE this child's contribution, never add to it.  'child_sum' is
         //  the incremental maintenance of the model's
@@ -4539,7 +4646,7 @@ namespace Realm {
         // ONLY GENERATIONS THIS NODE HAS STATE ON (BarrierArrive RecvInvalidate
         //  :452-456, 'IF ~triggered[g] /\ SubtreeKnown(m.to, g) > 0').
         //  Generations with no activity are governed by the plan record alone
-        //  (:448-451) - planless nodes are outsiders, planned nodes start
+        //  (BarrierArrive RecvInvalidate) - planless nodes are outsiders, planned nodes start
         //  planned - so nothing here is sticky across future generations.  A
         //  record CAN exist with zero state: add_waiter creates one for any
         //  future generation a local task waits on, and flagging it would
@@ -4725,9 +4832,16 @@ namespace Realm {
         //  with the older plan, and invalidate 1 then installed plan 2; the
         //  invalidation for plan 2 that follows clears it again, leaving this
         //  node and the part of plan 3 below it eager until a DIFFERENT plan is
-        //  built.  Safe either way - this is convergence, not correctness - and
-        //  it matches the drop guard just above, which already refuses a plan
-        //  that is not newer than what this node holds.
+        //  built.  It matches the drop guard just above, which already refuses
+        //  a plan no newer than what this node holds.
+        //
+        // T4-02: this is SAFETY, not convergence.  An earlier version of this
+        //  comment said the opposite, and it was both wrong and untested -
+        //  every scenario in tla/barrier had at most THREE plans, and reaching
+        //  this branch needs four, so nothing exercised it.  MCPlan4Tiny does,
+        //  and mutating this guard violates ReachableWhileHolding: the node is
+        //  left holding a plan that no live plan's child list names, so no
+        //  flush can reach it again.
         if(epoch <= defer_epoch) {
           log_barrier.info() << "keeping newer parked barrier plan: " << me
                              << " parked=" << defer_epoch << " offered=" << epoch;
@@ -5590,7 +5704,16 @@ namespace Realm {
     {
       AutoLock<> a(mutex);
 
-      // STEP 1 - the rule-7 window closes
+      // STEP 1 - the rule-7 window closes.
+      //
+      // T4-06: this clears the flag for ANY reply, including one that answers
+      //  an EARLIER subscribe while a later one is still in flight.  The window
+      //  then reopens early and a second pull can be issued for a generation
+      //  the owner is already about to answer.  Harmless - the duplicate is a
+      //  pull the protocol already permits (BarrierNotify's Consult allows the
+      //  same two), membership is version-gated below so a late reply cannot
+      //  resurrect it, and the owner answers both - but it is a redundant
+      //  message, not the single outstanding pull rule 7 describes.
       pull_outstanding = false;
 
       // STEP 2 - RULE 2 again.  The SAME version gate is required here: a stale

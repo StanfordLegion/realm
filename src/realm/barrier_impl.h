@@ -573,7 +573,15 @@ namespace Realm {
     // 'constexpr' rather than 'const': this is streamed into a log message in
     //  add_poison_locked(), which binds it to a reference and therefore ODR-uses
     //  it.  A 'static const int' with no out-of-line definition does not link.
-    static constexpr int POISONED_GENERATION_LIMIT = 16;
+    // How many poisoned generations one barrier can retain before the runtime
+    //  gives up (decision Q3).  Set at build time with -DREALM_BARRIER_POISON_LIMIT.
+    //  The array is allocated ONCE at this size so a lock-free reader never sees
+    //  a dangling pointer, so raising it costs that much memory per poisoned
+    //  barrier for the barrier's lifetime.
+#ifndef REALM_BARRIER_POISON_LIMIT
+#define REALM_BARRIER_POISON_LIMIT 16
+#endif
+    static constexpr int POISONED_GENERATION_LIMIT = REALM_BARRIER_POISON_LIMIT;
     atomic<int> num_poisoned_generations = atomic<int>(0);
     gen_t *poisoned_generations = nullptr;
 
@@ -739,7 +747,11 @@ namespace Realm {
 
       // ---- LEGACY / REDUCTION PATH ONLY ------------------------------------
       // the count-down accumulator: expected(gen) + unguarded_delta == 0
-      int unguarded_delta = 0;
+      // 64-bit like every other count on this path.  It was 'int', so a
+      //  reduction barrier with a count above INT_MAX overflowed it and the
+      //  completion test - an equality - could never be met NOR could the
+      //  negative-remaining diagnostic fire: a silent hang (adversarial review).
+      int64_t unguarded_delta = 0;
     };
 
     std::map<gen_t, Generation *> generations;
@@ -927,6 +939,14 @@ namespace Realm {
     uint64_t last_plan_hash = 0;
     uint32_t gather_backoff = 0;        // doubles on identical outcomes, cap 32
     uint32_t declines_until_gather = 0; // countdown while backing off
+    // R4-03 - the generation a gathering declaration was last made for, 0 if
+    //  none is outstanding.  A declaration only works if it reaches a node
+    //  BEFORE that node arrives at the declared generation.  That holds for a
+    //  waiter by construction, but an arrival-only rank running ahead has
+    //  already passed it, so its evidence can never be complete.  When the
+    //  declared generation triggers and the evidence is STILL partial, the
+    //  declaration has demonstrably failed and the plan is retired instead.
+    gen_t gather_declared_for = 0;
     uint32_t next_epoch = 1;
     // Set by the only thing that can tell the owner its plan is wrong: the
     //  owner entering eager-flush mode (a 'direct' from a node the plan did not
@@ -1299,6 +1319,17 @@ namespace Realm {
       //     the alteration side instead (apply_alter_locked), which is
       //     deterministic.
       uint64_t late_arrivals_dropped = 0;
+
+      // --- R4-03: plans retired because a gathering generation failed to
+      //     gather (a run-ahead arrival-only rank had already passed it).
+      uint64_t gathering_failed_retirements = 0;
+
+      // --- T-2: the slack valve has TWO halves and each has a case only it
+      //     covers, so they are counted apart.  'owner_valve_flushes' is shared
+      //     with the receipt valve and the switch-time audit, which made a
+      //     firing impossible to attribute.
+      uint64_t slack_valve_flushes = 0;   // check_bypass_slack_locked, on credit
+      uint64_t slack_install_flushes = 0; // the over_slack flush at plan switch
 
       // has anything at all happened worth reporting?
       bool any(void) const;
