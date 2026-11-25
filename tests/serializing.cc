@@ -293,6 +293,19 @@ bool serdez(S &s, const PP2 &p)
   return (s & p.x) && (s & p.y);
 }
 
+static void test_zero_byte_copies()
+{
+  Realm::Serialization::FixedBufferSerializer fixed(nullptr, 0);
+  Realm::Serialization::DynamicBufferSerializer dynamic(0);
+  Realm::Serialization::FixedBufferDeserializer reader(nullptr, 0);
+  char output = 'x';
+  if(!fixed.append_bytes(nullptr, 0) || !dynamic.append_bytes(nullptr, 0) ||
+     dynamic.bytes_used() != 0 || !reader.extract_bytes(&output, 0) || output != 'x') {
+    std::cout << "ERROR: zero-byte serialization failed" << std::endl;
+    error_count++;
+  }
+}
+
 int main(int argc, const char *argv[])
 {
   parse_args(argc, argv);
@@ -406,6 +419,8 @@ int main(int argc, const char *argv[])
   s.insert(11);
   std::set<int> set_int_output;
   do_test("set<int>", s, set_int_output, sizeof(size_t) + s.size() * sizeof(int));
+
+  test_zero_byte_copies();
 
   if(error_count > 0) {
     std::cout << "ERRORS FOUND" << std::endl;

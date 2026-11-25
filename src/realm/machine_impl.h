@@ -182,6 +182,16 @@ namespace Realm {
     RuntimeImpl *runtime_impl{nullptr};
   };
 
+  // the target and bounds of a has_affinity_to predicate: a query the shared
+  //  cache does not serve may enumerate the target's affinity map instead of
+  //  walking the machine (see ProcessorQueryImpl::add_anchor_mem)
+  template <typename T>
+  struct AffinityAnchor {
+    T target;
+    unsigned min_bandwidth;
+    unsigned max_latency;
+  };
+
   template <typename T, typename T2>
   class QueryPredicate {
   public:
@@ -191,6 +201,10 @@ namespace Realm {
 
     virtual bool matches_predicate(const MachineImpl *machine, T thing,
                                    const T2 *info = 0) const = 0;
+
+    // the target and bounds of a has_affinity_to(Memory) predicate, else null
+    //  (see ProcessorQueryImpl::for_each_anchored)
+    virtual const AffinityAnchor<Memory> *memory_anchor(void) const { return nullptr; }
   };
 
   typedef QueryPredicate<Processor, MachineProcInfo> ProcQueryPredicate;
@@ -204,11 +218,10 @@ namespace Realm {
 
     virtual bool matches_predicate(const MachineImpl *machine, Processor thing,
                                    const MachineProcInfo *info = 0) const;
+    virtual const AffinityAnchor<Memory> *memory_anchor(void) const { return &anchor; }
 
   protected:
-    Memory memory;
-    unsigned min_bandwidth;
-    unsigned max_latency;
+    AffinityAnchor<Memory> anchor; // the memory and the bounds
   };
 
   namespace Config {
@@ -269,11 +282,13 @@ namespace Realm {
     std::vector<T> items; // sorted by id
   };
 
-  // the lists of all things of each kind
+  // the lists of all things of each kind, and of every kind together (for a
+  //  query with no kind restriction)
   template <typename T, unsigned NUM_KINDS>
   struct QueryKindCache {
     unsigned generation = 0;
     QueryResultList<T> by_kind[NUM_KINDS];
+    QueryResultList<T> all;
   };
 
   // the publication slot for one kind of snapshot
@@ -355,13 +370,15 @@ namespace Realm {
     typedef QueryResultList<Processor> CachedList;
     typedef QueryKindCache<Processor, NUM_PROCESSOR_KINDS> KindCache;
 
-    // the processors of each kind with an affinity to each memory - any
-    //  affinity in the model, local or not, exactly as the walk sees them. A
-    //  kind and memory that are not in the map have no such processors (and
-    //  are served the empty list), so a miss costs no more than a hit.
+    // the processors of each kind, and of every kind, with an affinity to
+    //  each memory - any affinity in the model, local or not, exactly as the
+    //  walk sees them. A kind and memory that are not in the map have no such
+    //  processors (and are served the empty list), so a miss costs no more
+    //  than a hit.
     struct AffinityCache {
       unsigned generation = 0;
       std::map<Memory, CachedList> by_kind_and_mem[NUM_PROCESSOR_KINDS];
+      std::map<Memory, CachedList> by_mem;
       CachedList none;
     };
 
@@ -381,7 +398,7 @@ namespace Realm {
     // makes and returns if a copy if more than one reference is held
     ProcessorQueryImpl *writeable_reference(void);
 
-    void restrict_to_node(int new_node_id);
+    void restrict_to_node(AddressSpace new_node_id);
     void restrict_to_kind(Processor::Kind new_kind);
     void add_predicate(ProcQueryPredicate *pred);
 
@@ -390,19 +407,34 @@ namespace Realm {
     size_t count_matches(void) const;
     Processor random_match(void) const;
 
+    // how many calls on the calling thread were answered by a pass over the
+    //  whole machine model, and by a pass over one affinity map, and how
+    //  many entries of those maps the anchored passes examined (an entry
+    //  counts once its node is read, the one ending a node's run included)
+    static unsigned long walk_count(void);
+    static unsigned long anchored_count(void);
+    static unsigned long anchored_visits(void);
+
     void set_cached_mem(Memory m)
     {
-      cached_mem = m;
       if(predicates.size() == 1)
-        is_cached_mem = true;
+        cached_mem = m;
       else
-        is_cached_mem = false;
+        cached_mem.reset();
     };
-    void reset_cached_mem()
+    void reset_cached_mem() { cached_mem.reset(); };
+    // records the first has_affinity_to(Memory) predicate: a query the shared
+    //  cache does not serve enumerates the affinity map of one of its
+    //  memories (the smallest, chosen from the predicates when the query runs)
+    //  instead of every processor in the machine, applying the node and kind
+    //  restrictions and the other predicates to each entry (see
+    //  for_each_anchored). "No memory" anchors too: it has no map, and no
+    //  processor has an affinity to it
+    void add_anchor_mem(Memory m, unsigned min_bandwidth, unsigned max_latency)
     {
-      cached_mem = Memory::NO_MEMORY;
-      is_cached_mem = false;
-    };
+      if(!anchor_mem)
+        anchor_mem = AffinityAnchor<Memory>{m, min_bandwidth, max_latency};
+    }
     Processor cache_next(Processor after);
 
   public:
@@ -421,17 +453,19 @@ namespace Realm {
   protected:
     atomic<int> references;
     const MachineImpl *machine;
-    bool is_restricted_node;
-    int restricted_node_id;
-    bool is_restricted_kind;
-    Processor::Kind restricted_kind;
+    std::optional<AddressSpace> restricted_node_id;
+    std::optional<Processor::Kind> restricted_kind;
+    // set when the user requests a conflicting query, which must return the
+    //  empty set
+    bool conflict;
     std::vector<ProcQueryPredicate *> predicates;
 
     // Best affinity cost function (not a predicate)
     std::optional<BestAffinityCostFn> best_affinity_cost;
 
-    Memory cached_mem;
-    bool is_cached_mem;
+    std::optional<Memory> cached_mem;
+    std::optional<AffinityAnchor<Memory>> anchor_mem; // see add_anchor_mem
+    bool anchored() const { return anchor_mem.has_value(); }
 
     // the list this query last used: one in a shared snapshot, or one of
     //  the best-affinity lists it built itself. It is current while its
@@ -439,28 +473,37 @@ namespace Realm {
     //  object and may read concurrently, so this is an atomic; the lists it
     //  points to are immutable and outlive it (see QueryCacheSlot)
     mutable atomic<const CachedList *> attached;
-    // best-affinity results depend on the query's cost function, so they are
-    //  built per query. Across machine updates every list is kept, because
-    //  another copy may still be reading an older one. Refinement holds the
-    //  only reference to the implementation and frees all its lists; otherwise
-    //  they live until the query is destroyed. Between refinements a query
-    //  builds one list per machine update it observes. The first list lives
-    //  in the query itself, the rest on the heap; the optional is constructed
-    //  only when a list is built, so a query that never needs one pays nothing
-    //  for it
+    // a query's own result lists: best-affinity results depend on the query's
+    //  cost function, so they are built per query; and a query the shared
+    //  cache does not serve builds the list of its matches on its first
+    //  next(), the start of an iteration, so that each step is a lookup in
+    //  the list rather than another pass over the candidates (first(),
+    //  count() and random() use that list while it is current but do not
+    //  build one: a one-shot call keeps its one pass). The exception is a
+    //  memory query anchored on a processor: its candidates are the few
+    //  memories that processor reaches, so a step through them costs less
+    //  than building a list would (see MemoryQueryImpl::cache_next). Across machine
+    //  updates every list is kept, because another copy may still be reading an older
+    //  one. Refinement holds the only reference to the implementation and
+    //  frees all its lists; otherwise they live until the query is destroyed.
+    //  Between refinements a query builds one list per machine update it
+    //  observes. The first list lives in the query itself, the rest on the
+    //  heap; the optional is constructed only when a list is built, so a query
+    //  that never needs one pays nothing for it
     mutable UnfairMutex build_mutex;
     mutable std::optional<CachedList> first_own;
     mutable std::vector<std::unique_ptr<CachedList>> own_lists;
 
-    // whether the shared cache can serve this query at all: one kind, at most
-    //  one node, no best-affinity cost, and no predicate other than the one
-    //  memory affinity the by-kind-and-memory lists cover; anything else walks
-    //  the machine
+    // whether the shared cache can serve this query at all: no conflict, no
+    //  best-affinity cost, and no predicate other than the one memory
+    //  affinity the by-memory lists cover; anything else enumerates the
+    //  anchor memory's affinity map, or walks the machine without one (a
+    //  conflicting query does neither: it matches nothing)
     bool shared_cache_covers() const
     {
-      return is_restricted_kind && !(is_restricted_node && (restricted_node_id < 0)) &&
-             !best_affinity_cost.has_value() && (predicates.empty() || is_cached_mem) &&
-             (unsigned(restricted_kind) < NUM_PROCESSOR_KINDS);
+      return !conflict && !best_affinity_cost.has_value() &&
+             (predicates.empty() || cached_mem.has_value()) &&
+             (!restricted_kind || (unsigned(*restricted_kind) < NUM_PROCESSOR_KINDS));
     }
     // the shared list that serves this query (attaching to it as a side
     //  effect), or null if the shared cache does not cover this query. The
@@ -483,16 +526,28 @@ namespace Realm {
     REALM_ATTR_NOINLINE(const CachedList *cached_list_miss(unsigned generation) const);
     // the list for this query's kind and memory in an affinity snapshot
     const CachedList *list_in(const AffinityCache *ac) const;
+    // the list for this query's kind (or of every kind) in a kind snapshot
+    const CachedList *list_in(const KindCache *kc) const
+    {
+      return restricted_kind ? &kc->by_kind[*restricted_kind] : &kc->all;
+    }
     // builders of the shared snapshots for 'generation', run one at a time
     //  by QueryCacheSlot::get_or_build
     KindCache *build_kind_cache(unsigned generation) const;
     AffinityCache *build_affinity_cache(unsigned generation) const;
-    // the list of this query's best-affinity results, building it if needed
-    const CachedList *best_affinity_list() const;
+    // the list of this query's own results - its best-affinity results, or
+    //  the matches of a query the shared cache does not serve - building it
+    //  if it is missing or stale
+    const CachedList *own_list() const;
     // next() over that list (see the definition)
-    REALM_ATTR_NOINLINE(Processor best_affinity_next(Processor after) const);
+    REALM_ATTR_NOINLINE(Processor own_list_next(Processor after) const);
+    // builds this query's results into 'result' (one of the two below)
+    void build_own_list(std::vector<Processor> &result) const;
     // builds the best-affinity results of this query into 'result'
     void build_best_affinity_list(std::vector<Processor> &result) const;
+    // builds the matches of this query into 'result', from the anchor
+    //  memory's affinity map or by a walk of the machine
+    void build_match_list(std::vector<Processor> &result) const;
     // remembers 'list' as this query's current result
     const CachedList *attach(const CachedList *list) const;
     // this query's attached list if it is still current, else null
@@ -506,6 +561,24 @@ namespace Realm {
     bool cached_query(Processor p, Processor &pval);
     bool cached_query(Processor &pval, QueryType q) const;
     bool cached_query(size_t &count) const;
+    // the affinity map of a memory the query is anchored to (every
+    //  processor with an affinity to it), or NULL if it is not in the model
+    const std::map<Processor, Machine::ProcessorMemoryAffinity *> *
+    anchor_affinities(Memory m) const;
+    // the processors of 'node' this query may return (its node and kind
+    //  restrictions applied), or NULL if there are none
+    const std::map<Processor, MachineProcInfo *> *candidate_list(NodeID node) const;
+    // the matches of an anchored query after 'after' (all of them for "no
+    //  processor"), in id order, each handed to fn until it returns false;
+    //  the caller holds the machine's reader lock
+    template <typename Fn>
+    void for_each_anchored(Processor after, Fn &&fn) const;
+    // the accessors over the anchor's map, for a query the shared cache does
+    //  not serve (see first_match)
+    Processor anchored_first(void) const;
+    Processor anchored_next(Processor after) const;
+    size_t anchored_count_matches(void) const;
+    Processor anchored_random(void) const;
   };
 
   typedef QueryPredicate<Memory, MachineMemInfo> MemoryQueryPredicate;
@@ -535,11 +608,10 @@ namespace Realm {
 
     virtual bool matches_predicate(const MachineImpl *machine, Memory thing,
                                    const MachineMemInfo *info = 0) const;
+    virtual const AffinityAnchor<Memory> *memory_anchor(void) const { return &anchor; }
 
   protected:
-    Memory memory;
-    unsigned min_bandwidth;
-    unsigned max_latency;
+    AffinityAnchor<Memory> anchor; // the memory and the bounds
   };
 
   class MemoryQueryImpl {
@@ -551,9 +623,21 @@ namespace Realm {
     typedef QueryResultList<Memory> CachedList;
     typedef QueryKindCache<Memory, NUM_MEMORY_KINDS> KindCache;
 
-    // the shared query cache: memories by kind (see ProcessorQueryImpl)
+    // the memories of each kind, and of every kind, with an affinity to (an
+    //  edge into) each memory, as MemoryHasMemAffinityPredicate sees them
+    //  (see ProcessorQueryImpl::AffinityCache)
+    struct AffinityCache {
+      unsigned generation = 0;
+      std::map<Memory, CachedList> by_kind_and_mem[NUM_MEMORY_KINDS];
+      std::map<Memory, CachedList> by_mem;
+      CachedList none;
+    };
+
+    // the shared query cache: memories by kind, and by the memory they have
+    //  an affinity to (see ProcessorQueryImpl)
     static atomic<unsigned int> cache_invalid_count;
     static QueryCacheSlot<KindCache> kind_cache;
+    static QueryCacheSlot<AffinityCache> affinity_cache;
 
   protected:
     // these things are refcounted and copied-on-write
@@ -566,19 +650,48 @@ namespace Realm {
     // makes and returns if a copy if more than one reference is held
     MemoryQueryImpl *writeable_reference(void);
 
-    void restrict_to_node(int new_node_id);
+    void restrict_to_node(AddressSpace new_node_id);
     void restrict_to_kind(Memory::Kind new_kind);
     void restrict_by_capacity(size_t new_min_bytes);
     void add_predicate(MemoryQueryPredicate *pred);
-    // records the processor of a has_affinity_to(Processor) predicate when it
-    // is the query's only predicate, so matches can be enumerated from that
-    // processor's affinity map instead of every memory in the machine
-    void set_affinity_proc(Processor p);
+    // the anchors of a query with affinity predicates: a query the shared
+    //  cache does not serve enumerates one anchor's affinity map (every
+    //  memory a processor reaches, or every memory with an edge into a
+    //  memory), applying the restrictions and the other predicates to each
+    //  entry, instead of walking every memory in the machine. A match has an
+    //  affinity to every anchor, so any anchor's map holds every match, and
+    //  the smallest is scanned (see for_each_anchored). A target that is not
+    //  in the model ("no processor", "no memory") anchors too: it has no map,
+    //  and nothing has an affinity to it
+    void set_anchor_proc(Processor p, unsigned min_bandwidth, unsigned max_latency)
+    {
+      if(!anchor_proc)
+        anchor_proc = AffinityAnchor<Processor>{p, min_bandwidth, max_latency};
+    }
+    void add_anchor_mem(Memory m, unsigned min_bandwidth, unsigned max_latency)
+    {
+      if(!anchor_mem)
+        anchor_mem = AffinityAnchor<Memory>{m, min_bandwidth, max_latency};
+    }
+    // the memory of a has_affinity_to(Memory) predicate with no bounds, which
+    //  the shared by-memory lists serve while it is the only predicate
+    void set_cached_mem(Memory m)
+    {
+      if(predicates.size() == 1)
+        cached_mem = m;
+      else
+        cached_mem.reset();
+    }
+    void reset_cached_mem() { cached_mem.reset(); }
 
     Memory first_match(void) const;
     Memory next_match(Memory after) const;
     size_t count_matches(void) const;
     Memory random_match(void) const;
+    // see ProcessorQueryImpl
+    static unsigned long walk_count(void);
+    static unsigned long anchored_count(void);
+    static unsigned long anchored_visits(void);
     Memory cache_next(Memory after);
     bool cached_query(Memory p, Memory &pval);
     bool cached_query(Memory &pval, QueryType q) const;
@@ -608,10 +721,11 @@ namespace Realm {
   protected:
     atomic<int> references;
     const MachineImpl *machine;
-    bool is_restricted_node;
-    int restricted_node_id;
-    bool is_restricted_kind;
-    Memory::Kind restricted_kind;
+    std::optional<AddressSpace> restricted_node_id;
+    std::optional<Memory::Kind> restricted_kind;
+    // set when the user requests a conflicting query, which must return the
+    //  empty set
+    bool conflict;
     size_t restricted_min_capacity;
     // see ProcessorQueryImpl
     mutable atomic<const CachedList *> attached;
@@ -619,7 +733,11 @@ namespace Realm {
     mutable std::optional<CachedList> first_own;
     mutable std::vector<std::unique_ptr<CachedList>> own_lists;
     std::vector<MemoryQueryPredicate *> predicates;
-    Processor affinity_proc; // see set_affinity_proc
+    // see set_anchor_proc and set_cached_mem
+    std::optional<Memory> cached_mem;
+    std::optional<AffinityAnchor<Processor>> anchor_proc;
+    std::optional<AffinityAnchor<Memory>> anchor_mem;
+    bool anchored() const { return anchor_proc.has_value() || anchor_mem.has_value(); }
 
     // Best affinity cost functions (not predicates)
     std::optional<BestProcAffinityCostFn> best_proc_affinity_cost;
@@ -628,12 +746,16 @@ namespace Realm {
     // see ProcessorQueryImpl
     bool shared_cache_covers() const
     {
-      return is_restricted_kind && !(is_restricted_node && (restricted_node_id < 0)) &&
-             predicates.empty() && (restricted_min_capacity == 0) &&
-             !best_proc_affinity_cost.has_value() &&
+      return !conflict && (predicates.empty() || cached_mem.has_value()) &&
+             (restricted_min_capacity == 0) && !best_proc_affinity_cost.has_value() &&
              !best_mem_affinity_cost.has_value() &&
-             (unsigned(restricted_kind) < NUM_MEMORY_KINDS);
+             (!restricted_kind || (unsigned(*restricted_kind) < NUM_MEMORY_KINDS));
     }
+    const CachedList *list_in(const KindCache *kc) const
+    {
+      return restricted_kind ? &kc->by_kind[*restricted_kind] : &kc->all;
+    }
+    const CachedList *list_in(const AffinityCache *ac) const;
     const CachedList *cached_list() const
     {
       const CachedList *list = attached_list();
@@ -644,9 +766,13 @@ namespace Realm {
     REALM_ATTR_NOINLINE(const CachedList *cached_list_lookup() const);
     REALM_ATTR_NOINLINE(const CachedList *cached_list_miss(unsigned generation) const);
     KindCache *build_kind_cache(unsigned generation) const;
-    const CachedList *best_affinity_list() const;
-    REALM_ATTR_NOINLINE(Memory best_affinity_next(Memory after) const);
+    AffinityCache *build_affinity_cache(unsigned generation) const;
+    // see ProcessorQueryImpl
+    const CachedList *own_list() const;
+    REALM_ATTR_NOINLINE(Memory own_list_next(Memory after) const);
+    void build_own_list(std::vector<Memory> &result) const;
     void build_best_affinity_list(std::vector<Memory> &result) const;
+    void build_match_list(std::vector<Memory> &result) const;
     const CachedList *attach(const CachedList *list) const;
     const CachedList *attached_list() const
     {
@@ -657,6 +783,29 @@ namespace Realm {
     // the affinity map of a processor the query is anchored to, or NULL
     const std::map<Memory, Machine::ProcessorMemoryAffinity *> *
     anchor_affinities(Processor p, bool local_only) const;
+    // the incoming affinity map of a memory (every memory with an edge into
+    //  it, on any node), or NULL if it is not in the model
+    const std::map<Memory, Machine::MemoryMemoryAffinity *> *
+    anchor_sources(Memory m) const;
+    // the memories of 'node' this query may return (its node and kind
+    //  restrictions applied), or NULL if there are none
+    const std::map<Memory, MachineMemInfo *> *candidate_list(NodeID node) const;
+    // the matches of an anchored query after 'after' (all of them for "no
+    //  memory"), in id order, each handed to fn until it returns false; the
+    //  caller holds the machine's reader lock
+    template <typename Fn>
+    void for_each_anchored(Memory after, Fn &&fn) const;
+    // the matches among the keys of an anchor's map, whose entries that
+    //  anchor's bounds are checked against (see for_each_anchored)
+    template <typename Map, typename Fn>
+    void scan_anchor(const Map &map, unsigned min_bandwidth, unsigned max_latency,
+                     Memory after, Fn &&fn) const;
+    // the accessors over the anchor's map, for a query the shared cache does
+    //  not serve (see ProcessorQueryImpl::first_match)
+    Memory anchored_first(void) const;
+    Memory anchored_next(Memory after) const;
+    size_t anchored_count_matches(void) const;
+    Memory anchored_random(void) const;
     // the same-node outgoing affinity map of a memory, or NULL if it is not in
     //  the machine model (which "no memory" never is)
     const std::map<Memory, Machine::MemoryMemoryAffinity *> *

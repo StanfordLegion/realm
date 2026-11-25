@@ -102,6 +102,11 @@ namespace Realm {
    * A template class used to describe field data provided for partitioning
    * operations. IS is the type of the index space that defines the domain
    * dimensionality and base type.
+   *
+   * Before a partitioning operation accesses the field, the instance metadata
+   * must be available on the rank that owns the instance's memory. If needed,
+   * call \ref RegionInstance::fetch_metadata with a processor on that rank and
+   * include the returned event in the partitioning operation's wait_on precondition.
    */
   template <typename IS, typename FT>
   struct FieldDataDescriptor {

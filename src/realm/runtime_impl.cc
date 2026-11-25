@@ -43,6 +43,14 @@
 #include "realm/transfer/memcpy_channel.h"
 #include "realm/transfer/channel_disk.h"
 
+#ifdef REALM_USE_CUDA
+#include "realm/cuda/cuda_module.h"
+#endif
+
+#ifdef REALM_USE_HIP
+#include "realm/hip/hip_module.h"
+#endif
+
 #ifdef REALM_USE_KOKKOS
 #include "realm/kokkos/kokkos_interop.h"
 #endif
@@ -2393,6 +2401,12 @@ namespace Realm {
       }
     }
 
+#ifdef REALM_USE_CUDA
+    Cuda::CudaModule::configure_ipc_peers();
+#endif
+#ifdef REALM_USE_HIP
+    Hip::HipModule::configure_ipc_peers();
+#endif
     for(std::vector<Module *>::const_iterator it = modules.begin(); it != modules.end();
         it++)
       (*it)->create_dma_channels(this);
@@ -3064,6 +3078,13 @@ namespace Realm {
     for(std::vector<Module *>::iterator it = modules.begin(); it != modules.end(); it++) {
       (*it)->pre_detach_cleanup();
     }
+
+#if defined(REALM_USE_HIP) && defined(REALM_ON_LINUX)
+    // Ensure every rank has closed its imported HIP mappings before any rank
+    // detaches from the network or frees the exported allocations.
+    if(!Network::all_peers.empty())
+      Network::barrier();
+#endif
 
     // detach from the network
     for(std::vector<NetworkModule *>::const_iterator it = network_modules.begin();

@@ -220,6 +220,7 @@ jobs:
               openmp: 'ON',
               ucx: 'OFF',
               gasnet: 'OFF',
+              mpi: 'ON',
               python: 'OFF',
               kokkos: 'OFF',
               sanitizer: 'UBSAN'
@@ -260,7 +261,9 @@ jobs:
       # Unfortunately the openmpi package does a bunch of things that doesn't
       # allow it to be cached
       - name: Get Linux OpenMPI
-        if: ${{ startsWith(matrix.config.os, 'ubuntu') }}
+        if: >-
+          ${{ startsWith(matrix.config.os, 'ubuntu') &&
+              (matrix.config.mpi == 'ON' || matrix.config.gasnet == 'ON' || matrix.config.ucx == 'ON') }}
         # refresh the package index first - the runner image's baked-in lists go
         # stale and then point at .debs that have since been removed from the archive
         run: |
@@ -361,6 +364,7 @@ jobs:
                 -DREALM_ENABLE_UCX=${{ matrix.config.ucx }}
                 -DREALM_ENABLE_PYTHON=${{ matrix.config.python }}
                 -DREALM_ENABLE_CUDA=${{ matrix.config.cuda != '' && 'ON' || 'OFF' }}
+                ${{ steps.check_gpu.outputs.no_gpu == '1' && '-DCMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE=PRE_TEST' || '' }}
                 -DREALM_MIN_CUDA_ARCH=$REALM_MIN_CUDA_ARCH
                 -DREALM_ENABLE_KOKKOS=${{ matrix.config.kokkos }}
                 -DKokkos_ROOT=kokkos/install
@@ -369,6 +373,7 @@ jobs:
                 -DREALM_SANITIZER=${{ matrix.config.sanitizer }}
 
       - name: Build
+        shell: bash
         run:
           cmake --build build --parallel 4 --config ${{ matrix.config.build }} --verbose | tee build-new.log
 
@@ -403,6 +408,7 @@ jobs:
         if: matrix.config.cuda == '' || steps.check_gpu.outputs.no_gpu != '1'
         env:
           UCX_TLS: "^ib"
+          UBSAN_OPTIONS: ${{ matrix.config.sanitizer == 'UBSAN' && 'halt_on_error=1' || '' }}
         run:
           ctest --output-junit ${{ github.workspace }}/test-results.xml
                 --test-dir build

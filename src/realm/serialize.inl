@@ -101,6 +101,9 @@ namespace Realm {
 
     inline bool FixedBufferSerializer::append_bytes(const void *data, size_t datalen)
     {
+      if(datalen == 0)
+        return pos <= limit;
+
       char *pos2 = pos + datalen;
       // only copy if it fits in the buffer
       bool ok_to_write = (pos2 <= limit);
@@ -201,6 +204,9 @@ namespace Realm {
 
     inline bool DynamicBufferSerializer::append_bytes(const void *data, size_t datalen)
     {
+      if(datalen == 0)
+        return true;
+
       char *pos2 = pos + datalen;
       // resize as needed
       if(pos2 > limit) {
@@ -325,6 +331,9 @@ namespace Realm {
 
     inline bool FixedBufferDeserializer::extract_bytes(void *data, size_t datalen)
     {
+      if(datalen == 0)
+        return pos <= limit;
+
       const char *pos2 = pos + datalen;
       // only copy if we have enough data
       bool ok_to_read = (pos2 <= limit);

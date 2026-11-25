@@ -17,8 +17,17 @@
 
 #include "am_mpi.h"
 
+#include <cstddef>
+#include <cstring>
+
 #define AM_MSG_HEADER_SIZE (4 * sizeof(int) + sizeof(uintptr_t))
 #define AM_BUF_SIZE_W_HEADER (AM_BUF_SIZE + AM_MSG_HEADER_SIZE)
+
+struct AMBuffer {
+  Realm::MPI::AM_msg header;
+  char data[AM_BUF_SIZE];
+};
+static_assert(offsetof(AMBuffer, data) == AM_MSG_HEADER_SIZE);
 
 // if defined, replaces use of MPI_Put with two-sided send/recv
 // define REALM_MPI_USE_TWO_SIDED_ONLY
@@ -27,8 +36,7 @@ static MPI_Win g_am_win = MPI_WIN_NULL;
 static void *g_am_base = NULL;
 static Realm::IncomingMessageManager *g_message_manager = NULL;
 static Realm::atomic<unsigned int> num_threads(0);
-static unsigned char buf_recv_list[AM_BUF_COUNT][AM_BUF_SIZE_W_HEADER];
-static unsigned char *buf_recv = buf_recv_list[0];
+static AMBuffer buf_recv_list[AM_BUF_COUNT];
 static MPI_Request req_recv_list[AM_BUF_COUNT];
 static int n_am_mult_recv = 5;
 static int pre_initialized;
@@ -75,7 +83,7 @@ namespace Realm {
         n_am_mult_recv = atoi(s);
       }
       for(int i = 0; i < n_am_mult_recv; i++) {
-        CHECK_MPI(MPI_Irecv(buf_recv_list[i], AM_BUF_SIZE_W_HEADER, MPI_CHAR,
+        CHECK_MPI(MPI_Irecv(&buf_recv_list[i], AM_BUF_SIZE_W_HEADER, MPI_CHAR,
                             MPI_ANY_SOURCE, TAG_COMMAND, MPI_COMM_WORLD,
                             &req_recv_list[i]));
       }
@@ -131,8 +139,9 @@ namespace Realm {
 
     void AMPoll()
     {
-      struct AM_msg *msg;
-      int tn_src;
+      // Match the incoming message manager's alignment for typed headers.
+      constexpr size_t header_alignment = 16;
+      alignas(header_alignment) char aligned_header[AM_BUF_SIZE];
 
       while(1) {
         int got_am;
@@ -141,35 +150,35 @@ namespace Realm {
         if(!got_am) {
           break;
         }
-        msg = (struct AM_msg *)buf_recv;
-
-        tn_src = status.MPI_SOURCE;
+        AMBuffer &buf_recv = buf_recv_list[i_recv_list];
+        AM_msg *msg = &buf_recv.header;
+        int tn_src = status.MPI_SOURCE;
 
         char *header;
         char *payload;
         int payload_mode = PAYLOAD_NONE;
         if(msg->type == 0) {
-          header = msg->stuff;
-          payload = msg->stuff + msg->header_size;
+          header = buf_recv.data;
+          payload = buf_recv.data + msg->header_size;
           payload_mode = PAYLOAD_COPY;
         } else if(msg->type == 1) {
           int32_t msg_tag;
-          memcpy(&msg_tag, msg->stuff, sizeof(int32_t));
-          header = msg->stuff + 4;
+          memcpy(&msg_tag, buf_recv.data, sizeof(int32_t));
+          header = buf_recv.data + 4;
           payload = (char *)malloc(msg->payload_size);
           payload_mode = PAYLOAD_FREE;
           CHECK_MPI(MPI_Recv(payload, msg->payload_size, MPI_BYTE, tn_src, msg_tag,
                              comm_medium, &status));
         } else if(msg->type == 2) {
           int32_t offset;
-          memcpy(&offset, msg->stuff, sizeof(int32_t));
-          header = msg->stuff + 4;
+          memcpy(&offset, buf_recv.data, sizeof(int32_t));
+          header = buf_recv.data + 4;
           payload = (char *)g_am_base + offset;
 #ifdef REALM_MPI_USE_TWO_SIDED_ONLY
           // if we weren't allowed to do an MPI_Put on the sender, post
           //  receives here to actually get the data
           int32_t msg_tag;
-          memcpy(&msg_tag, msg->stuff + msg->header_size + 4, sizeof(int32_t));
+          memcpy(&msg_tag, header + msg->header_size, sizeof(int32_t));
           CHECK_MPI(MPI_Recv(payload, msg->payload_size, MPI_BYTE, tn_src, msg_tag,
                              MPI_COMM_WORLD, &status));
 #endif
@@ -187,6 +196,11 @@ namespace Realm {
 
         uintptr_t completion = 0; // do we need to send a completion here?
         if(msg->msgid != 0x7fff) {
+          // Inline handlers can read the header before the manager copies it.
+          if(reinterpret_cast<uintptr_t>(header) % header_alignment != 0) {
+            std::memcpy(aligned_header, header, msg->header_size);
+            header = aligned_header;
+          }
           bool handled = g_message_manager->add_incoming_message(
               tn_src, msg->msgid, header, msg->header_size, PAYLOAD_COPY, payload,
               msg->payload_size, payload_mode,
@@ -197,11 +211,9 @@ namespace Realm {
             completion = msg->comp_ptr;
         }
 
-        CHECK_MPI(MPI_Irecv(buf_recv_list[i_recv_list], AM_BUF_SIZE_W_HEADER, MPI_CHAR,
-                            MPI_ANY_SOURCE, TAG_COMMAND, MPI_COMM_WORLD,
-                            &req_recv_list[i_recv_list]));
+        CHECK_MPI(MPI_Irecv(&buf_recv, AM_BUF_SIZE_W_HEADER, MPI_CHAR, MPI_ANY_SOURCE,
+                            TAG_COMMAND, MPI_COMM_WORLD, &req_recv_list[i_recv_list]));
         i_recv_list = (i_recv_list + 1) % n_am_mult_recv;
-        buf_recv = buf_recv_list[i_recv_list];
 
         if(completion)
           incoming_message_handled(tn_src, completion, 0);
@@ -230,14 +242,14 @@ namespace Realm {
                 const char *payload, int payload_lines, int payload_line_stride,
                 int has_dest, MPI_Aint dest, void *remote_comp)
     {
-      char buf_send[AM_BUF_SIZE_W_HEADER];
+      AMBuffer buf_send;
 
-      struct AM_msg *msg = (struct AM_msg *)(buf_send);
+      AM_msg *msg = &buf_send.header;
       msg->msgid = msgid;
       msg->header_size = header_size;
       msg->payload_size = payload_size;
       msg->comp_ptr = reinterpret_cast<uintptr_t>(remote_comp);
-      char *msg_header = msg->stuff;
+      char *msg_header = buf_send.data;
 
       if(has_dest) {
         assert(g_am_win);
@@ -265,7 +277,7 @@ namespace Realm {
         n += 4;
 #endif
         assert(tgt != node_this);
-        CHECK_MPI(MPI_Send(buf_send, n, MPI_BYTE, tgt, TAG_COMMAND, MPI_COMM_WORLD));
+        CHECK_MPI(MPI_Send(&buf_send, n, MPI_BYTE, tgt, TAG_COMMAND, MPI_COMM_WORLD));
 #ifdef REALM_MPI_USE_TWO_SIDED_ONLY
         // after the header (which contains the destination address, use
         //  old-school MPI_Send to ship the data over
@@ -290,7 +302,7 @@ namespace Realm {
         }
         int n = AM_MSG_HEADER_SIZE + header_size + payload_size;
         assert(tgt != node_this);
-        CHECK_MPI(MPI_Send(buf_send, n, MPI_CHAR, tgt, TAG_COMMAND, MPI_COMM_WORLD));
+        CHECK_MPI(MPI_Send(&buf_send, n, MPI_CHAR, tgt, TAG_COMMAND, MPI_COMM_WORLD));
       } else {
         msg->type = 1;
         int32_t msg_tag = generate_payload_tag();
@@ -298,7 +310,7 @@ namespace Realm {
         memcpy(msg_header + 4, header, header_size);
         int n = AM_MSG_HEADER_SIZE + 4 + header_size;
         assert(tgt != node_this);
-        CHECK_MPI(MPI_Send(buf_send, n, MPI_BYTE, tgt, TAG_COMMAND, MPI_COMM_WORLD));
+        CHECK_MPI(MPI_Send(&buf_send, n, MPI_BYTE, tgt, TAG_COMMAND, MPI_COMM_WORLD));
         assert(tgt != node_this);
         assert(payload_lines <= 1); // not supporting 2d payloads here yet
         CHECK_MPI(MPI_Send(payload, payload_size, MPI_BYTE, tgt, msg_tag, comm_medium));

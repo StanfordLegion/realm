@@ -77,6 +77,10 @@ namespace Realm {
     // gets the network for a given node
     NetworkModule *get_network(NodeID node);
 
+    // Collective on all ranks. Local IPC requires mutual shared-peer membership.
+    // A pair that both support remote IPC can also exchange handles across hosts.
+    NodeSet find_ipc_peers(bool enabled, bool allow_remote = false);
+
     // and a few "global" operations that abstract over any/all networks
     void barrier(void);
 

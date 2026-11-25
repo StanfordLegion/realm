@@ -107,6 +107,7 @@ list(
   striped_rwlock_test.cc
   actmsg_fragmentation_test.cc
   actmsg_chunked_send_test.cc
+  bgwork_test.cc
   fragmented_message_test.cc
   incoming_message_manager_test.cc
   memcpy_channel_test.cc
@@ -321,6 +322,42 @@ endmacro()
 
 add_integration_test(version_check "${REALM_TEST_DIR}/version_check.cc")
 add_integration_test(rank_count_check "${REALM_TEST_DIR}/rank_count_check.cc")
+if(REALM_USE_CUDA AND TEST_PROCESSORS GREATER 1)
+  add_integration_test(cuda_ipc_startup "${REALM_TEST_DIR}/gpu_ipc_startup.cc")
+  add_test(NAME cuda_ipc_startup_gpu_on_peer
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:cuda_ipc_startup> ${MPIEXEC_POSTFLAGS}
+                   -test:gpu-rank 1
+  )
+  add_test(NAME cuda_ipc_startup_ipc_disabled
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:cuda_ipc_startup> ${MPIEXEC_POSTFLAGS}
+                   -test:gpu-rank -1 -test:ipc-disabled-rank 1
+  )
+  set_tests_properties(
+    cuda_ipc_startup cuda_ipc_startup_gpu_on_peer cuda_ipc_startup_ipc_disabled
+    PROPERTIES RESOURCE_LOCK "${TEST_RESOURCE_LOCK}" TIMEOUT 60
+  )
+  list(APPEND _integ_extra_tests cuda_ipc_startup_gpu_on_peer cuda_ipc_startup_ipc_disabled)
+endif()
+if(REALM_USE_HIP
+   AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND TEST_PROCESSORS GREATER 1
+)
+  set(hip_ipc_startup_ARGS -test:backend hip)
+  add_integration_test(hip_ipc_startup "${REALM_TEST_DIR}/gpu_ipc_startup.cc")
+  add_test(NAME hip_ipc_startup_gpu_on_peer
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:hip_ipc_startup> ${MPIEXEC_POSTFLAGS}
+                   ${hip_ipc_startup_ARGS} -test:gpu-rank 1
+  )
+  add_test(NAME hip_ipc_shutdown
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:hip_ipc_startup> ${MPIEXEC_POSTFLAGS}
+                   ${hip_ipc_startup_ARGS} -test:gpu-rank -1 -test:ipc-disabled-rank 1
+  )
+  set_tests_properties(
+    hip_ipc_startup hip_ipc_startup_gpu_on_peer hip_ipc_shutdown
+    PROPERTIES RESOURCE_LOCK "${TEST_RESOURCE_LOCK}" TIMEOUT 60
+  )
+  list(APPEND _integ_extra_tests hip_ipc_startup_gpu_on_peer hip_ipc_shutdown)
+endif()
 add_integration_test(serializing "${REALM_TEST_DIR}/serializing.cc")
 set(ctxswitch_ARGS -ll:io 1 -t 30 -i 10000)
 add_integration_test(ctxswitch "${REALM_TEST_DIR}/ctxswitch.cc")
@@ -333,6 +370,12 @@ add_integration_test(transpose "${REALM_TEST_DIR}/transpose.cc")
 set(proc_group_ARGS -ll:cpu 4)
 add_integration_test(proc_group "${REALM_TEST_DIR}/proc_group.cc")
 add_integration_test(deppart "${REALM_TEST_DIR}/deppart.cc")
+# Use one partitioning worker so the local approximate image runs before a
+# deferred sparse target is populated. A dense target builds the tester inline.
+set(empty_preimage_ARGS -ll:bgwork 1 -ll:bgnuma 0 -ll:cpu_bgwork 0 -ll:util_bgwork 0
+                        -dp:workers 0 -dp:inline_ok 1)
+add_integration_test(empty_preimage "${REALM_TEST_DIR}/empty_preimage.cc")
+set_tests_properties(empty_preimage PROPERTIES TIMEOUT 120)
 set(scatter_ARGS -p1 2 -p2 2)
 add_integration_test(scatter "${REALM_TEST_DIR}/scatter.cc")
 set(proc_group_ARGS -ll:cpu 4)

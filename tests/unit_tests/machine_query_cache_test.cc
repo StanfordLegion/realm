@@ -31,6 +31,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -89,13 +90,20 @@ protected:
   Machine machine() { return Machine::get_machine(); }
 
 public:
-  // every result accessor of a query, as a set, checking they agree
+  // every result accessor of a query, as a set, checking they agree and that
+  //  the iteration yields ids in increasing order (the order of a walk, which
+  //  every other path - a cached list, an anchor's map - must reproduce)
   template <typename Q, typename T>
-  static std::set<T> results(const Q &q, T /*tag*/)
+  static std::set<T> results(const Q &q, T none)
   {
     std::set<T> found;
-    for(T t = q.first(); t.exists(); t = q.next(t))
+    T prev = none;
+    for(T t = q.first(); t.exists(); t = q.next(t)) {
       EXPECT_TRUE(found.insert(t).second) << "duplicate result";
+      if(prev.exists())
+        EXPECT_LT(prev.id, t.id) << "results out of id order";
+      prev = t;
+    }
     EXPECT_EQ(found.size(), q.count()) << "count disagrees with iteration";
     if(found.empty())
       EXPECT_FALSE(q.random().exists());
@@ -113,7 +121,8 @@ public:
   }
 
   // the results of a query with the shared cache enabled and with it
-  //  disabled (every query then walks the machine), which must agree
+  //  disabled (every query then walks the machine, or the affinity map it is
+  //  anchored to), which must agree
   template <typename Q>
   static void expect_cache_agrees_with_walk(const Q &q)
   {
@@ -373,13 +382,20 @@ TEST_F(MachineQueryCacheTest, ConcurrentReadsThroughCopies)
   mq.only_kind(Memory::SYSTEM_MEM);
   Machine::ProcessorQuery bq(machine());
   bq.only_kind(Processor::LOC_PROC).best_affinity_to(mems[0]);
+  // two the shared cache does not serve, which build their own lists on the
+  //  first next() of whichever copy gets there first: p2 and p3 reach m1 at
+  //  bandwidth 90; only m1 has 2 MB
+  Machine::ProcessorQuery aq(machine());
+  aq.has_affinity_to(mems[1], 85 /*min bandwidth*/);
+  Machine::MemoryQuery cq(machine());
+  cq.has_capacity(size_t(1536) * 1024);
 
   std::atomic<bool> go(false);
   std::atomic<int> failures(0);
   std::vector<std::thread> readers;
   for(int t = 0; t < 4; t++) {
     // each thread holds its own copy, all sharing one implementation
-    readers.emplace_back([&, pq, mq, bq] {
+    readers.emplace_back([&, pq, mq, bq, aq, cq] {
       while(!go.load())
         ;
       for(int i = 0; i < 2000; i++) {
@@ -396,6 +412,16 @@ TEST_F(MachineQueryCacheTest, ConcurrentReadsThroughCopies)
           failures.fetch_add(1);
         if(!mq.first().exists() || !bq.random().exists())
           failures.fetch_add(1);
+        n = 0;
+        for(Processor p = aq.first(); p.exists(); p = aq.next(p))
+          n++;
+        if((n != 2) || (aq.count() != 2) || (aq.first() != procs[2]))
+          failures.fetch_add(1);
+        n = 0;
+        for(Memory m = cq.first(); m.exists(); m = cq.next(m))
+          n++;
+        if((n != 1) || (cq.count() != 1) || (cq.random() != mems[1]))
+          failures.fetch_add(1);
       }
     });
   }
@@ -407,6 +433,8 @@ TEST_F(MachineQueryCacheTest, ConcurrentReadsThroughCopies)
   EXPECT_EQ(pq.count(), 4u);
   EXPECT_EQ(mq.count(), 2u);
   EXPECT_EQ(bq.count(), 2u);
+  EXPECT_EQ(aq.count(), 2u);
+  EXPECT_EQ(cq.count(), 1u);
 }
 
 // invalidating and rebuilding the shared cache while other queries are
@@ -561,6 +589,25 @@ TEST_F(MachineQueryCacheTest, IterationSurvivesInvalidation)
     invalidate_caches();
   }
   EXPECT_EQ(seen_mems, (std::set<Memory>{mems[0], mems[1]}));
+
+  // the same for queries that build their own list on next(): every step
+  //  finds the list stale and rebuilds it for the new generation
+  Machine::ProcessorQuery aq(machine());
+  aq.has_affinity_to(mems[1], 85 /*min bandwidth*/);
+  seen.clear();
+  for(Processor p = aq.first(); p.exists(); p = aq.next(p)) {
+    seen.insert(p);
+    invalidate_caches();
+  }
+  EXPECT_EQ(seen, (std::set<Processor>{procs[2], procs[3]}));
+  Machine::MemoryQuery cq(machine());
+  cq.has_capacity(1);
+  seen_mems.clear();
+  for(Memory m = cq.first(); m.exists(); m = cq.next(m)) {
+    seen_mems.insert(m);
+    invalidate_caches();
+  }
+  EXPECT_EQ(seen_mems, (std::set<Memory>{mems[0], mems[1]}));
 }
 
 // a best-affinity query keeps the list it built until the machine changes:
@@ -668,6 +715,417 @@ TEST_F(MachineQueryCacheTest, CacheAgreesWithWalk)
   expect_cache_agrees_with_walk(refined);
   refined.same_address_space_as(mems[0]);
   expect_cache_agrees_with_walk(refined);
+}
+
+// a memory's affinity to itself (a copy within one memory) must be reported
+//  from either end: it was in the memory's outgoing map but not its incoming
+//  one, so the sources of a memory left out the memory itself
+TEST_F(MachineQueryCacheTest, SelfAffinityInBothMaps)
+{
+  Machine m = machine();
+  std::vector<Machine::MemoryMemoryAffinity> out, in;
+  EXPECT_FALSE(m.has_affinity(mems[0], mems[0]));
+  EXPECT_EQ(m.get_mem_mem_affinity(out, mems[0], mems[0]), 0);
+
+  Machine::MemoryMemoryAffinity self;
+  self.m1 = mems[0];
+  self.m2 = mems[0];
+  self.bandwidth = 70;
+  self.latency = 5;
+  // as the mock's setup records an affinity, followed by a machine update
+  runtime_impl_->machine->nodeinfos[0]->add_mem_mem_affinity(self);
+  runtime_impl_->machine->update_kind_maps();
+
+  EXPECT_TRUE(m.has_affinity(mems[0], mems[0]));
+  // from the source: m0 -> m0 and m0 -> m1
+  EXPECT_EQ(m.get_mem_mem_affinity(out, mems[0]), 2);
+  // from the destination: m0 -> m0 and m1 -> m0, with the same numbers
+  EXPECT_EQ(m.get_mem_mem_affinity(in, Memory::NO_MEMORY, mems[0]), 2);
+  bool found = false;
+  for(const Machine::MemoryMemoryAffinity &a : in)
+    if((a.m1 == mems[0]) && (a.m2 == mems[0]) && (a.bandwidth == 70) && (a.latency == 5))
+      found = true;
+  EXPECT_TRUE(found) << "the self affinity is missing from the incoming map";
+  // adding it again changes nothing
+  EXPECT_FALSE(runtime_impl_->machine->nodeinfos[0]->add_mem_mem_affinity(self));
+
+  // the memories reachable from m0 include m0, and the query that asks for
+  //  memories with an affinity to m0 lists m0 and m1 however it is answered
+  std::set<Memory> visible;
+  m.get_visible_memories(mems[0], visible);
+  EXPECT_TRUE(visible.count(mems[0]) > 0);
+  Machine::MemoryQuery reach(m);
+  reach.has_affinity_to(mems[0]);
+  EXPECT_EQ(results(reach), (std::set<Memory>{mems[0], mems[1]}));
+  expect_cache_agrees_with_walk(reach);
+}
+
+// a query with no kind restriction is served the snapshot's list of
+//  everything, as a kind-restricted one is served its kind's list, so it does
+//  not walk the machine any more; the two lists live in one snapshot
+TEST_F(MachineQueryCacheTest, KindFreeQueriesUseTheCache)
+{
+  typedef std::set<Processor> PSet;
+  typedef std::set<Memory> MSet;
+  const bool saved = Config::use_machine_query_cache;
+  Config::use_machine_query_cache = true;
+  invalidate_caches();
+  const unsigned long pbuilds = ProcessorQueryImpl::kind_cache.build_count();
+  const unsigned long mbuilds = MemoryQueryImpl::kind_cache.build_count();
+  Machine::ProcessorQuery all(machine());
+  Machine::MemoryQuery mall(machine());
+  unsigned long pwalks = ProcessorQueryImpl::walk_count();
+  unsigned long mwalks = MemoryQueryImpl::walk_count();
+  // (m2 has no affinities, so nothing put it into the machine model)
+  EXPECT_EQ(results(all), (PSet{procs[0], procs[1], procs[2], procs[3]}));
+  EXPECT_EQ(results(mall), (MSet{mems[0], mems[1]}));
+  EXPECT_EQ(all.next(procs[1]), procs[2]);
+  EXPECT_EQ(mall.next(mems[1]), Memory::NO_MEMORY);
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), pwalks) << "a kind-free query walked";
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), mwalks) << "a kind-free query walked";
+  // one snapshot each, which the by-kind queries then share
+  EXPECT_EQ(ProcessorQueryImpl::kind_cache.build_count(), pbuilds + 1);
+  EXPECT_EQ(MemoryQueryImpl::kind_cache.build_count(), mbuilds + 1);
+  EXPECT_EQ(Machine::ProcessorQuery(machine()).only_kind(Processor::LOC_PROC).count(),
+            4u);
+  EXPECT_EQ(Machine::MemoryQuery(machine()).only_kind(Memory::SYSTEM_MEM).count(), 2u);
+  EXPECT_EQ(ProcessorQueryImpl::kind_cache.build_count(), pbuilds + 1);
+  EXPECT_EQ(MemoryQueryImpl::kind_cache.build_count(), mbuilds + 1);
+  // restricted to this node (the only one): the node's run of the same list
+  Machine::ProcessorQuery local(machine());
+  local.local_address_space();
+  Machine::MemoryQuery mlocal(machine());
+  mlocal.local_address_space();
+  EXPECT_EQ(results(local), results(all));
+  EXPECT_EQ(results(mlocal), results(mall));
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), pwalks);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), mwalks);
+  EXPECT_EQ(ProcessorQueryImpl::kind_cache.build_count(), pbuilds + 1);
+  EXPECT_EQ(MemoryQueryImpl::kind_cache.build_count(), mbuilds + 1);
+  expect_cache_agrees_with_walk(all);
+  expect_cache_agrees_with_walk(mall);
+  expect_cache_agrees_with_walk(local);
+  expect_cache_agrees_with_walk(mlocal);
+  // with the cache off every call is a walk
+  Config::use_machine_query_cache = false;
+  pwalks = ProcessorQueryImpl::walk_count();
+  mwalks = MemoryQueryImpl::walk_count();
+  EXPECT_EQ(all.count(), 4u);
+  EXPECT_EQ(all.first(), procs[0]);
+  EXPECT_EQ(all.next(procs[0]), procs[1]);
+  EXPECT_EQ(mall.count(), 2u);
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), pwalks + 3);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), mwalks + 1);
+  Config::use_machine_query_cache = saved;
+}
+
+// a processor query with one plain affinity predicate is served the shared
+//  snapshot's by-memory list whether or not it has a kind; one with a bound
+//  on the affinity enumerates the memory's own affinity map. Neither walks
+//  the machine
+TEST_F(MachineQueryCacheTest, AffinityQueriesWithoutKindUseTheCache)
+{
+  typedef std::set<Processor> PSet;
+  const bool saved = Config::use_machine_query_cache;
+  Config::use_machine_query_cache = true;
+  invalidate_caches();
+  const unsigned long builds = ProcessorQueryImpl::affinity_cache.build_count();
+  const unsigned long walks = ProcessorQueryImpl::walk_count();
+  const unsigned long anchored = ProcessorQueryImpl::anchored_count();
+  Machine::ProcessorQuery reach1(machine());
+  reach1.has_affinity_to(mems[1]);
+  EXPECT_EQ(results(reach1), (PSet{procs[0], procs[1], procs[2], procs[3]}));
+  Machine::ProcessorQuery reach2(machine());
+  reach2.has_affinity_to(mems[2]); // nothing reaches m2 (it is not even in the model)
+  EXPECT_TRUE(results(reach2).empty());
+  Machine::ProcessorQuery local0(machine());
+  local0.local_address_space().has_affinity_to(mems[0]);
+  EXPECT_EQ(results(local0), (PSet{procs[0], procs[1], procs[2], procs[3]}));
+  EXPECT_EQ(ProcessorQueryImpl::affinity_cache.build_count(), builds + 1);
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), walks) << "an affinity query walked";
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored) << "the cache did not serve";
+  // a bound: the anchored pass over m1's map (p2 and p3 have bandwidth 90)
+  Machine::ProcessorQuery fast1(machine());
+  fast1.has_affinity_to(mems[1], 85 /*min bandwidth*/);
+  EXPECT_EQ(results(fast1), (PSet{procs[2], procs[3]}));
+  EXPECT_GT(ProcessorQueryImpl::anchored_count(), anchored);
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), walks);
+  Machine::ProcessorQuery slow1(machine());
+  slow1.only_kind(Processor::LOC_PROC).has_affinity_to(mems[1], 0, 14 /*max latency*/);
+  EXPECT_EQ(results(slow1), (PSet{procs[2], procs[3]}));
+  // two predicates: m1 with bandwidth 85 and m0 with latency 15
+  Machine::ProcessorQuery both(machine());
+  both.has_affinity_to(mems[1], 85).has_affinity_to(mems[0], 0, 15);
+  EXPECT_TRUE(results(both).empty());
+  both.has_affinity_to(mems[0]);
+  EXPECT_TRUE(results(both).empty());
+  Machine::ProcessorQuery both2(machine());
+  both2.has_affinity_to(mems[0], 0, 15).has_affinity_to(mems[1], 75);
+  EXPECT_EQ(results(both2), (PSet{procs[0], procs[1]}));
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), walks);
+  for(const Machine::ProcessorQuery *q :
+      {&reach1, &reach2, &local0, &fast1, &slow1, &both, &both2})
+    expect_cache_agrees_with_walk(*q);
+  // with the cache off the plain query takes the anchored pass as well
+  Config::use_machine_query_cache = false;
+  const unsigned long anchored2 = ProcessorQueryImpl::anchored_count();
+  EXPECT_EQ(reach1.count(), 4u);
+  EXPECT_EQ(reach1.first(), procs[0]);
+  EXPECT_EQ(reach1.next(procs[0]), procs[1]);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored2 + 3);
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), walks);
+  Config::use_machine_query_cache = saved;
+}
+
+// a memory query with one plain has_affinity_to(Memory) predicate is served
+//  the shared snapshot's by-memory list (the memories with an edge into the
+//  target), with or without a kind, and never walks; one with a bound, a
+//  capacity or a second predicate enumerates the smallest of its anchors'
+//  affinity maps (a processor's, or a target's incoming map) and never walks
+//  either
+TEST_F(MachineQueryCacheTest, MemoryAffinityQueriesUseTheCache)
+{
+  typedef std::set<Memory> MSet;
+  const bool saved = Config::use_machine_query_cache;
+  Config::use_machine_query_cache = true;
+  invalidate_caches();
+  const unsigned long builds = MemoryQueryImpl::affinity_cache.build_count();
+  const unsigned long walks = MemoryQueryImpl::walk_count();
+  const unsigned long anchored = MemoryQueryImpl::anchored_count();
+  // m0 <-> m1 are the only edges: the sources of each is the other
+  Machine::MemoryQuery into0(machine());
+  into0.has_affinity_to(mems[0]);
+  EXPECT_EQ(results(into0), (MSet{mems[1]}));
+  Machine::MemoryQuery into1(machine());
+  into1.only_kind(Memory::SYSTEM_MEM).has_affinity_to(mems[1]);
+  EXPECT_EQ(results(into1), (MSet{mems[0]}));
+  Machine::MemoryQuery into2(machine());
+  into2.has_affinity_to(mems[2]); // nothing reaches m2 (it is not even in the model)
+  EXPECT_TRUE(results(into2).empty());
+  Machine::MemoryQuery local1(machine());
+  local1.local_address_space().has_affinity_to(mems[1]);
+  EXPECT_EQ(results(local1), (MSet{mems[0]}));
+  Machine::MemoryQuery gpu0(machine());
+  gpu0.only_kind(Memory::GPU_FB_MEM).has_affinity_to(mems[0]);
+  EXPECT_TRUE(results(gpu0).empty());
+  EXPECT_EQ(MemoryQueryImpl::affinity_cache.build_count(), builds + 1);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << "an affinity query walked";
+  EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored) << "the cache did not serve";
+  // a bound on a local target: enumerated from the target's incoming map,
+  //  as for any target (m1 -> m0 is 60/25)
+  unsigned long walks2 = MemoryQueryImpl::walk_count();
+  Machine::MemoryQuery fast0(machine());
+  fast0.has_affinity_to(mems[0], 70 /*min bandwidth*/);
+  EXPECT_TRUE(results(fast0).empty());
+  Machine::MemoryQuery slow0(machine());
+  slow0.has_affinity_to(mems[0], 0, 25 /*max latency*/);
+  EXPECT_EQ(results(slow0), (MSet{mems[1]}));
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks2);
+  EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored);
+  // with a processor predicate, in either order, the query is anchored on
+  //  the processor's few affinities and never walks
+  unsigned long anchored2 = MemoryQueryImpl::anchored_count();
+  Machine::MemoryQuery both(machine());
+  both.has_affinity_to(mems[1]).has_affinity_to(procs[0]);
+  EXPECT_EQ(results(both), (MSet{mems[0]}));
+  Machine::MemoryQuery both2(machine());
+  both2.has_affinity_to(procs[0]).has_affinity_to(mems[1]);
+  EXPECT_EQ(results(both2), (MSet{mems[0]}));
+  EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored2);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks2);
+  // two memory targets, or a capacity bound: anchored as well
+  anchored2 = MemoryQueryImpl::anchored_count();
+  Machine::MemoryQuery both3(machine());
+  both3.has_affinity_to(mems[0]).has_affinity_to(mems[1]); // nothing reaches both
+  EXPECT_TRUE(results(both3).empty());
+  Machine::MemoryQuery cap(machine());
+  cap.has_affinity_to(mems[0]).has_capacity(size_t(1536) * 1024); // m1 is 2 MB
+  EXPECT_EQ(results(cap), (MSet{mems[1]}));
+  cap.has_capacity(size_t(3072) * 1024);
+  EXPECT_TRUE(results(cap).empty());
+  EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored2);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks2);
+  for(const Machine::MemoryQuery *q : {&into0, &into1, &into2, &local1, &gpu0, &fast0,
+                                       &slow0, &both, &both2, &both3, &cap})
+    expect_cache_agrees_with_walk(*q);
+  // with the cache off the plain local-target query takes the anchored pass
+  Config::use_machine_query_cache = false;
+  walks2 = MemoryQueryImpl::walk_count();
+  anchored2 = MemoryQueryImpl::anchored_count();
+  EXPECT_EQ(into0.count(), 1u);
+  EXPECT_EQ(into0.first(), mems[1]);
+  EXPECT_EQ(into0.next(mems[0]), mems[1]);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks2);
+  EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored2 + 3);
+  Config::use_machine_query_cache = saved;
+}
+
+// a query the shared cache does not serve builds the list of its matches on
+//  its first next() and answers from it from then on - except a memory query
+//  anchored on a processor, whose few candidates are cheaper to step through;
+//  first(), count() and random() use that list but never build one; a
+//  machine update makes it stale, the next next() rebuilds it (an iteration
+//  goes on across the update), refinement frees the lists, and with the
+//  cache off nothing is built
+TEST_F(MachineQueryCacheTest, OwnListBuiltOnNext)
+{
+  typedef std::set<Processor> PSet;
+  typedef std::set<Memory> MSet;
+  const bool saved = Config::use_machine_query_cache;
+  Config::use_machine_query_cache = true;
+  // a bounded affinity predicate (an anchored pass) and a capacity bound (a
+  //  walk): p2 and p3 reach m1 at bandwidth 90; only m1 has 2 MB
+  QueryStorageProbe<Machine::ProcessorQuery, ProcessorQueryImpl> pq(machine());
+  pq.has_affinity_to(mems[1], 85 /*min bandwidth*/);
+  QueryStorageProbe<Machine::MemoryQuery, MemoryQueryImpl> mq(machine());
+  mq.has_capacity(size_t(1536) * 1024);
+  unsigned long anchored = ProcessorQueryImpl::anchored_count();
+  unsigned long walks = MemoryQueryImpl::walk_count();
+  EXPECT_EQ(pq.count(), 2u);
+  EXPECT_EQ(pq.first(), procs[2]);
+  EXPECT_TRUE(PSet({procs[2], procs[3]}).count(pq.random()) > 0);
+  EXPECT_EQ(mq.count(), 1u);
+  EXPECT_EQ(mq.first(), mems[1]);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 3);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 2);
+  EXPECT_EQ(pq.owned_list_count(), 0u);
+  EXPECT_EQ(mq.owned_list_count(), 0u);
+  // the first next() builds the list with one more pass; then every call is
+  //  a lookup in it
+  EXPECT_EQ(pq.next(procs[2]), procs[3]);
+  EXPECT_EQ(mq.next(mems[0]), mems[1]);
+  EXPECT_EQ(pq.owned_list_count(), 1u);
+  EXPECT_EQ(mq.owned_list_count(), 1u);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 4);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 3);
+  EXPECT_EQ(pq.next(procs[3]), Processor::NO_PROC);
+  EXPECT_EQ(pq.next(procs[0]), procs[2]);
+  EXPECT_EQ(pq.count(), 2u);
+  EXPECT_EQ(pq.first(), procs[2]);
+  EXPECT_TRUE(PSet({procs[2], procs[3]}).count(pq.random()) > 0);
+  EXPECT_EQ(mq.next(mems[1]), Memory::NO_MEMORY);
+  EXPECT_EQ(mq.count(), 1u);
+  EXPECT_EQ(mq.first(), mems[1]);
+  EXPECT_EQ(mq.random(), mems[1]);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 4);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 3);
+  EXPECT_EQ(pq.owned_list_count(), 1u);
+  EXPECT_EQ(mq.owned_list_count(), 1u);
+  // a memory query anchored on a processor steps through that processor's
+  //  few affinities instead of building a list (p0 reaches m0 at bandwidth
+  //  100 and m1 at 80)
+  QueryStorageProbe<Machine::MemoryQuery, MemoryQueryImpl> vq(machine());
+  vq.has_affinity_to(procs[0], 90 /*min bandwidth*/);
+  EXPECT_EQ(vq.first(), mems[0]);
+  EXPECT_EQ(vq.next(mems[0]), Memory::NO_MEMORY);
+  EXPECT_EQ(vq.count(), 1u);
+  EXPECT_EQ(vq.owned_list_count(), 0u);
+  // one with a bound on a memory target is enumerated from the target's
+  //  incoming map, and builds its list on the first next() like the capacity
+  //  query (m1 -> m0 is 60)
+  QueryStorageProbe<Machine::MemoryQuery, MemoryQueryImpl> lq(machine());
+  lq.has_affinity_to(mems[0], 50 /*min bandwidth*/);
+  const unsigned long lanchored = MemoryQueryImpl::anchored_count();
+  const unsigned long lwalks = MemoryQueryImpl::walk_count();
+  EXPECT_EQ(lq.count(), 1u);
+  EXPECT_EQ(lq.owned_list_count(), 0u);
+  EXPECT_EQ(lq.next(mems[0]), mems[1]);
+  EXPECT_EQ(lq.owned_list_count(), 1u);
+  EXPECT_EQ(MemoryQueryImpl::anchored_count(), lanchored + 2);
+  EXPECT_EQ(lq.next(mems[1]), Memory::NO_MEMORY);
+  EXPECT_EQ(lq.count(), 1u);
+  EXPECT_EQ(MemoryQueryImpl::anchored_count(), lanchored + 2);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), lwalks);
+  // a machine update: the list is stale, so count() passes over the
+  //  candidates again and the next next() builds a second list
+  invalidate_caches();
+  anchored = ProcessorQueryImpl::anchored_count();
+  walks = MemoryQueryImpl::walk_count();
+  EXPECT_EQ(pq.count(), 2u);
+  EXPECT_EQ(mq.count(), 1u);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 1);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 1);
+  EXPECT_EQ(pq.owned_list_count(), 1u);
+  EXPECT_EQ(mq.owned_list_count(), 1u);
+  EXPECT_EQ(pq.next(procs[2]), procs[3]);
+  EXPECT_EQ(mq.next(mems[0]), mems[1]);
+  EXPECT_EQ(pq.owned_list_count(), 2u);
+  EXPECT_EQ(mq.owned_list_count(), 2u);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 2);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 2);
+  // the answers are the walk's, and a copy shares the list
+  EXPECT_EQ(results(pq), (PSet{procs[2], procs[3]}));
+  EXPECT_EQ(results(mq), (MSet{mems[1]}));
+  expect_cache_agrees_with_walk(pq);
+  expect_cache_agrees_with_walk(mq);
+  Config::use_machine_query_cache = true;
+  {
+    Machine::ProcessorQuery copy(pq);
+    anchored = ProcessorQueryImpl::anchored_count();
+    EXPECT_EQ(copy.next(procs[2]), procs[3]);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored);
+  }
+  // refinement frees the lists
+  pq.only_kind(Processor::LOC_PROC);
+  mq.only_kind(Memory::SYSTEM_MEM);
+  EXPECT_EQ(pq.owned_list_count(), 0u);
+  EXPECT_EQ(mq.owned_list_count(), 0u);
+  EXPECT_EQ(results(pq), (PSet{procs[2], procs[3]}));
+  EXPECT_EQ(results(mq), (MSet{mems[1]}));
+  // an update in the middle of an iteration: the list built for the new
+  //  generation continues it
+  Machine::ProcessorQuery walk(machine());
+  walk.has_affinity_to(mems[1], 85);
+  Processor p = walk.first();
+  EXPECT_EQ(p, procs[2]);
+  invalidate_caches();
+  EXPECT_EQ(walk.next(p), procs[3]);
+  EXPECT_EQ(walk.next(procs[3]), Processor::NO_PROC);
+  // with the cache off, every call passes over the candidates and no list is
+  //  built
+  Config::use_machine_query_cache = false;
+  QueryStorageProbe<Machine::ProcessorQuery, ProcessorQueryImpl> pq2(machine());
+  pq2.has_affinity_to(mems[1], 85);
+  QueryStorageProbe<Machine::MemoryQuery, MemoryQueryImpl> mq2(machine());
+  mq2.has_capacity(size_t(1536) * 1024);
+  anchored = ProcessorQueryImpl::anchored_count();
+  walks = MemoryQueryImpl::walk_count();
+  EXPECT_EQ(pq2.first(), procs[2]);
+  EXPECT_EQ(pq2.next(procs[2]), procs[3]);
+  EXPECT_EQ(pq2.next(procs[3]), Processor::NO_PROC);
+  EXPECT_EQ(mq2.first(), mems[1]);
+  EXPECT_EQ(mq2.next(mems[1]), Memory::NO_MEMORY);
+  EXPECT_EQ(ProcessorQueryImpl::anchored_count(), anchored + 3);
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), walks + 2);
+  EXPECT_EQ(pq2.owned_list_count(), 0u);
+  EXPECT_EQ(mq2.owned_list_count(), 0u);
+  Config::use_machine_query_cache = saved;
+}
+
+// a best-affinity memory query that also has a processor predicate carries a
+//  processor anchor; once a machine update makes its list of the best stale,
+//  next() must rebuild that list, not step through every memory the
+//  processor reaches (p0 reaches m0 at 100 and m1 at 80: the best is m0 alone)
+TEST_F(MachineQueryCacheTest, StaleBestAffinityListWithProcessorPredicate)
+{
+  const bool saved = Config::use_machine_query_cache;
+  for(bool cache : {true, false}) {
+    Config::use_machine_query_cache = cache;
+    Machine::MemoryQuery q(machine());
+    q.has_affinity_to(procs[0]).best_affinity_to(procs[0]);
+    EXPECT_EQ(q.first(), mems[0]) << "cache " << cache;
+    invalidate_caches();
+    EXPECT_EQ(q.next(mems[0]), Memory::NO_MEMORY) << "cache " << cache;
+    EXPECT_EQ(q.count(), 1u);
+    EXPECT_EQ(results(q), (std::set<Memory>{mems[0]}));
+    // and from a fresh query whose first call is the next()
+    Machine::MemoryQuery fresh(machine());
+    fresh.best_affinity_to(procs[0]).has_affinity_to(procs[0]);
+    EXPECT_EQ(fresh.next(mems[0]), Memory::NO_MEMORY) << "cache " << cache;
+    EXPECT_EQ(fresh.next(Memory::NO_MEMORY), Memory::NO_MEMORY);
+    EXPECT_EQ(results(fresh), (std::set<Memory>{mems[0]}));
+  }
+  Config::use_machine_query_cache = saved;
 }
 
 // copies of a query share its implementation by reference count; the last
@@ -1017,6 +1475,81 @@ namespace {
   }
 } // namespace
 
+// what ProcessorQuery::has_affinity_to(m, min_bandwidth, max_latency) must
+//  return, alone or with a second has_affinity_to: of the processors that pass
+//  the other restrictions, those with an affinity to m (any node) within the
+//  bounds
+namespace {
+  std::set<Processor> reference_procs_with_affinity(const Machine &machine,
+                                                    std::optional<Processor::Kind> kind,
+                                                    std::optional<AddressSpace> node,
+                                                    Memory m, unsigned min_bandwidth,
+                                                    unsigned max_latency,
+                                                    std::optional<Memory> also)
+  {
+    std::set<Processor> all, result;
+    machine.get_all_processors(all);
+    if(!m.exists())
+      return result; // no processor has an affinity to "no memory"
+    for(Processor p : all) {
+      if(kind && (p.kind() != *kind))
+        continue;
+      if(node && (p.address_space() != *node))
+        continue;
+      std::vector<Machine::ProcessorMemoryAffinity> pmas;
+      machine.get_proc_mem_affinity(pmas, p, m, false /*any node*/);
+      if(pmas.empty())
+        continue;
+      if((min_bandwidth != 0) && (pmas[0].bandwidth < min_bandwidth))
+        continue;
+      if((max_latency != 0) && (pmas[0].latency > max_latency))
+        continue;
+      if(also && !machine.has_affinity(p, *also))
+        continue;
+      result.insert(p);
+    }
+    return result;
+  }
+} // namespace
+
+// what MemoryQuery::has_affinity_to(m, min_bandwidth, max_latency) must
+//  return, alone or with a has_affinity_to(Processor) as well: of the memories
+//  that pass the other restrictions, those with an edge to m (any node) within
+//  the bounds
+namespace {
+  std::set<Memory>
+  reference_mems_with_affinity(const Machine &machine, std::optional<Memory::Kind> kind,
+                               std::optional<AddressSpace> node, size_t min_capacity,
+                               Memory m, unsigned min_bandwidth, unsigned max_latency,
+                               std::optional<Processor> also)
+  {
+    std::set<Memory> all, result;
+    machine.get_all_memories(all);
+    if(!m.exists())
+      return result; // no memory has an affinity to "no memory"
+    for(Memory c : all) {
+      if(kind && (c.kind() != *kind))
+        continue;
+      if(node && (c.address_space() != *node))
+        continue;
+      if((min_capacity > 0) && (c.capacity() < min_capacity))
+        continue;
+      std::vector<Machine::MemoryMemoryAffinity> mmas;
+      machine.get_mem_mem_affinity(mmas, c, m, false /*any node*/);
+      if(mmas.empty())
+        continue;
+      if((min_bandwidth != 0) && (mmas[0].bandwidth < min_bandwidth))
+        continue;
+      if((max_latency != 0) && (mmas[0].latency > max_latency))
+        continue;
+      if(also && !machine.has_affinity(*also, c))
+        continue;
+      result.insert(c);
+    }
+    return result;
+  }
+} // namespace
+
 class BestAffinityAnchorTest : public ::testing::Test {
 protected:
   // node 0: CPUs p0 and p1, GPU g0; memories m0 (system), f0 (framebuffer,
@@ -1081,6 +1614,332 @@ protected:
   Processor p0, p1, g0, p2;
   Memory m0, f0, o0, m1;
 };
+
+// processors with an affinity to a memory come from that memory's own
+//  affinity map (or the shared snapshot's by-memory list), never from a walk
+//  of the machine, and must be exactly the brute-force answer for every mix
+//  of kind, node, target (including one nothing reaches and "no memory"),
+//  bounds and a second affinity predicate, with the cache on and off
+TEST_F(BestAffinityAnchorTest, ProcessorsWithAffinityMatchReference)
+{
+  Machine machine = Machine::get_machine();
+  const bool saved = Config::use_machine_query_cache;
+  const std::optional<Processor::Kind> kinds[] = {std::nullopt, Processor::LOC_PROC,
+                                                  Processor::TOC_PROC};
+  const std::optional<AddressSpace> nodes[] = {std::nullopt, 0, 1};
+  const Memory targets[] = {m0, f0, o0, m1, Memory::NO_MEMORY};
+  const unsigned bounds[][2] = {{0, 0}, {100, 0}, {0, 10}, {300, 0}, {60, 15}};
+  const std::optional<Memory> alsos[] = {std::nullopt, m0, m1, o0};
+  int checked = 0;
+  for(bool cache : {true, false}) {
+    Config::use_machine_query_cache = cache;
+    const unsigned long walks = ProcessorQueryImpl::walk_count();
+    for(std::optional<Processor::Kind> kind : kinds)
+      for(std::optional<AddressSpace> node : nodes)
+        for(Memory m : targets)
+          for(const unsigned *bound : bounds)
+            for(std::optional<Memory> also : alsos) {
+              Machine::ProcessorQuery q(machine);
+              if(kind)
+                q.only_kind(*kind);
+              if(node)
+                q.same_address_space_as((*node == 0) ? p0 : p2);
+              q.has_affinity_to(m, bound[0], bound[1]);
+              if(also)
+                q.has_affinity_to(*also);
+              std::set<Processor> expected = reference_procs_with_affinity(
+                  machine, kind, node, m, bound[0], bound[1], also);
+              EXPECT_EQ(MachineQueryCacheTest::results(q), expected)
+                  << "cache " << cache << " kind " << (kind ? int(*kind) : -1) << " node "
+                  << (node ? int(*node) : -1) << " mem " << m.id << " bounds " << bound[0]
+                  << "," << bound[1] << " also " << (also ? also->id : 0);
+              checked++;
+            }
+    EXPECT_EQ(ProcessorQueryImpl::walk_count(), walks)
+        << "an affinity query walked the machine (cache " << cache << ")";
+  }
+  Config::use_machine_query_cache = saved;
+  EXPECT_EQ(checked, 2 * 3 * 3 * 5 * 5 * 4);
+}
+
+// memories with an affinity to a memory come from the shared snapshot's
+//  by-memory list or from the target's incoming affinity map (or a
+//  processor's map, when the query has a processor predicate too), never from
+//  a walk, and must be exactly the brute-force answer for every mix of kind,
+//  node, capacity, target (including one nothing reaches, and "no memory"),
+//  bounds and a processor predicate added before or after, with the cache on
+//  and off - and again once a memory has an affinity to itself. The path each
+//  is answered by is checked too
+TEST_F(BestAffinityAnchorTest, MemoriesWithAffinityMatchReference)
+{
+  Machine machine = Machine::get_machine();
+  const bool saved = Config::use_machine_query_cache;
+  const std::optional<Memory::Kind> kinds[] = {std::nullopt, Memory::SYSTEM_MEM,
+                                               Memory::GPU_FB_MEM};
+  const std::optional<AddressSpace> nodes[] = {std::nullopt, 0, 1};
+  const size_t capacities[] = {0, size_t(512) * 1024};
+  const Memory targets[] = {m0, f0, o0, m1, Memory::NO_MEMORY};
+  const unsigned bounds[][2] = {{0, 0}, {50, 0}, {0, 20}, {900, 0}};
+  // the processor predicate: none, or one of these added before or after
+  //  ("no processor" anchors a query too and nothing has an affinity to it)
+  const std::optional<Processor> alsos[] = {std::nullopt, p0, g0, p2, Processor::NO_PROC};
+  int checked = 0;
+  for(int self_edge = 0; self_edge < 2; self_edge++) {
+    if(self_edge) {
+      Machine::MemoryMemoryAffinity mma;
+      mma.m1 = f0;
+      mma.m2 = f0;
+      mma.bandwidth = 70;
+      mma.latency = 7;
+      runtime_impl_->machine->nodeinfos[0]->add_mem_mem_affinity(mma);
+      runtime_impl_->machine->update_kind_maps();
+    }
+    for(bool cache : {true, false}) {
+      Config::use_machine_query_cache = cache;
+      for(std::optional<Memory::Kind> kind : kinds)
+        for(std::optional<AddressSpace> node : nodes)
+          for(size_t capacity : capacities)
+            for(Memory m : targets)
+              for(const unsigned *bound : bounds)
+                for(std::optional<Processor> also : alsos)
+                  for(int before = 0; before < (also ? 2 : 1); before++) {
+                    Machine::MemoryQuery q(machine);
+                    if(kind)
+                      q.only_kind(*kind);
+                    if(node)
+                      q.same_address_space_as((*node == 0) ? p0 : p2);
+                    if(capacity)
+                      q.has_capacity(capacity);
+                    if(also && before)
+                      q.has_affinity_to(*also);
+                    q.has_affinity_to(m, bound[0], bound[1]);
+                    if(also && !before)
+                      q.has_affinity_to(*also);
+                    std::set<Memory> expected = reference_mems_with_affinity(
+                        machine, kind, node, capacity, m, bound[0], bound[1], also);
+                    const unsigned long walks = MemoryQueryImpl::walk_count();
+                    const unsigned long anchored = MemoryQueryImpl::anchored_count();
+                    std::ostringstream what;
+                    what << "self edge " << self_edge << " cache " << cache << " kind "
+                         << (kind ? int(*kind) : -1) << " node "
+                         << (node ? int(*node) : -1) << " capacity " << capacity
+                         << " mem " << m.id << " bounds " << bound[0] << "," << bound[1]
+                         << " also " << (also ? also->id : 0) << " before " << before;
+                    EXPECT_EQ(MachineQueryCacheTest::results(q), expected) << what.str();
+                    // how it was answered: the shared list for the plain
+                    //  predicate (no bound, no capacity) with the cache on;
+                    //  otherwise the smallest anchor map (the processor's,
+                    //  the target's incoming map, or none for "no memory"
+                    //  and "no processor"), never a walk
+                    const bool served = cache && (bound[0] == 0) && (bound[1] == 0) &&
+                                        !also && (capacity == 0);
+                    EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << what.str();
+                    if(served)
+                      EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored)
+                          << what.str();
+                    else
+                      EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored)
+                          << what.str();
+                    checked++;
+                  }
+    }
+  }
+  Config::use_machine_query_cache = saved;
+  EXPECT_EQ(checked, 2 * 2 * 3 * 3 * 2 * 5 * 4 * 9);
+}
+
+// a bounded has_affinity_to(Memory) is enumerated from the target's incoming
+//  map whether the target is on another node (the map holds this node's
+//  memories only) or on this one (the map may span the machine, but a pass
+//  over it costs no more per entry than a walk, see
+//  AnchoredPassScansTheSmallestMapAndOneNodeRun). A processor predicate
+//  anchors the query whatever the target
+TEST_F(BestAffinityAnchorTest, EveryMemoryTargetIsAnchored)
+{
+  Machine machine = Machine::get_machine();
+  typedef std::set<Memory> MSet;
+  const bool saved = Config::use_machine_query_cache;
+  for(bool cache : {true, false}) {
+    Config::use_machine_query_cache = cache;
+    const unsigned long walks = MemoryQueryImpl::walk_count();
+    unsigned long anchored = MemoryQueryImpl::anchored_count();
+    Machine::MemoryQuery remote(machine);
+    remote.has_affinity_to(m1, 1 /*min bandwidth*/); // m0 -> m1 only
+    EXPECT_EQ(MachineQueryCacheTest::results(remote), (MSet{m0}));
+    EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << "cache " << cache;
+    EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored) << "cache " << cache;
+    anchored = MemoryQueryImpl::anchored_count();
+    Machine::MemoryQuery local(machine);
+    local.has_affinity_to(m0, 1); // f0 -> m0 and m1 -> m0
+    EXPECT_EQ(MachineQueryCacheTest::results(local), (MSet{f0, m1}));
+    EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << "cache " << cache;
+    EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored) << "cache " << cache;
+    // the plain predicate: the shared list with the cache on, else the map
+    anchored = MemoryQueryImpl::anchored_count();
+    Machine::MemoryQuery plain_remote(machine);
+    plain_remote.has_affinity_to(m1);
+    Machine::MemoryQuery plain_local(machine);
+    plain_local.has_affinity_to(m0);
+    EXPECT_EQ(MachineQueryCacheTest::results(plain_remote), (MSet{m0}));
+    EXPECT_EQ(MachineQueryCacheTest::results(plain_local), (MSet{f0, m1}));
+    EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << "cache " << cache;
+    if(cache)
+      EXPECT_EQ(MemoryQueryImpl::anchored_count(), anchored);
+    else
+      EXPECT_GT(MemoryQueryImpl::anchored_count(), anchored);
+    // a processor predicate anchors the query whatever the memory target: p0
+    //  reaches m0 and f0, and of those only f0 has an edge to m0
+    Machine::MemoryQuery both(machine);
+    both.has_affinity_to(m0, 1).has_affinity_to(p0);
+    EXPECT_EQ(MachineQueryCacheTest::results(both), (MSet{f0}));
+    EXPECT_EQ(MemoryQueryImpl::walk_count(), walks) << "cache " << cache;
+  }
+  Config::use_machine_query_cache = saved;
+}
+
+// an anchored pass examines the entries of the smallest of the query's
+//  anchor maps, and for a query restricted to one node only that node's run
+//  of them (ids sort by node first): the entries examined are counted (one
+//  counts once its node is read, so the entry that ends a node's run is
+//  counted too), and the answers checked
+TEST_F(BestAffinityAnchorTest, AnchoredPassScansTheSmallestMapAndOneNodeRun)
+{
+  Machine machine = Machine::get_machine();
+  typedef std::set<Processor> PSet;
+  typedef std::set<Memory> MSet;
+  const bool saved = Config::use_machine_query_cache;
+  for(bool cache : {true, false}) {
+    Config::use_machine_query_cache = cache;
+    // m0's affinity map holds p0, p1 and g0 of node 0 and p2 of node 1: a
+    //  query restricted to node 1 examines p2 alone, one restricted to node
+    //  0 stops at p2 (its fourth entry), an unrestricted one examines all
+    const unsigned long pwalks = ProcessorQueryImpl::walk_count();
+    unsigned long visits = ProcessorQueryImpl::anchored_visits();
+    Machine::ProcessorQuery node1(machine);
+    node1.same_address_space_as(p2).has_affinity_to(m0, 1 /*min bandwidth*/);
+    EXPECT_EQ(node1.count(), 1u);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_visits(), visits + 1) << "cache " << cache;
+    Machine::ProcessorQuery node0(machine);
+    node0.same_address_space_as(p0).has_affinity_to(m0, 1);
+    EXPECT_EQ(node0.count(), 3u);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_visits(), visits + 5) << "cache " << cache;
+    Machine::ProcessorQuery kind1(machine);
+    kind1.only_kind(Processor::LOC_PROC).same_address_space_as(p2).has_affinity_to(m0, 1);
+    EXPECT_EQ(kind1.first(), p2);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_visits(), visits + 6) << "cache " << cache;
+    Machine::ProcessorQuery all(machine);
+    all.has_affinity_to(m0, 1);
+    EXPECT_EQ(all.count(), 4u);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_visits(), visits + 10) << "cache " << cache;
+    // two memory predicates: m1's map holds p1 and p2 where m0's holds four,
+    //  so m1's is the one examined, in either order (p1 and p2 reach both)
+    Machine::ProcessorQuery both(machine);
+    both.has_affinity_to(m0, 1).has_affinity_to(m1);
+    EXPECT_EQ(both.count(), 2u);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_visits(), visits + 12) << "cache " << cache;
+    Machine::ProcessorQuery both2(machine);
+    both2.has_affinity_to(m1).has_affinity_to(m0, 1);
+    EXPECT_EQ(both2.count(), 2u);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_visits(), visits + 14) << "cache " << cache;
+    // a target nothing reaches, or "no memory", among them: no entry at all
+    Machine::ProcessorQuery none(machine);
+    none.has_affinity_to(m0, 1).has_affinity_to(o0);
+    EXPECT_EQ(none.count(), 0u);
+    Machine::ProcessorQuery none2(machine);
+    none2.has_affinity_to(m0, 1).has_affinity_to(Memory::NO_MEMORY);
+    EXPECT_EQ(none2.count(), 0u);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_visits(), visits + 14) << "cache " << cache;
+    EXPECT_EQ(ProcessorQueryImpl::walk_count(), pwalks) << "cache " << cache;
+
+    // memories: m0's incoming map holds f0 of node 0 and m1 of node 1 (the
+    //  node-0 query reads m1's node and stops)
+    const unsigned long mwalks = MemoryQueryImpl::walk_count();
+    const unsigned long mvisits = MemoryQueryImpl::anchored_visits();
+    Machine::MemoryQuery mnode1(machine);
+    mnode1.same_address_space_as(p2).has_affinity_to(m0, 1);
+    EXPECT_EQ(mnode1.count(), 1u);
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 1) << "cache " << cache;
+    Machine::MemoryQuery mnode0(machine);
+    mnode0.same_address_space_as(p0).has_affinity_to(m0, 1);
+    EXPECT_EQ(mnode0.count(), 1u);
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 3) << "cache " << cache;
+    Machine::MemoryQuery mall(machine);
+    mall.has_affinity_to(m0, 1);
+    EXPECT_EQ(mall.count(), 2u);
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 5) << "cache " << cache;
+    // a processor's map against a memory's: g0 reaches m0 and f0 where m1's
+    //  incoming map holds m0 alone, so that one is examined in either order;
+    //  p0's map (m0, f0) ties with m0's incoming map (f0, m1), and the
+    //  processor's is examined
+    Machine::MemoryQuery pm(machine);
+    pm.has_affinity_to(g0).has_affinity_to(m1, 1);
+    EXPECT_EQ(pm.count(), 1u);
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 6) << "cache " << cache;
+    Machine::MemoryQuery pm2(machine);
+    pm2.has_affinity_to(m1, 1).has_affinity_to(g0);
+    EXPECT_EQ(pm2.count(), 1u);
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 7) << "cache " << cache;
+    Machine::MemoryQuery tie(machine);
+    tie.has_affinity_to(p0, 1).has_affinity_to(m0, 1);
+    EXPECT_EQ(tie.count(), 1u);
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 9) << "cache " << cache;
+    // the tie shows on node 1, where p0's map has no entry and m0's incoming
+    //  map has m1
+    Machine::MemoryQuery tie1(machine);
+    tie1.same_address_space_as(p2).has_affinity_to(p0, 1).has_affinity_to(m0, 1);
+    EXPECT_EQ(tie1.count(), 0u);
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 9) << "cache " << cache;
+    // two memory targets: f0's incoming map holds m0 alone
+    Machine::MemoryQuery mm(machine);
+    mm.has_affinity_to(m0, 1).has_affinity_to(f0, 1);
+    EXPECT_EQ(mm.count(), 0u); // m0 has no edge to itself
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 10) << "cache " << cache;
+    EXPECT_EQ(MemoryQueryImpl::walk_count(), mwalks) << "cache " << cache;
+    // the answers
+    EXPECT_EQ(MachineQueryCacheTest::results(node1), (PSet{p2}));
+    EXPECT_EQ(MachineQueryCacheTest::results(node0), (PSet{p0, p1, g0}));
+    EXPECT_EQ(MachineQueryCacheTest::results(kind1), (PSet{p2}));
+    EXPECT_EQ(MachineQueryCacheTest::results(all), (PSet{p0, p1, g0, p2}));
+    EXPECT_EQ(MachineQueryCacheTest::results(both), (PSet{p1, p2}));
+    EXPECT_EQ(MachineQueryCacheTest::results(both2), (PSet{p1, p2}));
+    EXPECT_EQ(MachineQueryCacheTest::results(mnode1), (MSet{m1}));
+    EXPECT_EQ(MachineQueryCacheTest::results(mnode0), (MSet{f0}));
+    EXPECT_EQ(MachineQueryCacheTest::results(mall), (MSet{f0, m1}));
+    EXPECT_EQ(MachineQueryCacheTest::results(pm), (MSet{m0}));
+    EXPECT_EQ(MachineQueryCacheTest::results(pm2), (MSet{m0}));
+    EXPECT_EQ(MachineQueryCacheTest::results(tie), (MSet{f0}));
+    EXPECT_TRUE(MachineQueryCacheTest::results(mm).empty());
+  }
+  // the end of a node's run ends the scan: with two entries of node 1 after
+  //  node 0's run in m0's maps, a node-0 pass examines the first of them only
+  MockRuntimeImplMachineModel::ProcessorMemoriesToBeAdded more; // p3 and m2
+  more.proc_infos.push_back({1, Processor::LOC_PROC, 1});
+  more.mem_infos.push_back({1, Memory::SYSTEM_MEM, size_t(1024) * 1024, 1});
+  runtime_impl_->setup_mock_proc_mems(more);
+  const Processor p3 = ID::make_processor(1, 1).convert<Processor>();
+  const Memory m2 = ID::make_memory(1, 1).convert<Memory>();
+  MachineImpl *mi = runtime_impl_->machine;
+  mi->add_proc_mem_affinity(Machine::ProcessorMemoryAffinity{p3, m0, 100, 10});
+  mi->nodeinfos[1]->add_memory(m2);
+  const Machine::MemoryMemoryAffinity m2m0{m2, m0, 100, 10};
+  mi->nodeinfos[1]->add_mem_mem_affinity(m2m0);
+  mi->nodeinfos[0]->add_mem_mem_affinity(m2m0);
+  mi->update_kind_maps();
+  for(bool cache : {true, false}) {
+    Config::use_machine_query_cache = cache;
+    const unsigned long visits = ProcessorQueryImpl::anchored_visits();
+    Machine::ProcessorQuery node0(machine);
+    node0.same_address_space_as(p0).has_affinity_to(m0, 1);
+    EXPECT_EQ(node0.count(), 3u);
+    EXPECT_EQ(ProcessorQueryImpl::anchored_visits(), visits + 4) << "cache " << cache;
+    const unsigned long mvisits = MemoryQueryImpl::anchored_visits();
+    Machine::MemoryQuery mnode0(machine);
+    mnode0.same_address_space_as(p0).has_affinity_to(m0, 1);
+    EXPECT_EQ(mnode0.count(), 1u);
+    EXPECT_EQ(MemoryQueryImpl::anchored_visits(), mvisits + 2) << "cache " << cache;
+  }
+  Config::use_machine_query_cache = saved;
+}
 
 TEST_F(BestAffinityAnchorTest, ProcessorSpotChecks)
 {
@@ -1151,8 +2010,13 @@ TEST_F(BestAffinityAnchorTest, ProcessorsMatchReference)
             Machine::ProcessorQuery q(machine);
             if(kind)
               q.only_kind(*kind);
-            if(node)
-              q.same_address_space_as((*node == 0) ? p0 : p2);
+            if(node) {
+              // alternate between the two ways of naming the node
+              if(checked % 2)
+                q.address_space(*node);
+              else
+                q.same_address_space_as((*node == 0) ? p0 : p2);
+            }
             if(must_reach)
               q.has_affinity_to(*must_reach);
             q.best_affinity_to(target, w[0], w[1]);
@@ -1256,8 +2120,13 @@ TEST_F(BestAffinityAnchorTest, MemoriesMatchReference)
               Machine::MemoryQuery q(machine);
               if(kind)
                 q.only_kind(*kind);
-              if(node)
-                q.same_address_space_as((*node == 0) ? p0 : p2);
+              if(node) {
+                // alternate between the two ways of naming the node
+                if(checked % 2)
+                  q.address_space(*node);
+                else
+                  q.same_address_space_as((*node == 0) ? p0 : p2);
+              }
               if(capacity)
                 q.has_capacity(capacity);
               if(must_reach)
@@ -1299,8 +2168,13 @@ TEST_F(BestAffinityAnchorTest, MemoriesForProcessorMatchReference)
                   Machine::MemoryQuery q(machine);
                   if(kind)
                     q.only_kind(*kind);
-                  if(node)
-                    q.same_address_space_as((*node == 0) ? p0 : p2);
+                  if(node) {
+                    // alternate between the two ways of naming the node
+                    if(checked % 2)
+                      q.address_space(*node);
+                    else
+                      q.same_address_space_as((*node == 0) ? p0 : p2);
+                  }
                   if(capacity)
                     q.has_capacity(capacity);
                   if(must_reach)
@@ -1462,6 +2336,36 @@ TEST_F(MachineQueryCacheMultiNodeTest, NodeRestrictedQueries)
   EXPECT_TRUE(MachineQueryCacheTest::results(mtwo_nodes).empty());
   MachineQueryCacheTest::expect_cache_agrees_with_walk(mtwo_nodes);
 
+  // without a kind: the node's run of the list of everything
+  Machine::ProcessorQuery anode1(machine);
+  anode1.same_address_space_as(procs[2]);
+  EXPECT_EQ(MachineQueryCacheTest::results(anode1), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(anode1);
+  Machine::MemoryQuery amnode1(machine);
+  amnode1.same_address_space_as(procs[2]);
+  EXPECT_EQ(MachineQueryCacheTest::results(amnode1), (MSet{mems[1]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(amnode1);
+  Machine::ProcessorQuery atwo_nodes(machine);
+  atwo_nodes.same_address_space_as(procs[0]).same_address_space_as(procs[2]);
+  EXPECT_TRUE(MachineQueryCacheTest::results(atwo_nodes).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(atwo_nodes);
+
+  // an affinity predicate with a bound is enumerated from the memory's
+  //  affinity map, which spans nodes: of node 1 only p2 reaches m0, slowly
+  Machine::ProcessorQuery slow1(machine);
+  slow1.same_address_space_as(procs[2]).has_affinity_to(mems[0], 0, 2000 /*max lat*/);
+  EXPECT_EQ(MachineQueryCacheTest::results(slow1), (PSet{procs[2]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(slow1);
+  Machine::ProcessorQuery fast1(machine);
+  fast1.same_address_space_as(procs[2]).has_affinity_to(mems[0], 50 /*min bw*/);
+  EXPECT_TRUE(MachineQueryCacheTest::results(fast1).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(fast1);
+  // and without a kind, the by-memory list of the shared snapshot
+  Machine::ProcessorQuery reach0(machine);
+  reach0.has_affinity_to(mems[0]);
+  EXPECT_EQ(MachineQueryCacheTest::results(reach0), (PSet{procs[0], procs[1], procs[2]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(reach0);
+
   // next() from an entry outside the node has no successor, as in a walk
   {
     const bool saved = Config::use_machine_query_cache;
@@ -1475,6 +2379,17 @@ TEST_F(MachineQueryCacheMultiNodeTest, NodeRestrictedQueries)
       EXPECT_EQ(sharing1.next(procs[0]), Processor::NO_PROC);
       EXPECT_EQ(mnode1.next(mems[0]), Memory::NO_MEMORY);
       EXPECT_EQ(mlocal.next(mems[0]), Memory::NO_MEMORY);
+      EXPECT_EQ(anode1.next(procs[0]), Processor::NO_PROC);
+      EXPECT_EQ(anode1.next(procs[2]), procs[3]);
+      EXPECT_EQ(anode1.next(procs[3]), Processor::NO_PROC);
+      EXPECT_EQ(amnode1.next(mems[0]), Memory::NO_MEMORY);
+      EXPECT_EQ(amnode1.next(mems[1]), Memory::NO_MEMORY);
+      EXPECT_EQ(slow1.next(procs[0]), Processor::NO_PROC);
+      EXPECT_EQ(slow1.next(procs[1]), Processor::NO_PROC);
+      EXPECT_EQ(slow1.next(procs[2]), Processor::NO_PROC);
+      EXPECT_EQ(fast1.next(procs[2]), Processor::NO_PROC);
+      EXPECT_EQ(reach0.next(procs[1]), procs[2]);
+      EXPECT_EQ(reach0.next(procs[2]), Processor::NO_PROC);
       // a memory query anchored on a processor (has_affinity_to is its only
       //  predicate) is walked from that processor's affinity map, which spans
       //  nodes: an entry from another node has no successor there either
@@ -1547,4 +2462,319 @@ TEST_F(MachineQueryCacheMultiNodeTest, NodeRestrictedQueries)
   EXPECT_EQ(MachineQueryCacheTest::results(sharing0), (PSet{procs[0], procs[1]}));
   EXPECT_EQ(MachineQueryCacheTest::results(node1), (PSet{procs[2], procs[3]}));
   MachineQueryCacheTest::expect_cache_agrees_with_walk(node1);
+  EXPECT_EQ(MachineQueryCacheTest::results(slow1), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(slow1);
+  EXPECT_EQ(MachineQueryCacheTest::results(reach0),
+            (PSet{procs[0], procs[1], procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(reach0);
+}
+
+// address_space(a) restricts to the named node, exactly as same_address_space_as
+//  does for a processor or memory on that node
+TEST_F(MachineQueryCacheMultiNodeTest, AddressSpaceQueries)
+{
+  Machine machine = Machine::get_machine();
+  typedef std::set<Processor> PSet;
+  typedef std::set<Memory> MSet;
+
+  Machine::ProcessorQuery node1(machine);
+  node1.only_kind(Processor::LOC_PROC).address_space(1);
+  EXPECT_EQ(MachineQueryCacheTest::results(node1), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(node1);
+  EXPECT_EQ(MachineQueryCacheTest::results(node1),
+            MachineQueryCacheTest::results(Machine::ProcessorQuery(machine)
+                                               .only_kind(Processor::LOC_PROC)
+                                               .same_address_space_as(procs[2])));
+
+  Machine::ProcessorQuery node0(machine);
+  node0.address_space(0).only_kind(Processor::LOC_PROC);
+  EXPECT_EQ(MachineQueryCacheTest::results(node0), (PSet{procs[0], procs[1]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(node0);
+  // this process is node 0 in the mock machine
+  EXPECT_EQ(MachineQueryCacheTest::results(node0),
+            MachineQueryCacheTest::results(Machine::ProcessorQuery(machine)
+                                               .only_kind(Processor::LOC_PROC)
+                                               .local_address_space()));
+
+  // without a kind
+  Machine::ProcessorQuery any1(machine);
+  any1.address_space(1);
+  EXPECT_EQ(MachineQueryCacheTest::results(any1), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(any1);
+
+  // the node's run of a by-kind-and-memory list: only p2 on node 1 reaches m0
+  Machine::ProcessorQuery sharing1(machine);
+  sharing1.only_kind(Processor::LOC_PROC).has_affinity_to(mems[0]).address_space(1);
+  EXPECT_EQ(MachineQueryCacheTest::results(sharing1), (PSet{procs[2]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(sharing1);
+  Machine::ProcessorQuery sharing0(machine);
+  sharing0.address_space(0).only_kind(Processor::LOC_PROC).has_affinity_to(mems[0]);
+  EXPECT_EQ(MachineQueryCacheTest::results(sharing0), (PSet{procs[0], procs[1]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(sharing0);
+
+  // agreeing restrictions narrow nothing further; conflicting ones, a kind the
+  //  node does not have, or a node that does not exist match nothing
+  Machine::ProcessorQuery agree(machine);
+  agree.only_kind(Processor::LOC_PROC).address_space(1).same_address_space_as(procs[3]);
+  EXPECT_EQ(MachineQueryCacheTest::results(agree), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(agree);
+  Machine::ProcessorQuery two_nodes(machine);
+  two_nodes.only_kind(Processor::LOC_PROC).address_space(0).address_space(1);
+  EXPECT_TRUE(MachineQueryCacheTest::results(two_nodes).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(two_nodes);
+  Machine::ProcessorQuery mixed(machine);
+  mixed.only_kind(Processor::LOC_PROC).same_address_space_as(procs[0]).address_space(1);
+  EXPECT_TRUE(MachineQueryCacheTest::results(mixed).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mixed);
+  Machine::ProcessorQuery no_kind(machine);
+  no_kind.only_kind(Processor::TOC_PROC).address_space(0);
+  EXPECT_TRUE(MachineQueryCacheTest::results(no_kind).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(no_kind);
+  Machine::ProcessorQuery no_node(machine);
+  no_node.only_kind(Processor::LOC_PROC).address_space(2);
+  EXPECT_TRUE(MachineQueryCacheTest::results(no_node).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(no_node);
+
+  // memories, per node
+  Machine::MemoryQuery mnode1(machine);
+  mnode1.only_kind(Memory::SYSTEM_MEM).address_space(1);
+  EXPECT_EQ(MachineQueryCacheTest::results(mnode1), (MSet{mems[1]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mnode1);
+  EXPECT_EQ(MachineQueryCacheTest::results(mnode1),
+            MachineQueryCacheTest::results(Machine::MemoryQuery(machine)
+                                               .only_kind(Memory::SYSTEM_MEM)
+                                               .same_address_space_as(mems[1])));
+  Machine::MemoryQuery mnode0(machine);
+  mnode0.address_space(0).only_kind(Memory::SYSTEM_MEM);
+  EXPECT_EQ(MachineQueryCacheTest::results(mnode0), (MSet{mems[0]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mnode0);
+  Machine::MemoryQuery many1(machine);
+  many1.address_space(1);
+  EXPECT_EQ(MachineQueryCacheTest::results(many1), (MSet{mems[1]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(many1);
+  Machine::MemoryQuery mno_kind(machine);
+  mno_kind.only_kind(Memory::GPU_FB_MEM).address_space(0);
+  EXPECT_TRUE(MachineQueryCacheTest::results(mno_kind).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mno_kind);
+  Machine::MemoryQuery mtwo_nodes(machine);
+  mtwo_nodes.only_kind(Memory::SYSTEM_MEM).address_space(0).address_space(1);
+  EXPECT_TRUE(MachineQueryCacheTest::results(mtwo_nodes).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mtwo_nodes);
+  Machine::MemoryQuery mno_node(machine);
+  mno_node.only_kind(Memory::SYSTEM_MEM).address_space(2);
+  EXPECT_TRUE(MachineQueryCacheTest::results(mno_node).empty());
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mno_node);
+
+  // next() from an entry outside the node has no successor, as in a walk, and
+  //  a memory query anchored on a processor of another node sees only its own
+  {
+    const bool saved = Config::use_machine_query_cache;
+    for(bool cache : {true, false}) {
+      Config::use_machine_query_cache = cache;
+      EXPECT_EQ(node1.next(procs[0]), Processor::NO_PROC) << "cache " << cache;
+      EXPECT_EQ(node1.next(procs[2]), procs[3]);
+      EXPECT_EQ(node1.next(procs[3]), Processor::NO_PROC);
+      EXPECT_EQ(node0.next(procs[1]), Processor::NO_PROC);
+      EXPECT_EQ(node0.next(procs[2]), Processor::NO_PROC);
+      EXPECT_EQ(sharing1.next(procs[0]), Processor::NO_PROC);
+      EXPECT_EQ(mnode1.next(mems[0]), Memory::NO_MEMORY);
+      EXPECT_EQ(mnode0.next(mems[0]), Memory::NO_MEMORY);
+      Machine::MemoryQuery anchored1(machine);
+      anchored1.address_space(1).has_affinity_to(procs[2]);
+      EXPECT_EQ(MachineQueryCacheTest::results(anchored1), (MSet{mems[1]}));
+      EXPECT_EQ(anchored1.next(mems[0]), Memory::NO_MEMORY) << "cache " << cache;
+      Machine::MemoryQuery anchored0(machine);
+      anchored0.address_space(0).has_affinity_to(procs[2]);
+      EXPECT_EQ(MachineQueryCacheTest::results(anchored0), (MSet{mems[0]}));
+      EXPECT_EQ(anchored0.next(mems[0]), Memory::NO_MEMORY);
+    }
+    Config::use_machine_query_cache = saved;
+  }
+
+  // best affinity within a node: both CPUs of node 1 tie for m1, and only m1
+  //  is on node 1
+  Machine::ProcessorQuery best1(machine);
+  best1.only_kind(Processor::LOC_PROC).address_space(1).best_affinity_to(mems[1]);
+  EXPECT_EQ(MachineQueryCacheTest::results(best1), (PSet{procs[2], procs[3]}));
+  Machine::ProcessorQuery best0(machine);
+  best0.only_kind(Processor::LOC_PROC).address_space(0).best_affinity_to(mems[1]);
+  EXPECT_TRUE(MachineQueryCacheTest::results(best0).empty());
+  Machine::MemoryQuery mbest1(machine);
+  mbest1.address_space(1).best_affinity_to(procs[2]);
+  EXPECT_EQ(MachineQueryCacheTest::results(mbest1), (MSet{mems[1]}));
+
+  // restricting a query that has already run
+  Machine::ProcessorQuery refined(machine);
+  refined.only_kind(Processor::LOC_PROC);
+  EXPECT_EQ(refined.count(), 4u);
+  refined.address_space(1);
+  EXPECT_EQ(MachineQueryCacheTest::results(refined), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(refined);
+  Machine::MemoryQuery mrefined(machine);
+  mrefined.only_kind(Memory::SYSTEM_MEM);
+  EXPECT_EQ(mrefined.count(), 2u);
+  mrefined.address_space(0);
+  EXPECT_EQ(MachineQueryCacheTest::results(mrefined), (MSet{mems[0]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(mrefined);
+
+  // a machine update (p3 now reaches m0 too) is seen by the executed queries
+  Machine::ProcessorMemoryAffinity pma;
+  pma.p = procs[3];
+  pma.m = mems[0];
+  pma.bandwidth = 10;
+  pma.latency = 1000;
+  runtime_impl_->machine->add_proc_mem_affinity(pma);
+  EXPECT_EQ(MachineQueryCacheTest::results(sharing1), (PSet{procs[2], procs[3]}));
+  MachineQueryCacheTest::expect_cache_agrees_with_walk(sharing1);
+  EXPECT_EQ(MachineQueryCacheTest::results(sharing0), (PSet{procs[0], procs[1]}));
+}
+
+namespace {
+  // every accessor of a query that must match nothing finds nothing, with the
+  //  shared cache and without; next() also runs before first(), so that a
+  //  query the shared cache does not serve builds its own list first
+  template <typename Q, typename T>
+  void expect_matches_nothing(const Q &q, T after, const char *what)
+  {
+    const bool saved = Config::use_machine_query_cache;
+    for(bool cache : {true, false}) {
+      Config::use_machine_query_cache = cache;
+      EXPECT_FALSE(q.next(after).exists()) << what << ", cache " << cache;
+      EXPECT_TRUE(MachineQueryCacheTest::results(q).empty())
+          << what << ", cache " << cache;
+      EXPECT_FALSE(q.next(after).exists()) << what << ", cache " << cache;
+    }
+    Config::use_machine_query_cache = saved;
+  }
+} // namespace
+
+// conflicting restrictions - two different kinds, two different address
+//  spaces, or an address space no id can name - match nothing on every path
+//  (the shared cache, an anchor's map, a best-affinity list, the walk), and
+//  without walking the machine
+TEST_F(MachineQueryCacheMultiNodeTest, ConflictingQueries)
+{
+  Machine machine = Machine::get_machine();
+  const unsigned long pwalks = ProcessorQueryImpl::walk_count();
+  const unsigned long mwalks = MemoryQueryImpl::walk_count();
+  // an id's node field is 16 bits wide: this one names node 1 there
+  const AddressSpace alias1 = (1u << 16) + 1;
+
+  // two kinds, the first of which both nodes have
+  auto two_kinds = [&]() {
+    return Machine::ProcessorQuery(machine)
+        .only_kind(Processor::LOC_PROC)
+        .only_kind(Processor::TOC_PROC);
+  };
+  expect_matches_nothing(two_kinds(), procs[0], "two kinds");
+  expect_matches_nothing(two_kinds().only_kind(Processor::LOC_PROC), procs[0],
+                         "two kinds, then the first again");
+  expect_matches_nothing(two_kinds().address_space(0), procs[0], "two kinds, a node");
+  expect_matches_nothing(two_kinds().has_affinity_to(mems[0]), procs[0],
+                         "two kinds, an affinity");
+  expect_matches_nothing(two_kinds().has_affinity_to(mems[0], 0, 2000), procs[0],
+                         "two kinds, a bounded affinity");
+  expect_matches_nothing(two_kinds().best_affinity_to(mems[0]), procs[0],
+                         "two kinds, a best affinity");
+
+  // two nodes, and nodes no id can name
+  auto on_node = [&](AddressSpace a) {
+    return Machine::ProcessorQuery(machine)
+        .only_kind(Processor::LOC_PROC)
+        .address_space(a);
+  };
+  expect_matches_nothing(on_node(0).address_space(1).has_affinity_to(mems[0]), procs[0],
+                         "two nodes, an affinity");
+  expect_matches_nothing(on_node(0).address_space(1).best_affinity_to(mems[0]), procs[0],
+                         "two nodes, a best affinity");
+  expect_matches_nothing(on_node(ID::MAX_NODE_ID + 1), procs[0], "node MAX_NODE_ID + 1");
+  expect_matches_nothing(on_node(alias1), procs[0], "node 2^16 + 1");
+  expect_matches_nothing(on_node(alias1).has_affinity_to(mems[0], 0, 2000), procs[0],
+                         "node 2^16 + 1, a bounded affinity");
+  expect_matches_nothing(Machine::ProcessorQuery(machine).address_space(AddressSpace(-1)),
+                         procs[0], "node 2^32 - 1, no kind");
+  EXPECT_EQ(ProcessorQueryImpl::walk_count(), pwalks) << "a conflicting query walked";
+
+  // the largest node an id can name is a node, if not one this machine has,
+  //  so its query walks
+  expect_matches_nothing(on_node(ID::MAX_NODE_ID), procs[0], "node MAX_NODE_ID");
+  EXPECT_GT(ProcessorQueryImpl::walk_count(), pwalks) << "node MAX_NODE_ID did not walk";
+
+  // a conflict stays with the copy that was refined, and its copies
+  Machine::ProcessorQuery cpus(machine);
+  cpus.only_kind(Processor::LOC_PROC);
+  EXPECT_EQ(cpus.count(), 4u);
+  Machine::ProcessorQuery none(cpus);
+  none.only_kind(Processor::TOC_PROC);
+  EXPECT_EQ(MachineQueryCacheTest::results(cpus).size(), 4u);
+  expect_matches_nothing(none, procs[0], "a refined copy");
+  expect_matches_nothing(Machine::ProcessorQuery(none), procs[0],
+                         "a copy of a conflicting query");
+  // a copy refined in turn: without the conflict, the kind recorded before it
+  //  and the affinity would match p0, p1 and p2
+  Machine::ProcessorQuery none_refined(none);
+  none_refined.has_affinity_to(mems[0]);
+  expect_matches_nothing(none_refined, procs[0],
+                         "a copy of a conflicting query, refined");
+  // and an unrestricted query refined through a copy
+  Machine::ProcessorQuery all(machine);
+  Machine::ProcessorQuery node1(all);
+  node1.address_space(1);
+  EXPECT_EQ(MachineQueryCacheTest::results(node1),
+            (std::set<Processor>{procs[2], procs[3]}));
+  EXPECT_EQ(all.count(), 4u);
+
+  // memories
+  auto two_mem_kinds = [&]() {
+    return Machine::MemoryQuery(machine)
+        .only_kind(Memory::SYSTEM_MEM)
+        .only_kind(Memory::GPU_FB_MEM);
+  };
+  expect_matches_nothing(two_mem_kinds(), mems[0], "two memory kinds");
+  expect_matches_nothing(two_mem_kinds().address_space(0), mems[0],
+                         "two memory kinds, a node");
+  expect_matches_nothing(two_mem_kinds().has_affinity_to(procs[2]), mems[0],
+                         "two memory kinds, a processor affinity");
+  expect_matches_nothing(two_mem_kinds().has_affinity_to(procs[2], 0, 2000), mems[0],
+                         "two memory kinds, a bounded processor affinity");
+  expect_matches_nothing(two_mem_kinds().has_affinity_to(mems[0]), mems[0],
+                         "two memory kinds, a memory affinity");
+  expect_matches_nothing(two_mem_kinds().has_capacity(1), mems[0],
+                         "two memory kinds, a capacity");
+  expect_matches_nothing(two_mem_kinds().best_affinity_to(procs[0]), mems[0],
+                         "two memory kinds, a best processor affinity");
+  expect_matches_nothing(two_mem_kinds().best_affinity_to(mems[0]), mems[0],
+                         "two memory kinds, a best memory affinity");
+  auto on_mem_node = [&](AddressSpace a) {
+    return Machine::MemoryQuery(machine).only_kind(Memory::SYSTEM_MEM).address_space(a);
+  };
+  expect_matches_nothing(on_mem_node(0).address_space(1).has_capacity(1), mems[0],
+                         "two nodes, a capacity");
+  expect_matches_nothing(on_mem_node(ID::MAX_NODE_ID + 1), mems[0],
+                         "node MAX_NODE_ID + 1");
+  expect_matches_nothing(on_mem_node(alias1).has_affinity_to(procs[2]), mems[0],
+                         "node 2^16 + 1, a processor affinity");
+  EXPECT_EQ(MemoryQueryImpl::walk_count(), mwalks) << "a conflicting query walked";
+  expect_matches_nothing(on_mem_node(ID::MAX_NODE_ID), mems[0], "node MAX_NODE_ID");
+  EXPECT_GT(MemoryQueryImpl::walk_count(), mwalks) << "node MAX_NODE_ID did not walk";
+
+  Machine::MemoryQuery sysmems(machine);
+  sysmems.only_kind(Memory::SYSTEM_MEM);
+  EXPECT_EQ(sysmems.count(), 2u);
+  Machine::MemoryQuery no_mems(sysmems);
+  no_mems.only_kind(Memory::GPU_FB_MEM);
+  EXPECT_EQ(MachineQueryCacheTest::results(sysmems).size(), 2u);
+  expect_matches_nothing(no_mems, mems[0], "a refined memory copy");
+  expect_matches_nothing(Machine::MemoryQuery(no_mems), mems[0],
+                         "a copy of a conflicting memory query");
+  // without the conflict, the kind and the capacity would match m0 and m1
+  Machine::MemoryQuery no_mems_refined(no_mems);
+  no_mems_refined.has_capacity(1);
+  expect_matches_nothing(no_mems_refined, mems[0],
+                         "a copy of a conflicting memory query, refined");
+  Machine::MemoryQuery all_mems(machine);
+  Machine::MemoryQuery mem_node1(all_mems);
+  mem_node1.address_space(1);
+  EXPECT_EQ(MachineQueryCacheTest::results(mem_node1), (std::set<Memory>{mems[1]}));
+  EXPECT_EQ(all_mems.count(), 2u);
 }

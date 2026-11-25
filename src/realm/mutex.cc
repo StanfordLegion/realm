@@ -251,13 +251,15 @@ namespace Realm {
       }
 
 #if defined(REALM_ON_LINUX) && !defined(REALM_NO_USE_FUTEX)
+      // doorbells only synchronize threads within this process
+      //
       // if we can transition from AWAKE->ASLEEP, we ask the kernel to
       //  wait for someone to wake us (if val changes before we get there,
       //   we'll get EAGAIN)
       if(dbi->state.compare_exchange(val, STATE_PENDING_ASLEEP)) {
         errno = 0;
-        int ret = syscall(SYS_futex, &dbi->state, FUTEX_WAIT, STATE_PENDING_ASLEEP,
-                          nullptr, nullptr, 0);
+        int ret = syscall(SYS_futex, &dbi->state, FUTEX_WAIT_PRIVATE,
+                          STATE_PENDING_ASLEEP, nullptr, nullptr, 0);
         // acceptable results are:
         //  ret==0 (_probably_ woken up by another thread, but have to check)
         //  errno=EINTR (_probably_ a spurious wakeup, have to check though)
@@ -318,7 +320,7 @@ namespace Realm {
 
 #if defined(REALM_ON_LINUX) && !defined(REALM_NO_USE_FUTEX)
     // tell kernel to wake up sleeper (or not, if we get there first)
-    int ret = syscall(SYS_futex, &dbi->state, FUTEX_WAKE, 1, nullptr, nullptr, 0);
+    int ret = syscall(SYS_futex, &dbi->state, FUTEX_WAKE_PRIVATE, 1, nullptr, nullptr, 0);
     assert(ret >= 0);
 #elif defined(REALM_ON_WINDOWS)
     // set the sleeper's event
@@ -1190,7 +1192,7 @@ namespace Realm {
     } else
       return false;
 #else
-    int ret = pthread_rwlock_trywrlock(rwlock);
+    int ret = pthread_rwlock_tryrdlock(rwlock);
     return (ret == 0);
 #endif
   }

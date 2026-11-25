@@ -21,6 +21,7 @@
 #include "realm/cmdline.h"
 #include "realm/logging.h"
 #include "realm/activemsg.h"
+#include "realm/serialize.h"
 #include "realm/timers.h"
 
 #ifdef REALM_USE_DLFCN
@@ -57,6 +58,58 @@ namespace Realm {
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeSet all_peers;
     REALM_INTERNAL_API_EXTERNAL_LINKAGE NodeSet shared_peers;
     NetworkModule *single_network = 0;
+
+    NodeSet find_ipc_peers(bool enabled, bool allow_remote)
+    {
+      NodeSet peers;
+      if(all_peers.empty())
+        return peers;
+
+      enum
+      {
+        IPC_ENABLED = 1,
+        REMOTE_IPC = 2,
+      };
+
+      // Each rank advertises its capabilities followed by its same-host candidates.
+      std::vector<NodeID> local_info{(enabled ? IPC_ENABLED : 0) |
+                                     (allow_remote ? REMOTE_IPC : 0)};
+      if(enabled)
+        for(NodeID peer : shared_peers)
+          local_info.push_back(peer);
+
+      std::vector<char> all_info;
+      std::vector<size_t> lengths;
+      single_network->allgatherv(reinterpret_cast<const char *>(local_info.data()),
+                                 local_info.size() * sizeof(NodeID), all_info, lengths);
+      if(!enabled)
+        return peers;
+
+      // Shared-peer discovery can give different results on each rank.
+      const char *next = all_info.data();
+      NodeID peer = 0;
+      for(size_t length : lengths) {
+        const NodeID remote = peer++;
+        Serialization::FixedBufferDeserializer decoder(next, length);
+        next += length;
+        NodeID capabilities = 0;
+        if((remote == my_node_id) || !(decoder >> capabilities) ||
+           !(capabilities & IPC_ENABLED))
+          continue;
+
+        if(allow_remote && (capabilities & REMOTE_IPC)) {
+          peers.add(remote);
+        } else if(shared_peers.contains(remote)) {
+          for(NodeID candidate; decoder.bytes_left() >= ptrdiff_t(sizeof(candidate));) {
+            if((decoder >> candidate) && (candidate == my_node_id)) {
+              peers.add(remote);
+              break;
+            }
+          }
+        }
+      }
+      return peers;
+    }
 
     // Persistent state across calls to check_for_quiescence.  The function
     //  is only invoked from RuntimeImpl::wait_for_shutdown, single-threaded,

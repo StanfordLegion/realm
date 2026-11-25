@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+#include <algorithm>
 #include <gtest/gtest.h>
 #include "realm/deppart/sparsity_impl.h"
 #include "realm/transfer/transfer.h"
@@ -227,23 +228,26 @@ TEST(SparsityMapImplTest, RemoteDataReply)
   using T = int;
   constexpr int N = 3;
   constexpr int gap = 3;
-  constexpr size_t num_rects = 3;
-  SparsityMap<N, T> handle = (ID::make_sparsity(0, 0, 0)).convert<SparsityMap<N, T>>();
-  NodeSet subscribers;
-  MockSparsityMapCommunicator<N, T> *sparsity_comm =
-      new MockSparsityMapCommunicator<N, T>();
-  std::vector<Rect<N, T>> rect_list = create_rects<N, T>(num_rects, gap);
-  std::unique_ptr<SparsityMapImpl<N, T>> impl =
-      std::make_unique<SparsityMapImpl<N, T>>(handle, subscribers, sparsity_comm);
+  for(int num_rects : {0, 3}) {
+    SCOPED_TRACE(num_rects);
+    SparsityMap<N, T> handle = (ID::make_sparsity(0, 0, 0)).convert<SparsityMap<N, T>>();
+    NodeSet subscribers;
+    auto *sparsity_comm = new MockSparsityMapCommunicator<N, T>();
+    auto impl =
+        std::make_unique<SparsityMapImpl<N, T>>(handle, subscribers, sparsity_comm);
 
-  impl->contribute_dense_rect_list(rect_list, /*disjoint=*/true);
-  impl->set_contributor_count(1);
-  impl->remote_data_reply(/*requestor=*/2, /*reply_precise=*/true,
-                          /*reply_approx=*/false);
+    impl->contribute_dense_rect_list(create_rects<N, T>(num_rects, gap),
+                                     /*disjoint=*/true);
+    impl->set_contributor_count(1);
+    impl->remote_data_reply(/*requestor=*/2, /*reply_precise=*/true,
+                            /*reply_approx=*/false);
 
-  ASSERT_EQ(sparsity_comm->sent_contributions, num_rects);
-  ASSERT_EQ(sparsity_comm->sent_piece_count, num_rects);
-  ASSERT_EQ(sparsity_comm->sent_bytes, num_rects * sizeof(T) * N * 2);
+    // Even an empty map requires one reply so the requester can finish waiting.
+    const int expected_pieces = std::max(1, num_rects);
+    EXPECT_EQ(sparsity_comm->sent_contributions, expected_pieces);
+    EXPECT_EQ(sparsity_comm->sent_piece_count, expected_pieces);
+    EXPECT_EQ(sparsity_comm->sent_bytes, num_rects * sizeof(Rect<N, T>));
+  }
 }
 
 struct BaseTestData {
