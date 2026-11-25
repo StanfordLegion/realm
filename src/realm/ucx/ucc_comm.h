@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-#ifndef __UCCLAYER_H__
-#define __UCCLAYER_H__
+#ifndef __UCC_COMM_H__
+#define __UCC_COMM_H__
 
 #include <cassert>
 #include <memory>
-
-// #include <ucp/api/ucp.h>
+#include <ucc/api/ucc.h>
 
 #include "bootstrap/bootstrap.h"
 #include "oob_group_comm.h"
@@ -31,21 +30,12 @@ namespace Realm {
     class UCCComm {
       int rank;
       int world_sz;
-      std::unique_ptr<OOBGroupComm> oob_comm;
+      OOBGroupComm oob_comm;
 
-      ucc_lib_h lib;
-      ucc_team_h team{};
-      ucc_context_h context{};
+      ucc_lib_h lib = nullptr;
+      ucc_team_h team = nullptr;
+      ucc_context_h context = nullptr;
 
-      // Helper functions
-      ucc_status_t init_lib();
-      ucc_status_t create_context();
-      ucc_status_t create_team();
-
-      // Currently simply assert fails on non-success state.
-      void ucc_check(const ucc_status_t &st);
-
-      // Currently simply assert fails on non-success state.
       ucc_status_t ucc_collective(ucc_coll_args_t &coll_args, ucc_coll_req_h &req);
 
     public:
@@ -106,4 +96,4 @@ namespace Realm {
     };
   } // namespace ucc
 } // namespace Realm
-#endif
+#endif // __UCC_COMM_H__
