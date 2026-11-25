@@ -42,7 +42,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+3b495d95</button>
+     <button class="dropbtn">Version 26.9.1+5bf3fe56</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -150,7 +150,8 @@ Public Attributes</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename IS, typename FT&gt;<br />
-class Realm::FieldDataDescriptor&lt; IS, FT &gt;</div><p>A template class used to describe field data provided for partitioning operations. IS is the type of the index space that defines the domain dimensionality and base type. </p>
+class Realm::FieldDataDescriptor&lt; IS, FT &gt;</div><p>A template class used to describe field data provided for partitioning operations. IS is the type of the index space that defines the domain dimensionality and base type.</p>
+<p>Before a partitioning operation accesses the field, the instance metadata must be available on the rank that owns the instance's memory. If needed, call <a class="el" href="classRealm_1_1RegionInstance.html#afb883947307c45ac6e6a3e53ec6d5940">RegionInstance::fetch_metadata</a> with a processor on that rank and include the returned event in the partitioning operation's wait_on precondition. </p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a7913a8db877cb7321aaa4e805d884972" name="a7913a8db877cb7321aaa4e805d884972"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7913a8db877cb7321aaa4e805d884972">&#9670;&#160;</a></span>field_offset</h2>

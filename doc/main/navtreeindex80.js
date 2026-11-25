@@ -1,7 +1,5 @@
 var NAVTREEINDEX80 =
 {
-"structbootstrap__handle.html#aaacfaa49617d9f033d26c398e7cf38d5":[2,0,9,9],
-"structbootstrap__handle.html#ab3d50e21e33ebfe2c4b3f5f6577003ee":[2,0,9,5],
 "structbootstrap__handle.html#ad076de79d3142204c7641c0226a9ca94":[2,0,9,1],
 "structbootstrap__handle.html#af5862787e841ff53d2075231a8b2f305":[2,0,9,2],
 "structbootstrap__handle.html#af70d98b7ae5004b981c2d132c9702fcc":[2,0,9,8],

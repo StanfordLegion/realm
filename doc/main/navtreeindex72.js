@@ -1,7 +1,5 @@
 var NAVTREEINDEX72 =
 {
-"structRealm_1_1MachineMemInfo.html#aa3401279acf639543ac35b38995f3880":[2,0,3,212,0],
-"structRealm_1_1MachineMemInfo.html#aec45c65865ec9b3ca78f61b07350aaaf":[1,0,3,223,5],
 "structRealm_1_1MachineMemInfo.html#aec45c65865ec9b3ca78f61b07350aaaf":[2,0,3,212,5],
 "structRealm_1_1MachineNodeInfo.html":[1,0,3,224],
 "structRealm_1_1MachineNodeInfo.html":[2,0,3,213],
@@ -249,5 +247,7 @@ var NAVTREEINDEX72 =
 "structRealm_1_1Node.html#afedaad330fc34d017e566a6192642eee":[2,0,3,323,6],
 "structRealm_1_1NotifyXferDesCompleteMessage.html":[1,0,3,411],
 "structRealm_1_1NotifyXferDesCompleteMessage.html":[2,0,3,400],
-"structRealm_1_1NotifyXferDesCompleteMessage.html#a7153abcb0bf2b48de25ee99bdca12119":[1,0,3,411,0]
+"structRealm_1_1NotifyXferDesCompleteMessage.html#a7153abcb0bf2b48de25ee99bdca12119":[1,0,3,411,0],
+"structRealm_1_1NotifyXferDesCompleteMessage.html#a7153abcb0bf2b48de25ee99bdca12119":[2,0,3,400,0],
+"structRealm_1_1NotifyXferDesCompleteMessage.html#abed6e4e1455a4ce5963fc082512c0f51":[1,0,3,411,1]
 };
