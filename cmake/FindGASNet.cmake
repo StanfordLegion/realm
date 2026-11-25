@@ -14,21 +14,17 @@
 # limitations under the License.
 
 if(TARGET GASNet::GASNet)
+  get_target_property(_GASNet_existing_module GASNet::GASNet GASNet_PKGCONFIG_MODULE)
+  if(_GASNet_existing_module)
+    set(GASNet_MODULE_NAME "${_GASNet_existing_module}")
+  endif()
+  set(GASNet_FOUND TRUE)
   return()
 endif()
 
 find_package(PkgConfig)
 if(NOT PkgConfig_FOUND)
   return()
-endif()
-
-if(GASNET_USE_MULTITHREADED)
-  set(_GASNET_MT par)
-  if(GASNET_USE_SYNC)
-    set(_GASNET_MT ${_GASNET_MT}sync)
-  endif()
-else()
-  set(_GASNET_MT seq)
 endif()
 
 if(NOT GASNet_ROOT)
@@ -41,19 +37,53 @@ if(GASNet_ROOT)
   set(ENV{PKG_CONFIG_PATH} "${_pkg_config_var}")
 endif()
 
-set(_GASNet_search_modules)
-if(NOT GASNET_CONDUIT)
-  # This list is in order of search priority.  Manually specify via GASNET_CONDUIT
-  foreach(_gasnet_conduit ibv ucx aries ofi gemini psm smp mpi udp)
-    foreach(_gasnet_multithread par parsync seq)
-      list(APPEND _GASNet_search_modules gasnet-${_gasnet_conduit}-${_gasnet_multithread})
-    endforeach()
+set(_GASNet_failure_reason "")
+if(GASNet_FIND_COMPONENTS)
+  # Installed Realm packages specify the exact variant they linked against.
+  # Use a separate prefix so pkg-config cannot reuse a caller's PkgConfig::GASNet target.
+  pkg_check_modules(RealmGASNet QUIET IMPORTED_TARGET "${GASNet_FIND_COMPONENTS}")
+  foreach(_GASNet_result FOUND VERSION LIBRARIES LINK_LIBRARIES LIBRARY_DIRS INCLUDE_DIRS)
+    set(GASNet_${_GASNet_result} "${RealmGASNet_${_GASNet_result}}")
   endforeach()
+  set(_GASNet_pkg_target PkgConfig::RealmGASNet)
+  set(GASNet_MODULE_NAME "${GASNet_FIND_COMPONENTS}")
+  set(_GASNet_failure_reason
+      "Realm requires the ${GASNet_MODULE_NAME} pkg-config module. Set GASNet_ROOT or PKG_CONFIG_PATH to an installation providing it."
+  )
 else()
-  set(_GASNet_search_modules gasnet-${GASNET_CONDUIT}-${_GASNET_MT})
+  if(GASNET_CONDUIT)
+    if(GASNET_USE_MULTITHREADED)
+      set(_GASNET_MT par)
+      if(GASNET_USE_SYNC)
+        set(_GASNET_MT parsync)
+      endif()
+    else()
+      set(_GASNET_MT seq)
+    endif()
+    set(_GASNet_search_modules gasnet-${GASNET_CONDUIT}-${_GASNET_MT})
+  else()
+    # This list is in order of search priority.
+    set(_GASNet_search_modules)
+    foreach(
+      _gasnet_conduit
+      ibv
+      ucx
+      aries
+      ofi
+      gemini
+      psm
+      smp
+      mpi
+      udp
+    )
+      foreach(_gasnet_multithread par parsync seq)
+        list(APPEND _GASNet_search_modules gasnet-${_gasnet_conduit}-${_gasnet_multithread})
+      endforeach()
+    endforeach()
+  endif()
+  pkg_search_module(GASNet ${_GASNet_search_modules} IMPORTED_TARGET GASNet)
+  set(_GASNet_pkg_target PkgConfig::GASNet)
 endif()
-
-pkg_search_module(GASNet ${_GASNet_search_modules} IMPORTED_TARGET GASNet)
 
 if(GASNet_FOUND)
   # GASNet wants you to use mpicc to build and link your application, so doesn't
@@ -77,10 +107,9 @@ if(GASNet_FOUND)
   endif()
 
   # Provide a way to indicate to the caller what conduit was found
-  if (NOT GASNET_CONDUIT)
-    string(REGEX MATCH "gasnet-([a-z]+)-.*" _ "${GASNet_MODULE_NAME}")
-    set(GASNET_CONDUIT ${CMAKE_MATCH_1})
-  endif()
+  string(REGEX REPLACE "^gasnet-(.+)-(parsync|par|seq)$" "\\1" GASNET_CONDUIT
+                       "${GASNet_MODULE_NAME}"
+  )
 
   string(TOUPPER "${GASNET_CONDUIT}" GASNET_CONDUIT_UPPER)
   set(GASNET_CONDUIT_${GASNET_CONDUIT_UPPER} TRUE)
@@ -98,29 +127,23 @@ endif()
 find_package_handle_standard_args(
   GASNet
   VERSION_VAR GASNet_VERSION
-  REQUIRED_VARS GASNet_FOUND GASNet_LIBRARIES GASNet_INCLUDE_DIRS GASNET_CONDUIT GASNET_CONDUIT_${GASNET_CONDUIT_UPPER}
-  FOUND_VAR GASNet_FOUND
+  REQUIRED_VARS GASNet_FOUND GASNet_LIBRARIES GASNet_INCLUDE_DIRS GASNET_CONDUIT
+                GASNET_CONDUIT_${GASNET_CONDUIT_UPPER}
+  FOUND_VAR GASNet_FOUND REASON_FAILURE_MESSAGE "${_GASNet_failure_reason}"
 )
 
 if(GASNet_FOUND)
-  add_library(GASNet::GASNet ALIAS PkgConfig::GASNet)
+  # Export a stable dependency name even when discovery uses a different pkg-config target.
+  add_library(GASNet::GASNet INTERFACE IMPORTED)
+  target_link_libraries(GASNet::GASNet INTERFACE ${_GASNet_pkg_target} ${_GASNet_LINK_LIBRARIES})
+  set_property(TARGET GASNet::GASNet PROPERTY GASNet_PKGCONFIG_MODULE "${GASNet_MODULE_NAME}")
   # Issues #380
   # GASNet pkgconfig adds optimization and build flags that are not necessacary
   # for linkage but override and mess with compilation.  Until GASNet provides
   # a way to remove these, we'll need to just ignore them for now
-  set_target_properties(
-    PkgConfig::GASNet PROPERTIES
-    INTERFACE_COMPILE_OPTIONS ""
-  )
-  set_property(
-    TARGET PkgConfig::GASNet
-    APPEND
-    PROPERTY INTERFACE_LINK_LIBRARIES "${_GASNet_LINK_LIBRARIES}"
-  )
+  set_property(TARGET ${_GASNet_pkg_target} PROPERTY INTERFACE_COMPILE_OPTIONS "")
 endif()
 
-mark_as_advanced(GASNet_INCLUDE_DIRS
-                 GASNet_LIBRARIES
-                 GASNET_CONDUIT
-                 GASNET_CONDUIT_${GASNET_CONDUIT}
+mark_as_advanced(
+  GASNet_INCLUDE_DIRS GASNet_LIBRARIES GASNET_CONDUIT GASNET_CONDUIT_${GASNET_CONDUIT}
 )
