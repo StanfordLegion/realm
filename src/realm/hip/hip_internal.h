@@ -950,7 +950,7 @@ namespace Realm {
       GPUreduceRemoteChannel(uintptr_t _remote_ptr);
     };
 
-    // active messages for establishing cuda ipc mappings
+    // active messages for establishing HIP IPC mappings
 
     struct HipIpcRequest {
 #ifdef REALM_ON_LINUX
@@ -965,12 +965,6 @@ namespace Realm {
       unsigned count;
 
       static void handle_message(NodeID sender, const HipIpcResponse &args,
-                                 const void *data, size_t datalen);
-    };
-
-    struct HipIpcRelease {
-
-      static void handle_message(NodeID sender, const HipIpcRelease &args,
                                  const void *data, size_t datalen);
     };
 

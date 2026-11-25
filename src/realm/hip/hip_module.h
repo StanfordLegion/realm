@@ -173,6 +173,9 @@ namespace Realm {
 
       static Module *create_module(RuntimeImpl *runtime);
 
+      // Invoked by runtime startup on all ranks, including ranks without HIP GPUs.
+      static void configure_ipc_peers();
+
       // do any general initialization - this is called after all configuration is
       //  complete
       virtual void initialize(RuntimeImpl *runtime);
@@ -227,9 +230,7 @@ namespace Realm {
 
       Mutex hipipc_mutex;
       Mutex::CondVar hipipc_condvar;
-      atomic<int> hipipc_responses_needed;
-      atomic<int> hipipc_releases_needed;
-      atomic<int> hipipc_exports_remaining;
+      NodeSet hipipc_pending_responses;
     };
 
   }; // namespace Hip

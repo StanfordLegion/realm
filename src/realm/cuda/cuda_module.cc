@@ -2873,9 +2873,7 @@ namespace Realm {
       , zcmem(0)
       , uvm_base(0)
       , uvmmem(0)
-      , initialization_complete(false)
       , cudaipc_condvar(cudaipc_mutex)
-      , cudaipc_responses_received(0)
     {
       assert(!cuda_module_singleton);
       cuda_module_singleton = this;
@@ -3397,8 +3395,6 @@ namespace Realm {
       {
         for(int i = 0; i < config->res_num_gpus; i++) {
           GPUInfo *info = new GPUInfo;
-          int attribute_value = 0;
-
           info->index = i;
           CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGet)(&info->device, i));
           CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGetName)(info->name, sizeof(info->name),
@@ -3416,21 +3412,21 @@ namespace Realm {
               &info->pci_deviceid, CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID, info->device));
           CHECK_CU(CUDA_DRIVER_FNPTR(cuDeviceGetAttribute)(
               &info->pci_domainid, CU_DEVICE_ATTRIBUTE_PCI_DOMAIN_ID, info->device));
-          CUDA_DRIVER_FNPTR(cuDeviceGetAttribute)
-          (&attribute_value, CU_DEVICE_ATTRIBUTE_CAN_USE_HOST_POINTER_FOR_REGISTERED_MEM,
-           info->device);
-          info->host_gpu_same_va = !!attribute_value;
+          const auto optional_attribute = [&](CUdevice_attribute attribute) {
+            int value = 0;
+            return (CUDA_DRIVER_FNPTR(cuDeviceGetAttribute)(
+                        &value, attribute, info->device) == CUDA_SUCCESS) &&
+                   (value != 0);
+          };
+          info->host_gpu_same_va = optional_attribute(
+              CU_DEVICE_ATTRIBUTE_CAN_USE_HOST_POINTER_FOR_REGISTERED_MEM);
 #if CUDA_VERSION >= 12030
-          CUDA_DRIVER_FNPTR(cuDeviceGetAttribute)
-          (&attribute_value, CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED,
-           info->device);
-#else
-          attribute_value = 0;
+          info->fabric_supported =
+              (m->cuda_api_version >= 12030) &&
+              optional_attribute(CU_DEVICE_ATTRIBUTE_HANDLE_TYPE_FABRIC_SUPPORTED);
 #endif
-          info->fabric_supported = !!attribute_value;
-          CUDA_DRIVER_FNPTR(cuDeviceGetAttribute)
-          (&attribute_value, CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS, info->device);
-          info->pageable_access_supported = !!attribute_value;
+          info->pageable_access_supported =
+              optional_attribute(CU_DEVICE_ATTRIBUTE_PAGEABLE_MEMORY_ACCESS);
           // Assume x16 PCI-e 2.0 = 8000 MB/s, which is reasonable for most
           // systems
           info->pci_bandwidth = 8000;
@@ -4071,6 +4067,20 @@ namespace Realm {
       }
     }
 
+    /*static*/ void CudaModule::configure_ipc_peers()
+    {
+      CudaModule *module = cuda_module_singleton;
+      const bool enabled =
+          module && module->config->cfg_use_cuda_ipc && !module->gpus.empty();
+      const bool fabric = enabled && std::any_of(module->gpus.begin(), module->gpus.end(),
+                                                 [](const GPU *gpu) {
+                                                   return gpu->info->fabric_supported;
+                                                 });
+      NodeSet peers = Network::find_ipc_peers(enabled, fabric);
+      if(enabled)
+        module->cudaipc_pending_peers.swap(peers);
+    }
+
     // create any DMA channels provided by the module (default == do nothing)
     void CudaModule::create_dma_channels(RuntimeImpl *runtime)
     {
@@ -4140,56 +4150,39 @@ namespace Realm {
         advise_cpu_memories_to_cpu(runtime->nodes[Network::my_node_id].ib_memories);
       }
 
-      // ask any ipc-able nodes to share handles with us
-      if(config->cfg_use_cuda_ipc && !gpus.empty()) {
-        NodeSet ipc_peers = Network::shared_peers;
-        // If this is a fabric enabled system, then we need to query all ranks in the
-        // system for mappings (assume all GPUs are fabric enabled)
-        if(gpus[0]->info->fabric_supported) {
-          ipc_peers = Network::all_peers;
-        }
+      // Until cudaipc_ready is published, only this thread accesses the peer set.
+      if(!cudaipc_pending_peers.empty()) {
+        const NodeSet &ipc_peers = cudaipc_pending_peers;
+        log_cudaipc.info() << "Sending cuda ipc handles to " << ipc_peers.size()
+                           << " peers";
+        const Node &n = runtime->nodes[Network::my_node_id];
+        std::vector<CudaIpcResponseEntry> entries;
+        enumerate_ipc_entries(entries, n.memories);
+        enumerate_ipc_entries(entries, n.ib_memories);
 
-        if(!ipc_peers.empty()) {
-          log_cudaipc.info() << "Sending cuda ipc handles to " << ipc_peers.size()
-                             << " peers";
-          const Node &n = get_runtime()->nodes[Network::my_node_id];
-          std::vector<CudaIpcResponseEntry> entries;
-          // Find all the memories that are exportable via CUDA-IPC
-          enumerate_ipc_entries(entries, n.memories);
-          enumerate_ipc_entries(entries, n.ib_memories);
-
-          // Broadcast all the IPC handles to all my peers
-          // TODO: this could be replaced with ipc_mailbox
-          size_t datalen = entries.size() * sizeof(entries[0]);
-          ActiveMessage<CudaIpcImportRequest> amsg(
-              ipc_peers,
-              ActiveMessage<CudaIpcImportRequest>::recommended_max_payload(
-                  ipc_peers, entries.data(), HOST_NAME_MAX + datalen, 1, datalen, true));
+        size_t datalen = entries.size() * sizeof(entries[0]);
+        ActiveMessage<CudaIpcImportRequest> amsg(
+            ipc_peers,
+            ActiveMessage<CudaIpcImportRequest>::recommended_max_payload(
+                ipc_peers, entries.data(), HOST_NAME_MAX + datalen, 1, datalen, true));
 #if !defined(REALM_IS_WINDOWS)
-          amsg->hostid = gethostid();
-          char hostname[HOST_NAME_MAX];
-          gethostname(hostname, sizeof(hostname));
-          amsg.add_payload(hostname, sizeof(hostname));
+        amsg->hostid = gethostid();
+        char hostname[HOST_NAME_MAX] = {};
+        gethostname(hostname, sizeof(hostname));
+        amsg.add_payload(hostname, sizeof(hostname));
 #endif
-          amsg->count = entries.size();
-          amsg.add_payload(entries.data(), datalen);
-          amsg.commit();
+        amsg->count = entries.size();
+        amsg.add_payload(entries.data(), datalen);
+        amsg.commit();
 
-          log_cudaipc.debug() << "Sent " << entries.size() << " IPC entries";
-
-          {
-            // Wait for all the ipc_peers to send their IPC handles back to us
-            AutoLock<> al(cudaipc_mutex);
-            log_cudaipc.debug() << "Waiting for cudaipc responses...";
-
-            cudaipc_responses_received.store_release(ipc_peers.size());
-            initialization_complete.store_release(true);
-            cudaipc_condvar.broadcast();
-            while(cuda_module_singleton->cudaipc_responses_received.load_acquire() != 0) {
-              cudaipc_condvar.wait();
-            }
-          }
-        }
+        log_cudaipc.debug() << "Sent " << entries.size() << " IPC entries";
+      }
+      {
+        AutoLock<> al(cudaipc_mutex);
+        cudaipc_ready = true;
+        cudaipc_condvar.broadcast();
+        while(!cudaipc_pending_peers.empty())
+          cudaipc_condvar.wait();
       }
 
       // now actually let each GPU make its channels
@@ -4435,22 +4428,20 @@ namespace Realm {
                                                          const void *data, size_t datalen)
     {
       const CudaIpcResponseEntry *entries = nullptr;
-      assert(cuda_module_singleton != nullptr);
-      bool allow_ipc = true;
+      CudaModule *module = cuda_module_singleton;
+      if(!module)
+        return;
+      bool allow_ipc = Network::shared_peers.contains(sender);
 
       log_cudaipc.debug() << "IPC request from " << sender;
 
       {
-        // Make sure initialization of the cuda module is complete before servicing the
-        // active message. This will always be skipped, except in the rare case the
-        // network module is initialized before the cuda module.
-        AutoLock<> al(cuda_module_singleton->cudaipc_mutex);
-        log_cudaipc.debug(
-            "Waiting for cuda module initialization before processing IPC request");
-        while(!cuda_module_singleton->initialization_complete.load_acquire()) {
-          cuda_module_singleton->cudaipc_condvar.wait();
-        }
-        log_cudaipc.debug("Module initialized, processing IPC request");
+        // A peer can send while this rank is still preparing local GPU mappings.
+        AutoLock<> al(module->cudaipc_mutex);
+        while(!module->cudaipc_ready)
+          module->cudaipc_condvar.wait();
+        if(!module->cudaipc_pending_peers.contains(sender))
+          return;
       }
 
       if(args.count == 0) {
@@ -4467,7 +4458,7 @@ namespace Realm {
       //  that are not cuda ipc capable. This can lead to a failure when opening
       //  the ipc handle from another physical node, or it could succeed and we
       //  could end up getting corrupted results.
-      if(Realm::get_runtime()->shared_peers_use_network_module) {
+      if(allow_ipc && module->runtime->shared_peers_use_network_module) {
         char local_hostname[HOST_NAME_MAX] = {0};
         assert(datalen > sizeof(local_hostname));
         gethostname(local_hostname, sizeof(local_hostname));
@@ -4492,7 +4483,7 @@ namespace Realm {
       //    for each gpu: add an ipc mapping
       //  if type == ipc and allow IPC:
       //    for each gpu: open_ipc(), add an ipc mapping.
-      for(GPU *gpu : cuda_module_singleton->gpus) {
+      for(GPU *gpu : module->gpus) {
         for(size_t i = 0; i < args.count; i++) {
           const CudaIpcResponseEntry &entry = entries[i];
           GPU::CudaIpcMapping mapping;
@@ -4502,7 +4493,7 @@ namespace Realm {
           mapping.owner = sender;
           mapping.mem = entry.mem;
 
-          for(GPU *mapping_gpu : cuda_module_singleton->gpus) {
+          for(GPU *mapping_gpu : module->gpus) {
             if(memcmp(&mapping_gpu->info->uuid, &entries[i].src_gpu_uuid,
                       sizeof(mapping_gpu->info->uuid)) == 0) {
               mapping.src_gpu = mapping_gpu;
@@ -4519,7 +4510,8 @@ namespace Realm {
           case CUDA_IPC_RESPONSE_TYPE_FABRIC:
             // TODO(cperry): Seperate this out such that we can leverage the same VA
             // across all GPUs that can import this memory to reduce the import time cost
-            if((gpu->info->fabric_clique == entry.data.fabric.clique_id) &&
+            if(gpu->info->fabric_supported &&
+               (gpu->info->fabric_clique == entry.data.fabric.clique_id) &&
                (memcmp(gpu->info->fabric_uuid.bytes, entry.data.fabric.cluster_uuid.bytes,
                        sizeof(gpu->info->fabric_uuid.bytes)) == 0)) {
               alloc =
@@ -4535,7 +4527,7 @@ namespace Realm {
           }
 
           if(alloc != nullptr) {
-            AutoLock<> al(cuda_module_singleton->cudaipc_mutex);
+            AutoLock<> al(module->cudaipc_mutex);
 
             if(alloc->get_hptr() != nullptr) {
               gpu->pinned_sysmems.insert(entry.mem);
@@ -4560,14 +4552,11 @@ namespace Realm {
 
     Done:
     {
-      // Count the number of peers that have been received and signal to continue
-      // initialization when all of them have been recieved.  This needs to be done for
-      // every message received in order to unblock module initialization
-      AutoLock<> al(cuda_module_singleton->cudaipc_mutex);
-      if((cuda_module_singleton->cudaipc_responses_received.fetch_sub_acqrel(1)) == 1) {
-        log_cudaipc.debug() << "Signalling completion!";
-        cuda_module_singleton->cudaipc_condvar.signal();
-      }
+      // Empty or unimportable announcements complete the exchange too.
+      AutoLock<> al(module->cudaipc_mutex);
+      module->cudaipc_pending_peers.remove(sender);
+      if(module->cudaipc_pending_peers.empty())
+        module->cudaipc_condvar.signal();
     }
     }
 

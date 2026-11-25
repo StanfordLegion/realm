@@ -320,6 +320,42 @@ endmacro()
 
 add_integration_test(version_check "${REALM_TEST_DIR}/version_check.cc")
 add_integration_test(rank_count_check "${REALM_TEST_DIR}/rank_count_check.cc")
+if(REALM_USE_CUDA AND TEST_PROCESSORS GREATER 1)
+  add_integration_test(cuda_ipc_startup "${REALM_TEST_DIR}/gpu_ipc_startup.cc")
+  add_test(NAME cuda_ipc_startup_gpu_on_peer
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:cuda_ipc_startup> ${MPIEXEC_POSTFLAGS}
+                   -test:gpu-rank 1
+  )
+  add_test(NAME cuda_ipc_startup_ipc_disabled
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:cuda_ipc_startup> ${MPIEXEC_POSTFLAGS}
+                   -test:gpu-rank -1 -test:ipc-disabled-rank 1
+  )
+  set_tests_properties(
+    cuda_ipc_startup cuda_ipc_startup_gpu_on_peer cuda_ipc_startup_ipc_disabled
+    PROPERTIES RESOURCE_LOCK "${TEST_RESOURCE_LOCK}" TIMEOUT 60
+  )
+  list(APPEND _integ_extra_tests cuda_ipc_startup_gpu_on_peer cuda_ipc_startup_ipc_disabled)
+endif()
+if(REALM_USE_HIP
+   AND CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND TEST_PROCESSORS GREATER 1
+)
+  set(hip_ipc_startup_ARGS -test:backend hip)
+  add_integration_test(hip_ipc_startup "${REALM_TEST_DIR}/gpu_ipc_startup.cc")
+  add_test(NAME hip_ipc_startup_gpu_on_peer
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:hip_ipc_startup> ${MPIEXEC_POSTFLAGS}
+                   ${hip_ipc_startup_ARGS} -test:gpu-rank 1
+  )
+  add_test(NAME hip_ipc_shutdown
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:hip_ipc_startup> ${MPIEXEC_POSTFLAGS}
+                   ${hip_ipc_startup_ARGS} -test:gpu-rank -1 -test:ipc-disabled-rank 1
+  )
+  set_tests_properties(
+    hip_ipc_startup hip_ipc_startup_gpu_on_peer hip_ipc_shutdown
+    PROPERTIES RESOURCE_LOCK "${TEST_RESOURCE_LOCK}" TIMEOUT 60
+  )
+  list(APPEND _integ_extra_tests hip_ipc_startup_gpu_on_peer hip_ipc_shutdown)
+endif()
 add_integration_test(serializing "${REALM_TEST_DIR}/serializing.cc")
 set(ctxswitch_ARGS -ll:io 1 -t 30 -i 10000)
 add_integration_test(ctxswitch "${REALM_TEST_DIR}/ctxswitch.cc")
