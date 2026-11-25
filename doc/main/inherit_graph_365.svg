@@ -11,10 +11,10 @@
 <!-- Node0 -->
 <g id="Node000000" class="node">
 <title>Node0</title>
-<g id="a_Node000000"><a xlink:href="structRealm_1_1MemoryQueryImpl_1_1BestMemAffinityCostFn.html" target="_top" xlink:title=" ">
+<g id="a_Node000000"><a xlink:href="structRealm_1_1MemoryQueryImpl_1_1BestProcAffinityCostFn.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="145,-33.5 0,-33.5 0,0 145,0 145,-33.5"/>
 <text xml:space="preserve" text-anchor="start" x="8" y="-20" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::MemoryQueryImpl</text>
-<text xml:space="preserve" text-anchor="middle" x="72.5" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00">::BestMemAffinityCostFn</text>
+<text xml:space="preserve" text-anchor="middle" x="72.5" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00">::BestProcAffinityCostFn</text>
 </a>
 </g>
 </g>

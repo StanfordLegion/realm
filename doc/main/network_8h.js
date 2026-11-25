@@ -21,6 +21,7 @@ var network_8h =
     [ "Realm::Network::create_active_message_impl", "namespaceRealm_1_1Network.html#ababf531a97e5aea3f69af71a29467b7a", null ],
     [ "Realm::Network::create_active_message_impl", "namespaceRealm_1_1Network.html#ac511160936ccc2e5a9168ac516bec5c2", null ],
     [ "Realm::Network::create_active_message_impl", "namespaceRealm_1_1Network.html#a1077936badc65e85e0d8c6e7b56f7b4b", null ],
+    [ "Realm::Network::find_ipc_peers", "namespaceRealm_1_1Network.html#a602ad0d9bf77ca90b1a35d56d4866be2", null ],
     [ "Realm::Network::gather", "namespaceRealm_1_1Network.html#a30b1c9ffb339c0da416a799b91b6d8ef", null ],
     [ "Realm::Network::gather", "namespaceRealm_1_1Network.html#a3effd76cf06074e7438bf2a829a11fbc", null ],
     [ "Realm::Network::gather", "namespaceRealm_1_1Network.html#a4abc235b590cd22c017c646f6a90c5a2", null ],

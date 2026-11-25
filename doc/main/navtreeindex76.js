@@ -1,10 +1,5 @@
 var NAVTREEINDEX76 =
 {
-"structRealm_1_1ReductionOpUntyped.html#ac782a316b5dcb50402862417a90e9251":[1,0,3,324,1],
-"structRealm_1_1ReductionOpUntyped.html#ac782a316b5dcb50402862417a90e9251":[2,0,3,313,1],
-"structRealm_1_1RegionInstance_1_1DestroyedField.html":[1,0,3,206,0],
-"structRealm_1_1RegionInstance_1_1DestroyedField.html":[2,0,3,195,0],
-"structRealm_1_1RegionInstance_1_1DestroyedField.html#a1d3df01dad75b3684f2ab4b52af3c21c":[1,0,3,206,0,3],
 "structRealm_1_1RegionInstance_1_1DestroyedField.html#a1d3df01dad75b3684f2ab4b52af3c21c":[2,0,3,195,0,3],
 "structRealm_1_1RegionInstance_1_1DestroyedField.html#a21fa85bc5c99a26ac5f24ab17bde898e":[1,0,3,206,0,4],
 "structRealm_1_1RegionInstance_1_1DestroyedField.html#a21fa85bc5c99a26ac5f24ab17bde898e":[2,0,3,195,0,4],
@@ -249,5 +244,10 @@ var NAVTREEINDEX76 =
 "structRealm_1_1SparsityMapRefCounter_1_1SparsityMapAddReferenceMessage.html#a58b9b2a92ac92291e3b68182ea131ef0":[1,0,3,118,0,1],
 "structRealm_1_1SparsityMapRefCounter_1_1SparsityMapAddReferenceMessage.html#a58b9b2a92ac92291e3b68182ea131ef0":[2,0,3,107,0,1],
 "structRealm_1_1SparsityMapRefCounter_1_1SparsityMapAddReferenceMessage.html#ae746fe190f4442cef9f1a6275adc2177":[1,0,3,118,0,2],
-"structRealm_1_1SparsityMapRefCounter_1_1SparsityMapAddReferenceMessage.html#ae746fe190f4442cef9f1a6275adc2177":[2,0,3,107,0,2]
+"structRealm_1_1SparsityMapRefCounter_1_1SparsityMapAddReferenceMessage.html#ae746fe190f4442cef9f1a6275adc2177":[2,0,3,107,0,2],
+"structRealm_1_1SparsityMapRefCounter_1_1SparsityMapAddReferenceMessage.html#aee15375f5e9846aedb860599fd74865a":[1,0,3,118,0,0],
+"structRealm_1_1SparsityMapRefCounter_1_1SparsityMapAddReferenceMessage.html#aee15375f5e9846aedb860599fd74865a":[2,0,3,107,0,0],
+"structRealm_1_1SparsityMapRefCounter_1_1SparsityMapRemoveReferencesMessage.html":[1,0,3,118,1],
+"structRealm_1_1SparsityMapRefCounter_1_1SparsityMapRemoveReferencesMessage.html":[2,0,3,107,1],
+"structRealm_1_1SparsityMapRefCounter_1_1SparsityMapRemoveReferencesMessage.html#a2615001f4d9db2f51d3b2d608ee8a6c3":[1,0,3,118,1,1]
 };

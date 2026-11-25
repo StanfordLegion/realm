@@ -17,11 +17,10 @@ var searchData=
   ['hierarchicalbitmap_3c_20n_2c_20t_20_3e_14',['HierarchicalBitMap&lt; N, T &gt;',['../classRealm_1_1HierarchicalBitMap.html',1,'Realm']]],
   ['hipdevicememoryinfo_15',['HipDeviceMemoryInfo',['../classRealm_1_1Hip_1_1HipDeviceMemoryInfo.html',1,'Realm::Hip']]],
   ['hipipcmapping_16',['HipIpcMapping',['../structRealm_1_1Hip_1_1GPU_1_1HipIpcMapping.html',1,'Realm::Hip::GPU']]],
-  ['hipipcrelease_17',['HipIpcRelease',['../structRealm_1_1Hip_1_1HipIpcRelease.html',1,'Realm::Hip']]],
-  ['hipipcrequest_18',['HipIpcRequest',['../structRealm_1_1Hip_1_1HipIpcRequest.html',1,'Realm::Hip']]],
-  ['hipipcresponse_19',['HipIpcResponse',['../structRealm_1_1Hip_1_1HipIpcResponse.html',1,'Realm::Hip']]],
-  ['hipmodule_20',['HipModule',['../classRealm_1_1Hip_1_1HipModule.html',1,'Realm::Hip']]],
-  ['hipmoduleconfig_21',['HipModuleConfig',['../classRealm_1_1Hip_1_1HipModuleConfig.html',1,'Realm::Hip']]],
-  ['hipredopdesc_22',['HipRedOpDesc',['../structRealm_1_1Hip_1_1HipRedOpDesc.html',1,'Realm::Hip']]],
-  ['hybridrectanglelist_23',['HybridRectangleList',['../classRealm_1_1HybridRectangleList.html',1,'Realm']]]
+  ['hipipcrequest_17',['HipIpcRequest',['../structRealm_1_1Hip_1_1HipIpcRequest.html',1,'Realm::Hip']]],
+  ['hipipcresponse_18',['HipIpcResponse',['../structRealm_1_1Hip_1_1HipIpcResponse.html',1,'Realm::Hip']]],
+  ['hipmodule_19',['HipModule',['../classRealm_1_1Hip_1_1HipModule.html',1,'Realm::Hip']]],
+  ['hipmoduleconfig_20',['HipModuleConfig',['../classRealm_1_1Hip_1_1HipModuleConfig.html',1,'Realm::Hip']]],
+  ['hipredopdesc_21',['HipRedOpDesc',['../structRealm_1_1Hip_1_1HipRedOpDesc.html',1,'Realm::Hip']]],
+  ['hybridrectanglelist_22',['HybridRectangleList',['../classRealm_1_1HybridRectangleList.html',1,'Realm']]]
 ];

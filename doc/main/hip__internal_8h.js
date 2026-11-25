@@ -41,7 +41,6 @@ var hip__internal_8h =
     [ "Realm::Hip::GPUreduceRemoteChannel", "classRealm_1_1Hip_1_1GPUreduceRemoteChannel.html", "classRealm_1_1Hip_1_1GPUreduceRemoteChannel" ],
     [ "Realm::Hip::HipIpcRequest", "structRealm_1_1Hip_1_1HipIpcRequest.html", null ],
     [ "Realm::Hip::HipIpcResponse", "structRealm_1_1Hip_1_1HipIpcResponse.html", "structRealm_1_1Hip_1_1HipIpcResponse" ],
-    [ "Realm::Hip::HipIpcRelease", "structRealm_1_1Hip_1_1HipIpcRelease.html", null ],
     [ "Realm::Hip::GPUReplHeapListener", "classRealm_1_1Hip_1_1GPUReplHeapListener.html", "classRealm_1_1Hip_1_1GPUReplHeapListener" ],
     [ "CHECK_CUDART", "hip__internal_8h.html#a347bfed4b338a2f3a450278b6bffd903", null ],
     [ "CHECK_HIP", "hip__internal_8h.html#a5a045d1d3827a97fd6ef12509b83cfe3", null ],

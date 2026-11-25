@@ -42,7 +42,7 @@
    <!-- BEGIN version select -->
     <br />
     <div class="dropdown">
-     <button class="dropbtn">Version 26.9.1+278c0a14</button>
+     <button class="dropbtn">Version 26.9.1+3b495d95</button>
      <div class="dropdown-content"></div>
     </div>
     <script type="text/javascript" src="../selectversion.js"></script>
@@ -144,7 +144,7 @@ Inheritance diagram for Realm::Hip::HipModule:</div>
 <div class="dynheader">
 Collaboration diagram for Realm::Hip::HipModule:</div>
 <div class="dyncontent">
-<div class="center"><iframe scrolling="no" loading="lazy" frameborder="0" src="classRealm_1_1Hip_1_1HipModule__coll__graph.svg" width="3203" height="2212"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
+<div class="center"><iframe scrolling="no" loading="lazy" frameborder="0" src="classRealm_1_1Hip_1_1HipModule__coll__graph.svg" width="3202" height="2039"><p><b>This browser is not able to show SVG: try Firefox, Chrome, Safari, or Opera instead.</b></p></iframe></div>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
@@ -168,6 +168,7 @@ Public Member Functions</h2></td></tr>
 Static Public Member Functions</h2></td></tr>
 <tr class="memitem:abf77cdc8a37483310592cf7fc0ab1e2a" id="r_abf77cdc8a37483310592cf7fc0ab1e2a"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="classRealm_1_1ModuleConfig.html">ModuleConfig</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#abf77cdc8a37483310592cf7fc0ab1e2a">create_module_config</a> (<a class="el" href="classRealm_1_1RuntimeImpl.html">RuntimeImpl</a> *<a class="el" href="#a4c74e9a2088dd6b5bc67ec804eb1e0cf">runtime</a>)</td></tr>
 <tr class="memitem:a0bbf8dfb3c85016856d336858cdf1a5e" id="r_a0bbf8dfb3c85016856d336858cdf1a5e"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="classRealm_1_1Module.html#a8fb2df3a8562b68c6beb35dd49b1fca7">Module</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a0bbf8dfb3c85016856d336858cdf1a5e">create_module</a> (<a class="el" href="classRealm_1_1RuntimeImpl.html">RuntimeImpl</a> *<a class="el" href="#a4c74e9a2088dd6b5bc67ec804eb1e0cf">runtime</a>)</td></tr>
+<tr class="memitem:a64132bec255dd49e6b1647a77b2c42ac" id="r_a64132bec255dd49e6b1647a77b2c42ac"><td class="memItemLeft" align="right" valign="top">static void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a64132bec255dd49e6b1647a77b2c42ac">configure_ipc_peers</a> ()</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
@@ -186,9 +187,7 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a2e895318826d7855942efef98cf5d065" id="r_a2e895318826d7855942efef98cf5d065"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1Hip_1_1GPUReplHeapListener.html">GPUReplHeapListener</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a2e895318826d7855942efef98cf5d065">rh_listener</a></td></tr>
 <tr class="memitem:a91a9267b3e72c124ce99686bbb343ef2" id="r_a91a9267b3e72c124ce99686bbb343ef2"><td class="memItemLeft" align="right" valign="top"><a class="el" href="namespaceRealm.html#a4713e57139284efc3da66bd4bbc20ebe">Mutex</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a91a9267b3e72c124ce99686bbb343ef2">hipipc_mutex</a></td></tr>
 <tr class="memitem:a64b85c68dcab5272f457cd66c92bf99e" id="r_a64b85c68dcab5272f457cd66c92bf99e"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1UnfairMutex.html#a44c0f520b52e5a4c7f61844fd1bd9764">Mutex::CondVar</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a64b85c68dcab5272f457cd66c92bf99e">hipipc_condvar</a></td></tr>
-<tr class="memitem:a6852f95231bb7cf421f391c42f208562" id="r_a6852f95231bb7cf421f391c42f208562"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; int &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a6852f95231bb7cf421f391c42f208562">hipipc_responses_needed</a></td></tr>
-<tr class="memitem:af5f7b9ed0142a00602758e6e39517a34" id="r_af5f7b9ed0142a00602758e6e39517a34"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; int &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#af5f7b9ed0142a00602758e6e39517a34">hipipc_releases_needed</a></td></tr>
-<tr class="memitem:a64c8ca947b2ea3dc2361fff85ba4bd07" id="r_a64c8ca947b2ea3dc2361fff85ba4bd07"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt; int &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#a64c8ca947b2ea3dc2361fff85ba4bd07">hipipc_exports_remaining</a></td></tr>
+<tr class="memitem:adcb2fdac9b2cc0e7b9b092a338f0f43b" id="r_adcb2fdac9b2cc0e7b9b092a338f0f43b"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classRealm_1_1NodeSet.html">NodeSet</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="#adcb2fdac9b2cc0e7b9b092a338f0f43b">hipipc_pending_responses</a></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pro-methods" class="groupheader"><a id="pro-methods" name="pro-methods"></a>
 Protected Member Functions</h2></td></tr>
@@ -277,6 +276,31 @@ Additional Inherited Members</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Reimplemented from <a class="el" href="classRealm_1_1Module.html#a21db77990180d624ec07ded1234dcd86">Realm::Module</a>.</p>
+
+</div>
+</div>
+<a id="a64132bec255dd49e6b1647a77b2c42ac" name="a64132bec255dd49e6b1647a77b2c42ac"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a64132bec255dd49e6b1647a77b2c42ac">&#9670;&#160;</a></span>configure_ipc_peers()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void Realm::Hip::HipModule::configure_ipc_peers </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
 
 </div>
 </div>
@@ -623,20 +647,6 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
-<a id="a64c8ca947b2ea3dc2361fff85ba4bd07" name="a64c8ca947b2ea3dc2361fff85ba4bd07"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a64c8ca947b2ea3dc2361fff85ba4bd07">&#9670;&#160;</a></span>hipipc_exports_remaining</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt;int&gt; Realm::Hip::HipModule::hipipc_exports_remaining</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-</div>
-</div>
 <a id="a91a9267b3e72c124ce99686bbb343ef2" name="a91a9267b3e72c124ce99686bbb343ef2"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a91a9267b3e72c124ce99686bbb343ef2">&#9670;&#160;</a></span>hipipc_mutex</h2>
 
@@ -651,28 +661,14 @@ Additional Inherited Members</h2></td></tr>
 
 </div>
 </div>
-<a id="af5f7b9ed0142a00602758e6e39517a34" name="af5f7b9ed0142a00602758e6e39517a34"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af5f7b9ed0142a00602758e6e39517a34">&#9670;&#160;</a></span>hipipc_releases_needed</h2>
+<a id="adcb2fdac9b2cc0e7b9b092a338f0f43b" name="adcb2fdac9b2cc0e7b9b092a338f0f43b"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adcb2fdac9b2cc0e7b9b092a338f0f43b">&#9670;&#160;</a></span>hipipc_pending_responses</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt;int&gt; Realm::Hip::HipModule::hipipc_releases_needed</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-</div>
-</div>
-<a id="a6852f95231bb7cf421f391c42f208562" name="a6852f95231bb7cf421f391c42f208562"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6852f95231bb7cf421f391c42f208562">&#9670;&#160;</a></span>hipipc_responses_needed</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname"><a class="el" href="classRealm_1_1atomic.html">atomic</a>&lt;int&gt; Realm::Hip::HipModule::hipipc_responses_needed</td>
+          <td class="memname"><a class="el" href="classRealm_1_1NodeSet.html">NodeSet</a> Realm::Hip::HipModule::hipipc_pending_responses</td>
         </tr>
       </table>
 </div><div class="memdoc">

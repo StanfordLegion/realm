@@ -37,7 +37,6 @@ var namespaceRealm_1_1Hip =
     [ "GPUreduceRemoteChannel", "classRealm_1_1Hip_1_1GPUreduceRemoteChannel.html", "classRealm_1_1Hip_1_1GPUreduceRemoteChannel" ],
     [ "HipIpcRequest", "structRealm_1_1Hip_1_1HipIpcRequest.html", null ],
     [ "HipIpcResponse", "structRealm_1_1Hip_1_1HipIpcResponse.html", "structRealm_1_1Hip_1_1HipIpcResponse" ],
-    [ "HipIpcRelease", "structRealm_1_1Hip_1_1HipIpcRelease.html", null ],
     [ "GPUReplHeapListener", "classRealm_1_1Hip_1_1GPUReplHeapListener.html", "classRealm_1_1Hip_1_1GPUReplHeapListener" ],
     [ "AffineSubRect", "structRealm_1_1Hip_1_1AffineSubRect.html", "structRealm_1_1Hip_1_1AffineSubRect" ],
     [ "AffineCopyPair", "structRealm_1_1Hip_1_1AffineCopyPair.html", "structRealm_1_1Hip_1_1AffineCopyPair" ],

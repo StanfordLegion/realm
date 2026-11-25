@@ -486,7 +486,6 @@ var hierarchy =
     ] ],
     [ "Realm::HierarchicalBitMap&lt; N, T &gt;", "classRealm_1_1HierarchicalBitMap.html", null ],
     [ "Realm::Hip::GPU::HipIpcMapping", "structRealm_1_1Hip_1_1GPU_1_1HipIpcMapping.html", null ],
-    [ "Realm::Hip::HipIpcRelease", "structRealm_1_1Hip_1_1HipIpcRelease.html", null ],
     [ "Realm::Hip::HipIpcRequest", "structRealm_1_1Hip_1_1HipIpcRequest.html", null ],
     [ "Realm::Hip::HipIpcResponse", "structRealm_1_1Hip_1_1HipIpcResponse.html", null ],
     [ "Realm::Hip::HipRedOpDesc", "structRealm_1_1Hip_1_1HipRedOpDesc.html", null ],

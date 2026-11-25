@@ -11,10 +11,10 @@
 <!-- Node0 -->
 <g id="Node000000" class="node">
 <title>Node0</title>
-<g id="a_Node000000"><a xlink:href="structRealm_1_1RemoteIBAllocResponseMultiple.html" target="_top" xlink:title=" ">
+<g id="a_Node000000"><a xlink:href="structRealm_1_1RemoteIBAllocResponseSingle.html" target="_top" xlink:title=" ">
 <polygon fill="white" stroke="#666666" points="172.75,-33.5 0,-33.5 0,0 172.75,0 172.75,-33.5"/>
 <text xml:space="preserve" text-anchor="start" x="8" y="-20" font-family="Helvetica,sans-Serif" font-size="10.00">Realm::RemoteIBAllocResponse</text>
-<text xml:space="preserve" text-anchor="middle" x="86.38" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00">Multiple</text>
+<text xml:space="preserve" text-anchor="middle" x="86.38" y="-7.25" font-family="Helvetica,sans-Serif" font-size="10.00">Single</text>
 </a>
 </g>
 </g>
