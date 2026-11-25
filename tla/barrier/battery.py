@@ -378,6 +378,18 @@ VALVE = [
   "ValveSlack.cfg", "MCValveSlack", "CATCH",
   [("                        /\\ (newTsTot + SubQ(myEpoch[Owner], Owner) > expected[m.gen])",
     "                        /\\ FALSE")]),
+ # T4-03b - the OTHER half of the same valve: the switch-time over_slack test
+ #  in Trigger's deviant audit.  The receipt row above only covers the case
+ #  where the bypassed arrival lands AFTER the plan installs; this one covers
+ #  it running ahead of the install, when the owner has no tree state to show
+ #  for the credit but the new tree still cannot reach its predicted total.
+ #  Without this row the install half was in the spec and in the checked state
+ #  space, but nothing showed it was load-bearing rather than subsumed by the
+ #  receipt check.
+ ("no install valve: a bypassed credit past the NEW plan's slack is not re-announced",
+  "ValveSlack.cfg", "MCValveSlack", "CATCH",
+  [("                                        \\/ (TsTotal(h) + SubQ(k, Owner) > expected[h])",
+    "                                        \\/ FALSE")]),
 ]
 
 SUITES = {
