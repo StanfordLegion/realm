@@ -134,7 +134,7 @@ void main_task(const void *args, size_t arglen, const void *userdata, size_t use
     prev_event =
         p.spawn(READER_TASK, &task_args, sizeof(TaskArguments),
                 p.spawn(WRITER_TASK, &task_args, sizeof(TaskArguments), create_event));
-    inst.destroy(prev_event);
+    prev_event = inst.destroy(prev_event);
   }
 
   start_event.trigger();
