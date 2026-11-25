@@ -37,32 +37,30 @@ namespace Realm {
   //  these IDs directly
   enum ProfilingMeasurementID
   {
-    PMID_OP_STATUS,            // completion status of operation
-    PMID_OP_STATUS_ABNORMAL,   // completion status only if abnormal
-    PMID_OP_BACKTRACE,         // backtrace of a failed operation
-    PMID_OP_TIMELINE,          // when task was ready, started, completed
-    PMID_OP_EVENT_WAITS,       // intervals when operation is waiting on events
-    PMID_OP_PROC_USAGE,        // processor used by task
-    PMID_OP_MEM_USAGE,         // memories used by a copy
-    PMID_INST_STATUS,          // "completion" status of an instance
-    PMID_INST_STATUS_ABNORMAL, // completion status only if abnormal
-    PMID_INST_ALLOCRESULT,     // success/failure of instance allocation
-    PMID_INST_TIMELINE,        // timeline for a physical instance
-    PMID_INST_MEM_USAGE,       // memory and size used by an instance
-    PMID_PCTRS_CACHE_L1I,      // L1 I$ performance counters
-    PMID_PCTRS_CACHE_L1D,      // L1 D$ performance counters
-    PMID_PCTRS_CACHE_L2,       // L2 D$ performance counters
-    PMID_PCTRS_CACHE_L3,       // L3 D$ performance counters
-    PMID_PCTRS_IPC,            // instructions/clocks performance counters
-    PMID_PCTRS_TLB,            // TLB miss counters
-    PMID_PCTRS_BP,             // branch predictor performance counters
-    PMID_OP_TIMELINE_GPU,      // when a task was started and completed on the GPU
-    PMID_OP_SUBGRAPH_INFO,     // identifying info for containing subgraph(s)
-    PMID_OP_FINISH_EVENT,      // finish event for an operation
-    PMID_OP_COPY_INFO,         // copy transfer details
-    // as the name suggests, this should always be last, allowing apps/runtimes
-    // sitting on top of Realm to use some of the ID space
-    PMID_REALM_LAST = 10000,
+    PMID_OP_STATUS = ::PMID_OP_STATUS,
+    PMID_OP_STATUS_ABNORMAL = ::PMID_OP_STATUS_ABNORMAL,
+    PMID_OP_BACKTRACE = ::PMID_OP_BACKTRACE,
+    PMID_OP_TIMELINE = ::PMID_OP_TIMELINE,
+    PMID_OP_EVENT_WAITS = ::PMID_OP_EVENT_WAITS,
+    PMID_OP_PROC_USAGE = ::PMID_OP_PROC_USAGE,
+    PMID_OP_MEM_USAGE = ::PMID_OP_MEM_USAGE,
+    PMID_INST_STATUS = ::PMID_INST_STATUS,
+    PMID_INST_STATUS_ABNORMAL = ::PMID_INST_STATUS_ABNORMAL,
+    PMID_INST_ALLOCRESULT = ::PMID_INST_ALLOCRESULT,
+    PMID_INST_TIMELINE = ::PMID_INST_TIMELINE,
+    PMID_INST_MEM_USAGE = ::PMID_INST_MEM_USAGE,
+    PMID_PCTRS_CACHE_L1I = ::PMID_PCTRS_CACHE_L1I,
+    PMID_PCTRS_CACHE_L1D = ::PMID_PCTRS_CACHE_L1D,
+    PMID_PCTRS_CACHE_L2 = ::PMID_PCTRS_CACHE_L2,
+    PMID_PCTRS_CACHE_L3 = ::PMID_PCTRS_CACHE_L3,
+    PMID_PCTRS_IPC = ::PMID_PCTRS_IPC,
+    PMID_PCTRS_TLB = ::PMID_PCTRS_TLB,
+    PMID_PCTRS_BP = ::PMID_PCTRS_BP,
+    PMID_OP_TIMELINE_GPU = ::PMID_OP_TIMELINE_GPU,
+    PMID_OP_SUBGRAPH_INFO = ::PMID_OP_SUBGRAPH_INFO,
+    PMID_OP_FINISH_EVENT = ::PMID_OP_FINISH_EVENT,
+    PMID_OP_COPY_INFO = ::PMID_OP_COPY_INFO,
+    PMID_REALM_LAST = ::PMID_REALM_LAST
   };
 
   namespace ProfilingMeasurements {
@@ -95,6 +93,10 @@ namespace Realm {
 
       std::vector<uintptr_t> pcs;
       std::vector<std::string> symbols;
+
+      inline realm_status_t to_c(uintptr_t *result, size_t *result_count) const;
+      inline realm_status_t to_c(realm_profiling_operation_backtrace_symbol_t *result,
+                                 size_t *result_count) const;
     };
 
     struct OperationTimeline {
@@ -127,6 +129,8 @@ namespace Realm {
       inline void record_end_time(void);
       inline void record_complete_time(void);
       inline bool is_valid(void) const;
+
+      inline realm_status_t to_c(realm_profiling_operation_timeline_t *result) const;
     };
 
     struct OperationTimelineGPU {
@@ -147,6 +151,8 @@ namespace Realm {
       timestamp_t end_time;   // when was the GPU completed?
 
       inline bool is_valid(void) const;
+
+      inline realm_status_t to_c(realm_profiling_operation_timeline_gpu_t *result) const;
     };
 
     // records time intervals in which the operation was waiting on events
@@ -168,12 +174,18 @@ namespace Realm {
       };
 
       std::vector<WaitInterval> intervals;
+
+      inline realm_status_t to_c(realm_profiling_operation_event_wait_interval_t *result,
+                                 size_t *result_count) const;
     };
 
     // Track processor used for tasks
     struct OperationProcessorUsage {
       static const ProfilingMeasurementID ID = PMID_OP_PROC_USAGE;
       Processor proc;
+
+      inline realm_status_t
+      to_c(realm_profiling_operation_processor_usage_t *result) const;
     };
 
     // Track memories used for copies
@@ -182,6 +194,8 @@ namespace Realm {
       Memory source;
       Memory target;
       size_t size;
+
+      inline realm_status_t to_c(realm_profiling_operation_memory_usage_t *result) const;
     };
 
     // Track transfer details for copies
@@ -190,9 +204,9 @@ namespace Realm {
       // for each request create this
       enum RequestType
       {
-        FILL,
-        REDUCE,
-        COPY,
+        FILL = REALM_COPY_INFO_REQUEST_TYPE_FILL,
+        REDUCE = REALM_COPY_INFO_REQUEST_TYPE_REDUCE,
+        COPY = REALM_COPY_INFO_REQUEST_TYPE_COPY,
       };
 
       struct InstInfo {
@@ -208,6 +222,13 @@ namespace Realm {
         unsigned int num_hops;                 // num_hops for each request
       };
       std::vector<InstInfo> inst_info;
+
+      inline realm_status_t to_c(realm_profiling_operation_copy_info_t *result,
+                                 size_t *result_count) const;
+      inline realm_status_t to_c(realm_region_instance_t *result, size_t *result_count,
+                                 const void *data = nullptr) const;
+      inline realm_status_t to_c(realm_field_id_t *result, size_t *result_count,
+                                 const void *data = nullptr) const;
     };
 
     struct OperationFinishEvent {
@@ -275,6 +296,8 @@ namespace Realm {
       inline void record_create_time(void);
       inline void record_ready_time(void);
       inline void record_delete_time(void);
+
+      inline realm_status_t to_c(realm_profiling_instance_timeline_t *result) const;
     };
 
     // Track properties of an instance
@@ -283,6 +306,8 @@ namespace Realm {
       RegionInstance instance;
       Memory memory;
       size_t bytes;
+
+      inline realm_status_t to_c(realm_profiling_instance_memory_usage_t *result) const;
     };
 
     // Processor cache stats
@@ -341,6 +366,8 @@ namespace Realm {
     ProfilingRequest &add_measurement(ProfilingMeasurementID measurement_id);
     ProfilingRequest &
     add_measurements(const std::set<ProfilingMeasurementID> &measurement_ids);
+    ProfilingRequest &add_measurements(const ProfilingMeasurementID *measurement_ids,
+                                       size_t num_measurements);
 
     template <typename S>
     static ProfilingRequest *deserialize_new(S &s);
@@ -410,6 +437,8 @@ namespace Realm {
 
   protected:
     void send_response(const ProfilingRequest &pr) const;
+
+    void dump_to_buffer(const ProfilingRequest &pr, std::vector<char> &buffer) const;
 
     // in order to efficiently send responses as soon as we have all the requested
     // measurements, we

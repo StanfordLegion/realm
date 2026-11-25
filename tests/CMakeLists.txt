@@ -169,6 +169,7 @@ list(
   c_inst_copy.cc
   c_runtime_version.cc
   c_runtime_attr.cc
+  c_profiling.cc
   c_affinity.cc
   best_affinity_test.cc
   machine_query_cache_test.cc
@@ -625,6 +626,7 @@ endif()
 # TODO(weiwu): designated initializers require c++20, should be removed
 target_compile_features(c_external_inst PUBLIC cxx_std_20)
 target_link_libraries(c_external_inst ${TEST_GPU_LIBS})
+add_integration_test(c_profiling "${REALM_TEST_DIR}/c/test_c_profiling.cc")
 
 add_integration_test(c_event_poisoned "${REALM_TEST_DIR}/c/test_event_poisoned.cc")
 
