@@ -188,18 +188,14 @@ namespace Realm {
     //
     // class OpenMPModuleConfig
 
-    HDF5ModuleConfig::HDF5ModuleConfig(void)
-      : ModuleConfig("hdf5")
-    {}
-
-    void HDF5ModuleConfig::configure_from_cmdline(std::vector<std::string> &cmdline)
+    void HDF5ModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
     {
       // first order of business - read command line parameters
       CommandLineParser cp;
 
       cp.add_option_bool("-hdf5:showerrors", cfg_showerrors)
-          .add_option_int("-hdf5:openfiles", Config::max_open_files)
-          .add_option_bool("-hdf5:forcerw", Config::force_read_write);
+          .add_option_int("-hdf5:openfiles", cfg_max_open_files)
+          .add_option_bool("-hdf5:forcerw", cfg_force_read_write);
 
       bool ok = cp.parse_command_line(cmdline);
       if(!ok) {
@@ -230,7 +226,14 @@ namespace Realm {
 
     /*static*/ ModuleConfig *HDF5Module::create_module_config(RuntimeImpl *runtime)
     {
+      static constexpr ModuleConfig::Property properties[] = {
+          ModuleConfig::property<&HDF5ModuleConfig::cfg_showerrors>("showerrors"),
+          ModuleConfig::property<&HDF5ModuleConfig::cfg_max_open_files>("max_open_files"),
+          ModuleConfig::property<&HDF5ModuleConfig::cfg_force_read_write>(
+              "force_read_write"),
+      };
       HDF5ModuleConfig *config = new HDF5ModuleConfig();
+      ModuleConfig::bind<HDF5ModuleConfig>(properties);
       return config;
     }
 
@@ -240,13 +243,16 @@ namespace Realm {
       //  disabled
       HDF5Module *m = new HDF5Module;
 
-      HDF5ModuleConfig *config =
-          checked_cast<HDF5ModuleConfig *>(runtime->get_module_config("hdf5"));
+      HDF5ModuleConfig *config = runtime->get_module_config<HDF5ModuleConfig>();
       assert(config != nullptr);
       assert(config->finish_configured);
       assert(m->name == config->get_name());
       assert(m->config == nullptr);
       m->config = config;
+
+      // publish the file-cache settings to the globals used by the HDF5 memory
+      Config::max_open_files = config->cfg_max_open_files;
+      Config::force_read_write = config->cfg_force_read_write;
 
       {
         herr_t err = H5open();

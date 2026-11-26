@@ -596,18 +596,27 @@ namespace Realm {
 
   ////////////////////////////////////////////////////////////////////////
   //
+  // class MPIModuleConfig
+  //
+
+  void MPIModuleConfig::parse_cmdline(std::vector<std::string> &cmdline)
+  {
+    CommandLineParser cp;
+    cp.add_option_int_units("-ll:gsize", cfg_global_mem_size, 'm');
+
+    bool ok = cp.parse_command_line(cmdline);
+    assert(ok);
+  }
+
+  ////////////////////////////////////////////////////////////////////////
+  //
   // class MPIModule
   //
 
   MPIModule::MPIModule(void)
-    : NetworkModule("mpi")
+    : NetworkModule(MPIModuleConfig::MODULE_NAME)
+    , config(nullptr)
     , g_am_win(MPI_WIN_NULL)
-    , global_mem_size(0)
-  /*
-  , active_msg_worker_threads(1)
-  , active_msg_handler_threads(1)
-  , amsg_stack_size(2 << 20)
-  */
   {}
 
   /*static*/ NetworkModule *
@@ -687,20 +696,17 @@ namespace Realm {
 #endif
   }
 
-  // actual parsing of the command line should wait until here if at all
-  //  possible
-  void MPIModule::parse_command_line(RuntimeImpl *runtime,
-                                     std::vector<std::string> &cmdline)
+  // creates this module's configuration object (see NetworkModule) - the
+  //  settings are consumed in attach/create_memories
+  ModuleConfig *MPIModule::create_module_config(RuntimeImpl *runtime)
   {
-    CommandLineParser cp;
-    cp.add_option_int_units("-ll:gsize", global_mem_size, 'm')
-        //  .add_option_int("-ll:amsg", active_msg_worker_threads)
-        //  .add_option_int("-ll:ahandlers", active_msg_handler_threads)
-        //  .add_option_int_units("-ll:astack", amsg_stack_size, 'm')
-        ;
-
-    bool ok = cp.parse_command_line(cmdline);
-    assert(ok);
+    assert(config == nullptr);
+    static constexpr ModuleConfig::Property properties[] = {
+        ModuleConfig::property<&MPIModuleConfig::cfg_global_mem_size>("global_mem_size"),
+    };
+    config = new MPIModuleConfig;
+    ModuleConfig::bind<MPIModuleConfig>(properties);
+    return config;
   }
 
   // "attaches" to the network, if that is meaningful - attempts to
@@ -708,7 +714,7 @@ namespace Realm {
   //  segments with the network
   void MPIModule::attach(RuntimeImpl *runtime, std::vector<NetworkSegment *> &segments)
   {
-    size_t attach_size = global_mem_size;
+    size_t attach_size = config->cfg_global_mem_size;
     for(std::vector<NetworkSegment *>::iterator it = segments.begin();
         it != segments.end(); ++it) {
       if((*it)->bytes == 0)
@@ -736,7 +742,7 @@ namespace Realm {
                             MPI_COMM_WORLD));
 
     char *seg_base = reinterpret_cast<char *>(baseptr);
-    seg_base += global_mem_size;
+    seg_base += config->cfg_global_mem_size;
     for(std::vector<NetworkSegment *>::iterator it = segments.begin();
         it != segments.end(); ++it) {
       if((*it)->bytes == 0)
@@ -756,11 +762,12 @@ namespace Realm {
 
   void MPIModule::create_memories(RuntimeImpl *runtime)
   {
-    if(global_mem_size > 0) {
+    if(config->cfg_global_mem_size > 0) {
       // only node 0 creates the global memory
       if(Network::my_node_id == 0) {
         Memory m = runtime->next_local_memory_id();
-        MPIMemory *mem = new MPIMemory(runtime, m, global_mem_size, g_am_win, this);
+        MPIMemory *mem =
+            new MPIMemory(runtime, m, config->cfg_global_mem_size, g_am_win, this);
         runtime->add_memory(mem);
       }
     }

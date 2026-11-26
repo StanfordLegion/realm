@@ -45,6 +45,7 @@
 #include "realm/sampling.h"
 
 #include "realm/module.h"
+#include "realm/core_module_config.h"
 #include "realm/network.h"
 
 #include "realm/bgwork.h"
@@ -121,79 +122,6 @@ namespace Realm {
   std::ostream &operator<<(std::ostream &os, const Node &node);
 
   // the "core" module provides the basic memories and processors used by Realm
-  class CoreModuleConfig : public ModuleConfig {
-    friend class CoreModule;
-    friend class RuntimeImpl;
-
-  protected:
-    CoreModuleConfig(const HardwareTopology *topo);
-
-    bool discover_resource(void);
-
-  public:
-    virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
-
-  protected:
-    // configurations
-    // CoreModule
-    int num_cpu_procs = 1, num_util_procs = 1, num_io_procs = 0;
-    int concurrent_io_threads = 1; // Legion does not support values > 1 right now
-    size_t sysmem_size = 512 << 20;
-    size_t sysmem_ipc_limit = 0; // make the sysmem as shared only if share_sysmem_limit
-                                 // == 0 or sysmem_size <= share_sysmem_limit
-    size_t stack_size = 2 << 20;
-    bool pin_util_procs = false;
-    long long cpu_bgwork_timeslice = 0, util_bgwork_timeslice = 0;
-    bool use_ext_sysmem = true;
-
-    // RuntimeImpl
-    size_t reg_ib_mem_size = 0;
-    size_t reg_mem_size = 0;
-    size_t disk_mem_size = 0;
-    unsigned dma_worker_threads = 0; // unused - warning on application use
-    bool dma_multi_field = true;
-#ifdef EVENT_TRACING
-    size_t event_trace_block_size = 1 << 20;
-    double event_trace_exp_arrv_rate = 1e3;
-#endif
-#ifdef LOCK_TRACING
-    size_t lock_trace_block_size = 1 << 20;
-    double lock_trace_exp_arrv_rate = 1e2;
-#endif
-    // should local proc threads get dedicated cores?
-    bool dummy_reservation_ok = true;
-    bool show_reservations = false;
-    // are hyperthreads considered to share a physical core
-    bool hyperthread_sharing = true;
-    bool pin_dma_threads = false;        // unused - silently ignored on cmdline
-    size_t bitset_chunk_size = 32 << 10; // 32KB
-    // based on some empirical measurements, 1024 nodes seems like
-    //  a reasonable cutoff for switching to twolevel nodeset bitmasks
-    //  (measured on an E5-2698 v4)
-    int bitset_twolevel = -1024;        // i.e. yes if > 1024 nodes
-    int active_msg_handler_threads = 0; // default is none (use bgwork)
-    bool active_msg_handler_bgwork = true;
-    size_t replheap_size = 16 << 20;
-    std::string event_trace_file;
-    std::string lock_trace_file;
-#ifdef NODE_LOGGING
-    std::string prefix = ".";
-#endif
-
-    // resources
-    int res_num_cpus = 0;
-    size_t res_sysmem_size = 0;
-
-    // sparstiy maps
-    bool report_sparsity_leaks = false;
-
-    // barriers
-    int barrier_broadcast_radix = 4;
-
-    // topology of the host
-    const HardwareTopology *host_topology = nullptr;
-  };
-
   class CoreModule : public Module {
   public:
     CoreModule(void);
@@ -303,6 +231,10 @@ namespace Realm {
 
     bool configure_from_command_line(std::vector<std::string> &cmdline);
 
+    // asks each (already-created) network module for its config object - called
+    //  from whichever of create_configs/network_init runs second
+    void create_network_module_configs(void);
+
     void start(void);
 
     bool register_task(Processor::TaskFuncID taskid, Processor::TaskFuncPtr taskptr);
@@ -339,8 +271,14 @@ namespace Realm {
 
     bool create_configs(int argc, char **argv);
 
-    // return the configuration of a specific module
+    // return the configuration of a specific module (by name or by type) - a
+    //  null pointer is returned if the module is not present
     ModuleConfig *get_module_config(const std::string &name) const;
+    template <typename T>
+    T *get_module_config(void) const
+    {
+      return static_cast<T *>(get_module_config(T::MODULE_NAME));
+    }
 
     // three event-related impl calls - get_event_impl() will give you either
     //  a normal event or a barrier, but you won't be able to do specific things

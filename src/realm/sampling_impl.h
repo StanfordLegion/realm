@@ -126,8 +126,7 @@ namespace Realm {
     ~SamplingProfilerImpl(void);
 
   public:
-    void configure_from_cmdline(std::vector<std::string> &cmdline,
-                                CoreReservationSet &crs);
+    void configure(const CoreModuleConfig &config, CoreReservationSet &crs);
 
     void flush_data(void);
     void shutdown(void);

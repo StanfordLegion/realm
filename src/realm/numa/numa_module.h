@@ -19,34 +19,13 @@
 #define REALM_NUMA_MODULE_H
 
 #include "realm/module.h"
+#include "realm/numa/numa_module_config.h"
 
 namespace Realm {
 
   class MemoryImpl;
 
   namespace Numa {
-
-    class NumaModuleConfig : public ModuleConfig {
-      friend class NumaModule;
-
-    protected:
-      NumaModuleConfig(void);
-
-      bool discover_resource(void);
-
-    public:
-      virtual void configure_from_cmdline(std::vector<std::string> &cmdline);
-
-    protected:
-      size_t cfg_numa_mem_size = 0;
-      ssize_t cfg_numa_nocpu_mem_size = -1;
-      int cfg_num_numa_cpus = 0;
-      bool cfg_pin_memory = false;
-      size_t cfg_stack_size = 2 << 20;
-
-      // resources
-      std::vector<size_t> res_numa_mems; // the size of total memory of each numa domain.
-    };
 
     // our interface to the rest of the runtime
     class REALM_INTERNAL_API_EXTERNAL_LINKAGE NumaModule : public Module {
