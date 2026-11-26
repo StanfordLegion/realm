@@ -1639,6 +1639,7 @@ namespace Realm {
   void RuntimeImpl::create_shared_peers(void)
   {
 #if defined(REALM_USE_SHM) && defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
+    const auto bootstrap_progress = Network::single_network->start_bootstrap_progress();
     std::vector<OsHandle> handles;
     OsHandle all_node_mailbox =
         Realm::ipc_mailbox_create(get_mailbox_name(Network::my_node_id));

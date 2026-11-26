@@ -119,6 +119,8 @@ namespace Realm {
 
     virtual size_t max_payload_size(size_t header_size, const void *src_payload_addr);
 
+    virtual std::unique_ptr<BootstrapProgress> start_bootstrap_progress();
+
   protected:
     MPI_Win g_am_win; /* global window for RMA memory */
     ;

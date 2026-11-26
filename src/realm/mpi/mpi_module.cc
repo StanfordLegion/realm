@@ -27,7 +27,9 @@
 #include "realm/transfer/ib_memory.h"
 
 #include <limits.h>
+#include <atomic>
 #include <limits>
+#include <thread>
 
 #if !defined(REALM_MPI_HAS_COMM_SPLIT_TYPE) && defined(OMPI_MAJOR_VERSION)
 #if(OMPI_MAJOR_VERSION * 100 + OMPI_MINOR_VERSION) >= 107
@@ -642,6 +644,36 @@ namespace Realm {
     }
 #endif
     return new MPIModule;
+  }
+
+  std::unique_ptr<NetworkModule::BootstrapProgress> MPIModule::start_bootstrap_progress()
+  {
+    if(Network::all_peers.empty())
+      return {};
+
+    class ProgressThread final : public BootstrapProgress {
+    public:
+      ProgressThread()
+        : thread([this] {
+          while(!stop_requested.load()) {
+            Realm::MPI::poll_bootstrap_progress();
+            std::this_thread::yield();
+          }
+        })
+      {}
+
+      ~ProgressThread() override
+      {
+        stop_requested.store(true);
+        thread.join();
+      }
+
+    private:
+      std::atomic<bool> stop_requested{false};
+      std::thread thread;
+    };
+
+    return std::make_unique<ProgressThread>();
   }
 
   void MPIModule::get_shared_peers(NodeSet &shared_peers)

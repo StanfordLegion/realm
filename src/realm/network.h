@@ -27,6 +27,7 @@
 #include "realm/bytearray.h"
 
 #include <map>
+#include <memory>
 
 namespace Realm {
 
@@ -386,6 +387,15 @@ namespace Realm {
     //  for full documentation; callers wanting optimal performance should use
     //  recommended_max_payload() instead
     virtual size_t max_payload_size(size_t header_size, const void *src_payload_addr) = 0;
+
+    class BootstrapProgress {
+    public:
+      virtual ~BootstrapProgress() = default;
+    };
+
+    // Keep the network progressing while startup waits on IPC before attach().
+    // Destroying the returned guard ends that progress.
+    virtual std::unique_ptr<BootstrapProgress> start_bootstrap_progress() { return {}; }
   };
 
   namespace NetworkSegmentInfo {
