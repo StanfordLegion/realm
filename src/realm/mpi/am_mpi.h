@@ -56,7 +56,6 @@ namespace Realm {
 
     int AM_Init(int *p_node_this, int *p_node_size);
     void AM_Finalize();
-    void poll_bootstrap_progress();
     void AM_init_long_messages(MPI_Win win, void *am_base,
                                Realm::IncomingMessageManager *message_manager);
     void AMPoll();

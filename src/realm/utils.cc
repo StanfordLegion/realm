@@ -210,12 +210,10 @@ namespace Realm {
   }
 #if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS)
   static const char MAILBOX_PREFIX[] = "@realm_uds.";
-#endif
 
-  OsHandle ipc_mailbox_create(const std::string &name)
+  static sockaddr_un make_mailbox_address(const std::string &name)
   {
-#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS)
-    struct sockaddr_un addr = {};
+    sockaddr_un addr = {};
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, MAILBOX_PREFIX, sizeof(addr.sun_path) - 1);
     std::strncat(addr.sun_path, name.c_str(),
@@ -223,6 +221,14 @@ namespace Realm {
     // Use the abstract namespace so we don't need to unlink the file system
     // https://man7.org/linux/man-pages/man7/unix.7.html
     addr.sun_path[0] = 0;
+    return addr;
+  }
+#endif
+
+  OsHandle ipc_mailbox_create(const std::string &name)
+  {
+#if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS)
+    sockaddr_un addr = make_mailbox_address(name);
     // Use a DGRAM socket instead of a stream socket in order to create a connection-less,
     // bidirectional socket that mimics a mailbox
     OsHandle fd = socket(AF_UNIX, SOCK_DGRAM, 0);
@@ -242,27 +248,29 @@ namespace Realm {
 #endif
   }
 
+#if defined(REALM_ON_LINUX)
+  OsHandle ipc_mailbox_create_probe() { return socket(AF_UNIX, SOCK_DGRAM, 0); }
+
+  bool ipc_mailbox_reachable(OsHandle probe, const std::string &name)
+  {
+    sockaddr_un addr = make_mailbox_address(name);
+    // Datagram connect resolves the address without sending a message.
+    return connect(probe, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == 0;
+  }
+#endif
+
   bool ipc_mailbox_send(OsHandle mailbox, const std::string &to,
                         const std::vector<OsHandle> &handles, const void *data,
                         size_t data_sz)
   {
 #if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS)
     struct msghdr msg;
-    struct sockaddr_un addr;
+    sockaddr_un addr = make_mailbox_address(to);
     struct iovec in_band_msg;
     std::vector<char> control_buffer(CMSG_SPACE(handles.size() * sizeof(handles[0])), 0);
 
-    memset(&addr, 0, sizeof(addr));
     memset(&in_band_msg, 0, sizeof(in_band_msg));
     memset(&msg, 0, sizeof(msg));
-
-    std::strncpy(addr.sun_path, MAILBOX_PREFIX, sizeof(addr.sun_path) - 1);
-    std::strncat(addr.sun_path, to.c_str(),
-                 sizeof(addr.sun_path) - sizeof(MAILBOX_PREFIX));
-    // Use the abstract namespace so we don't need to unlink the file system
-    // https://man7.org/linux/man-pages/man7/unix.7.html
-    addr.sun_path[0] = 0;
-    addr.sun_family = AF_UNIX;
 
     msg.msg_name = &addr;
     msg.msg_namelen = sizeof(addr);

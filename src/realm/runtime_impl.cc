@@ -1638,46 +1638,30 @@ namespace Realm {
 
   void RuntimeImpl::create_shared_peers(void)
   {
-#if defined(REALM_USE_SHM) && defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
-    const auto bootstrap_progress = Network::single_network->start_bootstrap_progress();
-    std::vector<OsHandle> handles;
+#if defined(REALM_ON_LINUX) && defined(REALM_USE_SHM) &&                                 \
+    defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
     OsHandle all_node_mailbox =
         Realm::ipc_mailbox_create(get_mailbox_name(Network::my_node_id));
     Network::barrier(); // Wait for everyone to create their ipc mailboxes
     if(all_node_mailbox != Realm::INVALID_OS_HANDLE) {
-      NodeSet send_nodes;
+      OsHandle probe = Realm::ipc_mailbox_create_probe();
+      if(probe == Realm::INVALID_OS_HANDLE) {
+        log_runtime.fatal("Failed to create IPC mailbox probe: %s",
+                          realm_strerror(errno));
+        abort();
+      }
       for(NodeID node_id : Network::all_peers) {
-        std::string slot_name = get_mailbox_name(node_id);
-        if(!Realm::ipc_mailbox_send(all_node_mailbox, slot_name, handles,
-                                    &(Network::my_node_id), sizeof(NodeID))) {
-          log_runtime.info("Create shared_peers using ipc mailbox, but unable to "
-                           "send msg to node %u, skipping",
-                           (unsigned)node_id);
-          continue;
-        }
-        send_nodes.add(node_id);
+        if(Realm::ipc_mailbox_reachable(probe, get_mailbox_name(node_id)))
+          Network::shared_peers.add(node_id);
       }
-      for(NodeID node_id : send_nodes) {
-        NodeID recv_data = 0;
-        size_t data_sz;
-        std::string slot_name = get_mailbox_name(node_id);
-        if(!Realm::ipc_mailbox_recv(all_node_mailbox, slot_name, handles, &recv_data,
-                                    data_sz, sizeof(NodeID))) {
-          log_runtime.warning("Create shared_peers using ipc mailbox, but unable to "
-                              "recv msg from node %u, skipping",
-                              (unsigned)node_id);
-          continue;
-        }
-        assert(send_nodes.contains(recv_data) && "Received from unexpected node");
-        Network::shared_peers.add(node_id);
-      }
+      close_handle(probe);
       shared_peers_use_network_module = false;
     } else {
       log_runtime.warning("Failed to create ipc mailbox for building shared_peers, so "
                           "fall back to use network modules");
     }
 
-    // Wait for everyone to complete coordinating their shared_peers
+    // Keep mailboxes open until all peers have finished probing.
     Network::barrier();
     close_handle(all_node_mailbox);
 #endif

@@ -91,15 +91,6 @@ namespace Realm {
       return 0;
     }
 
-    void poll_bootstrap_progress()
-    {
-      // Medium payloads use tags starting at TAG_DATA_BASE on this private communicator.
-      constexpr int unused_tag = 0;
-      int found;
-      CHECK_MPI(
-          MPI_Iprobe(MPI_ANY_SOURCE, unused_tag, comm_medium, &found, MPI_STATUS_IGNORE));
-    }
-
     void AM_Finalize()
     {
       MPI_Request req_final;

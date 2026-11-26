@@ -407,6 +407,12 @@ namespace Realm {
   /// @return A valid OS handle it successful, Realm::INVALID_OS_HANDLE if not
   OsHandle ipc_mailbox_create(const std::string &name);
 
+#if defined(REALM_ON_LINUX)
+  // A separate unbound socket can probe multiple mailboxes and leave them unconnected.
+  OsHandle ipc_mailbox_create_probe();
+  bool ipc_mailbox_reachable(OsHandle probe, const std::string &name);
+#endif
+
   /// @brief Send the \p handles and \p data given via the \p mailbox created by
   /// ipc_mailbox_create to the receiving mailbox given by \p to
   /// @param mailbox Mailbox created via ipc_mailbox_create
