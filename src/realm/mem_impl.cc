@@ -1897,7 +1897,7 @@ namespace Realm {
       if(enable_ipc &&
          (SharedMemoryInfo::create(shared_memory, size, nullptr, numa_node)))
 #else
-      std::string name = get_shm_name(mem->memory_id);
+      std::string name = get_shm_name(ID(me).id);
       if(enable_ipc &&
          (SharedMemoryInfo::create(shared_memory, size, name.c_str(), numa_node)))
 #endif

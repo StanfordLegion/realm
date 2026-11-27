@@ -212,15 +212,18 @@ if((NOT REALM_SANITIZER OR REALM_SANITIZER STREQUAL "NONE")
    AND NOT CMAKE_CROSSCOMPILING
 )
   gtest_discover_tests(realm_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit")
-  gtest_discover_tests(realm_event_alloc_test NO_PRETTY_TYPES NO_PRETTY_VALUES
-                       PROPERTIES LABELS "unit")
+  gtest_discover_tests(
+    realm_event_alloc_test NO_PRETTY_TYPES NO_PRETTY_VALUES PROPERTIES LABELS "unit"
+  )
   # Discover c_unit_tests but exclude BestAffinityTest (runtime init not safe for per-test isolation)
-  gtest_discover_tests(realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES 
-                       TEST_FILTER "-BestAffinityTest.*"
-                       PROPERTIES LABELS "unit")
+  gtest_discover_tests(
+    realm_c_unit_tests NO_PRETTY_TYPES NO_PRETTY_VALUES TEST_FILTER "-BestAffinityTest.*"
+    PROPERTIES LABELS "unit"
+  )
   # Add BestAffinityTest as a single batch test
-  add_test(NAME BestAffinityTest 
-           COMMAND $<TARGET_FILE:realm_c_unit_tests> "--gtest_filter=BestAffinityTest.*")
+  add_test(NAME BestAffinityTest COMMAND $<TARGET_FILE:realm_c_unit_tests>
+                                         "--gtest_filter=BestAffinityTest.*"
+  )
   set_tests_properties(BestAffinityTest PROPERTIES LABELS "unit")
 else()
   add_test(NAME realm_unit_tests COMMAND $<TARGET_FILE:realm_unit_tests>)
@@ -258,7 +261,8 @@ if(REALM_ENABLE_COVERAGE)
     add_custom_command(
       TARGET coverage
       POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E echo "Cobertura coverage report saved in ${PROJECT_BINARY_DIR}/coverage.xml"
+      COMMAND ${CMAKE_COMMAND} -E echo
+              "Cobertura coverage report saved in ${PROJECT_BINARY_DIR}/coverage.xml"
     )
   else()
     set(CODE_COVERAGE_VERBOSE TRUE)
@@ -320,6 +324,28 @@ endmacro()
 
 add_integration_test(version_check "${REALM_TEST_DIR}/version_check.cc")
 add_integration_test(rank_count_check "${REALM_TEST_DIR}/rank_count_check.cc")
+# startup with an MPI whose barrier can return before its last message is delivered
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
+   AND REALM_USE_SHM
+   AND REALM_USE_MPI
+   AND MPIEXEC_EXECUTABLE
+   AND TEST_PROCESSORS GREATER 1
+)
+  set(mpi_startup_progress_ARGS -ll:networks mpi)
+  add_integration_test(mpi_startup_progress "${REALM_TEST_DIR}/mpi_startup_progress.cc")
+  target_link_libraries(mpi_startup_progress MPI::MPI_CXX)
+  # Make the MPI wrappers visible when Realm is linked as a shared library.
+  set_target_properties(mpi_startup_progress PROPERTIES ENABLE_EXPORTS TRUE)
+  add_test(NAME mpi_startup_asymmetric_csize
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:mpi_startup_progress> ${MPIEXEC_POSTFLAGS}
+                   ${mpi_startup_progress_ARGS} -test:asymmetric-csize
+  )
+  set_tests_properties(
+    mpi_startup_progress mpi_startup_asymmetric_csize PROPERTIES RESOURCE_LOCK
+                                                                 "${TEST_RESOURCE_LOCK}" TIMEOUT 60
+  )
+  list(APPEND _integ_extra_tests mpi_startup_asymmetric_csize)
+endif()
 if(REALM_USE_CUDA AND TEST_PROCESSORS GREATER 1)
   add_integration_test(cuda_ipc_startup "${REALM_TEST_DIR}/gpu_ipc_startup.cc")
   add_test(NAME cuda_ipc_startup_gpu_on_peer
@@ -370,8 +396,20 @@ add_integration_test(proc_group "${REALM_TEST_DIR}/proc_group.cc")
 add_integration_test(deppart "${REALM_TEST_DIR}/deppart.cc")
 # Use one partitioning worker so the local approximate image runs before a
 # deferred sparse target is populated. A dense target builds the tester inline.
-set(empty_preimage_ARGS -ll:bgwork 1 -ll:bgnuma 0 -ll:cpu_bgwork 0 -ll:util_bgwork 0
-                        -dp:workers 0 -dp:inline_ok 1)
+set(empty_preimage_ARGS
+    -ll:bgwork
+    1
+    -ll:bgnuma
+    0
+    -ll:cpu_bgwork
+    0
+    -ll:util_bgwork
+    0
+    -dp:workers
+    0
+    -dp:inline_ok
+    1
+)
 add_integration_test(empty_preimage "${REALM_TEST_DIR}/empty_preimage.cc")
 set_tests_properties(empty_preimage PROPERTIES TIMEOUT 120)
 set(scatter_ARGS -p1 2 -p2 2)
@@ -409,11 +447,14 @@ list(APPEND _integ_list actmsg_chunking)
 if(REALM_USE_GASNETEX)
   # Exercise fragmentation even when the conduit normally supports large messages.
   add_test(NAME actmsg_chunking_small_medium
-           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:actmsg_chunking>
-                   ${MPIEXEC_POSTFLAGS} ${actmsg_chunking_ARGS} -gex:maxmed 1024)
-  set_tests_properties(actmsg_chunking_small_medium PROPERTIES
-                       RESOURCE_LOCK "$<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}>"
-                       SKIP_RETURN_CODE 77 TIMEOUT 240)
+           COMMAND ${TEST_COMMAND_PREFIX} $<TARGET_FILE:actmsg_chunking> ${MPIEXEC_POSTFLAGS}
+                   ${actmsg_chunking_ARGS} -gex:maxmed 1024
+  )
+  set_tests_properties(
+    actmsg_chunking_small_medium
+    PROPERTIES RESOURCE_LOCK "$<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}>" SKIP_RETURN_CODE 77
+               TIMEOUT 240
+  )
   list(APPEND _integ_list actmsg_chunking_small_medium)
 endif()
 set(sparse_construct_ARGS -verbose)
@@ -429,8 +470,8 @@ add_test(NAME machine_queries_nocache
                  ${machine_queries_ARGS} -ll:machine_query_cache 0
 )
 set_property(
-  TEST machine_queries_nocache
-  PROPERTY RESOURCE_LOCK $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK} ${machine_queries_RESOURCE_LOCK}>
+  TEST machine_queries_nocache PROPERTY RESOURCE_LOCK $<REMOVE_DUPLICATES:${TEST_RESOURCE_LOCK}
+                                        ${machine_queries_RESOURCE_LOCK}>
 )
 # a test without an executable of its own: gets the test properties below, but
 # must not appear in the dependency list of the check target
@@ -527,8 +568,7 @@ if(REALM_USE_HIP AND TEST_USE_GPU)
   # HIP variant: hipLaunchKernel accepts host-side void* pointers directly,
   # so the kernel registration works correctly even with shared libs.
   add_integration_test(
-    simple_reduce "${REALM_TEST_DIR}/simple_reduce.cc"
-    "${REALM_TEST_DIR}/simple_reduce_gpu.hip"
+    simple_reduce "${REALM_TEST_DIR}/simple_reduce.cc" "${REALM_TEST_DIR}/simple_reduce_gpu.hip"
   )
   set_source_files_properties("${REALM_TEST_DIR}/simple_reduce_gpu.hip" PROPERTIES LANGUAGE HIP)
   # Test that reductions fall back to the basic stride loop when only the 4
@@ -588,7 +628,7 @@ if(TEST_USE_GPU)
     set(cuda_reduce_basic_RESOURCE_LOCK gpu)
     add_integration_test(
       cuda_reduce_basic "${REALM_TEST_DIR}/cuda_reduce_basic.cc"
-                        "${REALM_TEST_DIR}/cuda_reduce_basic_gpu.cu"
+      "${REALM_TEST_DIR}/cuda_reduce_basic_gpu.cu"
     )
     target_link_libraries(cuda_reduce_basic CUDA::cudart)
     set(multifield_transfer_ARGS -ll:gpu 1)
@@ -647,13 +687,8 @@ if(REALM_USE_CUDA)
 endif()
 
 set_tests_properties(
-  ${_integ_list} ${_integ_extra_tests}
-  PROPERTIES PROCESSORS
-             ${TEST_PROCESSORS}
-             ENVIRONMENT
-             "${TEST_ENV}"
-             LABELS
-             "integration"
+  ${_integ_list} ${_integ_extra_tests} PROPERTIES PROCESSORS ${TEST_PROCESSORS} ENVIRONMENT
+                                                  "${TEST_ENV}" LABELS "integration"
 )
 
 string(REPLACE ";" " " TEST_ARGS "${TEST_ARGS}")

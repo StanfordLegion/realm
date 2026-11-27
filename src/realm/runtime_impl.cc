@@ -1593,10 +1593,9 @@ namespace Realm {
                                const void *data, size_t len)
     {
       const Payload *msg = reinterpret_cast<const Payload *>(data);
-      const Payload *end_msg = msg + len / sizeof(*msg);
       // Iterate all the payloads passed here.
       AutoLock<> al(ShareableMemoryMessageHandler::mutex);
-      for(; msg != end_msg; ++msg) {
+      for(size_t remaining = len / sizeof(*msg); remaining > 0; --remaining, ++msg) {
         assert(ID(msg->memory_id).is_memory() && "Parsed id is not a memory id");
         assert((sender == NodeID(ID(msg->memory_id).memory_owner_node())) &&
                "Sender is not owner of sent memory");
@@ -1629,7 +1628,8 @@ namespace Realm {
   static ActiveMessageHandlerReg<ShareableMemoryMessageHandler>
       shareable_memory_message_handler;
 
-#if defined(REALM_USE_SHM) && defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
+#if defined(REALM_ON_LINUX) && defined(REALM_USE_SHM) &&                                 \
+    defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
   static std::string get_mailbox_name(NodeID id)
   {
     return std::to_string(id) + '.' + std::to_string(Config::job_id);
@@ -1666,7 +1666,6 @@ namespace Realm {
     close_handle(all_node_mailbox);
 #endif
     if(shared_peers_use_network_module) {
-      Network::shared_peers.empty();
       for(NetworkModule *module : network_modules) {
         module->get_shared_peers(Network::shared_peers);
       }
@@ -1675,8 +1674,8 @@ namespace Realm {
 
   bool RuntimeImpl::share_memories(void)
   {
-#if defined(REALM_USE_SHM)
-#if defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
+#if defined(REALM_ON_LINUX) && defined(REALM_USE_SHM) &&                                 \
+    defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
     // Temporary structure defining the layout of the data sent along in the mailbox
     struct MessagePayload {
       realm_id_t mem;
@@ -1690,13 +1689,14 @@ namespace Realm {
     std::vector<OsHandle> my_handles, peer_handles;
     std::vector<MessagePayload> my_mem_ids, peer_mem_ids;
     static const size_t MAX_PEER_MEMORIES = 1024;
-    OsHandle intra_node_mailbox =
-        Realm::ipc_mailbox_create(get_mailbox_name(Network::my_node_id));
-    if(intra_node_mailbox == Realm::INVALID_OS_HANDLE) {
-      log_runtime.error("Failed to create ipc mailbox");
-      return false;
-    }
-    {
+    OsHandle intra_node_mailbox = Realm::INVALID_OS_HANDLE;
+    if(!Network::shared_peers.empty()) {
+      intra_node_mailbox =
+          Realm::ipc_mailbox_create(get_mailbox_name(Network::my_node_id));
+      if(intra_node_mailbox == Realm::INVALID_OS_HANDLE) {
+        log_runtime.error("Failed to create ipc mailbox");
+        return false;
+      }
       size_t idx = 0;
       my_handles.resize(local_shared_memory_mappings.size(), Realm::INVALID_OS_HANDLE);
       my_mem_ids.resize(local_shared_memory_mappings.size());
@@ -1716,8 +1716,7 @@ namespace Realm {
 
     Network::barrier(); // Wait for everyone to create their ipc mailboxes
                         // (TODO: only do on shared peers)
-    // Share all the sharable memories.  Do this AFTER the network barrier to ensure
-    // all the intra_node_mailboxes have been created
+    // Send one datagram to each shared peer, even when there are no mappings to share.
     for(NodeSetIterator it = Network::shared_peers.begin();
         it != Network::shared_peers.end(); ++it) {
       size_t data_sz;
@@ -1736,9 +1735,7 @@ namespace Realm {
       if(!Realm::ipc_mailbox_recv(intra_node_mailbox, slot_name, peer_handles,
                                   peer_mem_ids.data(), data_sz,
                                   peer_mem_ids.size() * sizeof(peer_mem_ids[0]))) {
-        log_runtime.warning(
-            "Unable to recv shared memory information from node %u, skipping",
-            (unsigned)*it);
+        log_runtime.warning("Unable to receive shared memory information, skipping");
         continue;
       }
       assert(peer_handles.size() * sizeof(peer_mem_ids[0]) == data_sz &&
@@ -1758,33 +1755,30 @@ namespace Realm {
     // TODO: only do on shared peers
     Network::barrier();
     close_handle(intra_node_mailbox);
-    return true;
-#else // REALM_USE_ANONYMOUS_SHARED_MEMORY
-    ActiveMessage<ShareableMemoryMessageHandler> msg(
-        Network::shared_peers, local_shared_memory_mappings.size() *
-                                   sizeof(ShareableMemoryMessageHandler::Payload));
-    for(std::unordered_map<realm_id_t, SharedMemoryInfo>::iterator it =
-            local_shared_memory_mappings.begin();
-        it != local_shared_memory_mappings.end(); ++it) {
-      ShareableMemoryMessageHandler::Payload payload;
-      payload.memory_id = it->first;
-      payload.sz = it->second.get_size();
-      msg.add_payload(&payload, sizeof(payload));
-    }
-    msg.commit();
-    { // Wait for everyone to send their mappings
+#elif defined(REALM_USE_SHM) && !defined(REALM_USE_ANONYMOUS_SHARED_MEMORY)
+    if(!Network::shared_peers.empty()) {
+      ActiveMessage<ShareableMemoryMessageHandler> msg(
+          Network::shared_peers, local_shared_memory_mappings.size() *
+                                     sizeof(ShareableMemoryMessageHandler::Payload));
+      for(const auto &mapping : local_shared_memory_mappings) {
+        ShareableMemoryMessageHandler::Payload payload;
+        payload.memory_id = mapping.first;
+        payload.sz = mapping.second.get_size();
+        msg.add_payload(&payload, sizeof(payload));
+      }
+      msg.commit();
+
+      // Wait for every shared peer, including peers with no mappings to send.
       AutoLock<> al(ShareableMemoryMessageHandler::mutex);
       while(ShareableMemoryMessageHandler::num_msgs_handled !=
             Network::shared_peers.size()) {
         ShareableMemoryMessageHandler::cond_var.wait();
       }
+      ShareableMemoryMessageHandler::num_msgs_handled = 0;
     }
     Network::barrier(); // Wait for everyone to get all their mappings from us
-    return true;
-#endif // REALM_USE_ANONYMOUS_MEMORY
-#else  // REALM_USE_SHM
-    return true;
 #endif
+    return true;
   }
 
   static void allgather_announcement(Realm::Serialization::DynamicBufferSerializer &dbs,
@@ -2255,11 +2249,12 @@ namespace Realm {
     //  maps where non-CPU devices can see them
     repl_heap.init(config->replheap_size, 1 /*chunks*/);
 
-    if(!Network::shared_peers.empty() && local_shared_memory_mappings.size() > 0) {
-      if(!share_memories()) {
-        log_runtime.fatal("Failed to share memories with peers");
-        abort();
-      }
+    // The sharing barriers are job-wide, even for ranks with no peers or no memory.
+    if(Network::max_node_id > 0 && !share_memories()) {
+      log_runtime.fatal("Failed to share memories with peers");
+      abort();
+    }
+    if(!Network::shared_peers.empty()) {
       for(std::unordered_map<realm_id_t, SharedMemoryInfo>::iterator it =
               local_shared_memory_mappings.begin();
           it != local_shared_memory_mappings.end(); ++it) {

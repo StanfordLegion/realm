@@ -255,7 +255,13 @@ namespace Realm {
   {
     sockaddr_un addr = make_mailbox_address(name);
     // Datagram connect resolves the address without sending a message.
-    return connect(probe, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == 0;
+    if(connect(probe, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == 0)
+      return true;
+    // An unbound name is normal for peers outside this network namespace.
+    if(errno != ECONNREFUSED)
+      log_mailbox.info("Failed to probe mailbox %s: %s", name.c_str(),
+                       realm_strerror(errno));
+    return false;
   }
 #endif
 
@@ -294,7 +300,8 @@ namespace Realm {
       memcpy(CMSG_DATA(cmsg), handles.data(), handles.size() * sizeof(handles[0]));
     }
 
-    if(sendmsg(mailbox, &msg, 0) > 0) {
+    // An empty datagram is a successful send and returns zero.
+    if(sendmsg(mailbox, &msg, 0) >= 0) {
       return true;
     }
     log_mailbox.info("Failed to send message: %s", realm_strerror(errno));
@@ -303,29 +310,19 @@ namespace Realm {
     return false;
   }
 
-  bool ipc_mailbox_recv(OsHandle mailbox, const std::string &from,
+  bool ipc_mailbox_recv(OsHandle mailbox, const std::string & /*from*/,
                         std::vector<OsHandle> &handles, void *data, size_t &data_sz,
                         size_t max_data_sz)
   {
 #if defined(REALM_ON_LINUX) || defined(REALM_ON_MACOS)
     struct msghdr msg;
-    struct sockaddr_un addr;
     struct cmsghdr *cmsg = nullptr;
     struct iovec in_band_msg;
     const size_t MAX_HANDLES = 1024; // TODO: implement MSG_PEEK
     std::vector<char> control_buffer(CMSG_SPACE(MAX_HANDLES * sizeof(handles[0])));
 
-    memset(&addr, 0, sizeof(addr));
     memset(&in_band_msg, 0, sizeof(in_band_msg));
     memset(&msg, 0, sizeof(msg));
-
-    std::strncpy(addr.sun_path, MAILBOX_PREFIX, sizeof(addr.sun_path) - 1);
-    std::strncat(addr.sun_path, from.c_str(),
-                 sizeof(addr.sun_path) - sizeof(MAILBOX_PREFIX));
-    // Use the abstract namespace so we don't need to unlink the file system
-    // https://man7.org/linux/man-pages/man7/unix.7.html
-    addr.sun_path[0] = 0;
-    addr.sun_family = AF_UNIX;
 
     in_band_msg.iov_base = data;
     in_band_msg.iov_len = max_data_sz;
