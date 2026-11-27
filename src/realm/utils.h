@@ -407,6 +407,20 @@ namespace Realm {
   /// @return A valid OS handle it successful, Realm::INVALID_OS_HANDLE if not
   OsHandle ipc_mailbox_create(const std::string &name);
 
+#if defined(REALM_ON_LINUX)
+  /// @brief Creates an unbound socket for ipc_mailbox_reachable.
+  /// @return A valid OS handle on success, Realm::INVALID_OS_HANDLE on failure.
+  OsHandle ipc_mailbox_create_probe();
+
+  /// @brief Checks whether the named mailbox is reachable without sending a datagram.
+  /// @param probe Socket from ipc_mailbox_create_probe. A successful check connects
+  /// this socket to the peer. Connecting a receiving mailbox would restrict whose
+  /// datagrams it accepts.
+  /// @param name Name of the mailbox to check.
+  /// @return True if the mailbox is reachable, false otherwise.
+  bool ipc_mailbox_reachable(OsHandle probe, const std::string &name);
+#endif
+
   /// @brief Send the \p handles and \p data given via the \p mailbox created by
   /// ipc_mailbox_create to the receiving mailbox given by \p to
   /// @param mailbox Mailbox created via ipc_mailbox_create
@@ -420,10 +434,9 @@ namespace Realm {
                         const std::vector<OsHandle> &handles, const void *data,
                         size_t data_sz);
 
-  /// @brief Receive in \p handles and \p data via the \p mailbox created by
-  /// ipc_mailbox_create from the sending mailbox given by \p from
+  /// @brief Receive the next datagram and its handles from any sender.
   /// @param mailbox Mailbox created via ipc_mailbox_create
-  /// @param from Name of the mailbox to receive from
+  /// @param from Retained for compatibility. The receive accepts any sender.
   /// @param[out] handles OS handles to receive from
   /// @param[out] data Bytes recieved from
   /// @param[out] data_sz Length of data in bytes received
